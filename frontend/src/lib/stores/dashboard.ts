@@ -179,10 +179,11 @@ export async function refreshDashboard(): Promise<void> {
   let globalTimeout: number | null = serverStatus?.globalTimeout ?? null;
   let configMaxTokens: number | null = null;
   if (configResult.status === 'fulfilled' && configResult.value.ok) {
-    const cfg = configResult.value.data;
-    if (cfg.available && cfg.raw) {
-      globalTimeout = (cfg.raw.global_timeout as number) ?? globalTimeout;
-      configMaxTokens = (cfg.raw.max_tokens as number) ?? null;
+    // Type assertion needed: ApiResult<T> for getConfig returns { ok: true; data: { raw; available } }
+    const cfg = configResult.value as { data: { raw: Record<string, unknown>; available: boolean } };
+    if (cfg.data.available && cfg.data.raw) {
+      globalTimeout = (cfg.data.raw.global_timeout as number) ?? globalTimeout;
+      configMaxTokens = (cfg.data.raw.max_tokens as number) ?? null;
     }
   }
 

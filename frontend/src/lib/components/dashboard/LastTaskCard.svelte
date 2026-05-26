@@ -15,9 +15,9 @@
   export let loading: boolean = false;
 
   $: finishBadgeVariant = (() => {
-    if (!data?.finishReason) return 'secondary';
-    if (data.finishReason === 'length') return 'destructive';
-    return 'secondary';
+    if (!data?.finishReason) return 'secondary' as const;
+    if (data.finishReason === 'length') return 'destructive' as const;
+    return 'secondary' as const;
   })();
 
   $: finishLabel = (() => {
