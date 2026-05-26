@@ -83,7 +83,7 @@
     <div class="space-y-5 py-2">
       <!-- Context Size -->
       <div class="space-y-2">
-        <label class="text-sm font-medium">Context Size</label>
+        <label for="ctx-size-input" class="text-sm font-medium">Context Size</label>
         <div class="flex flex-wrap gap-1.5">
           {#each ctxPresets as preset}
             <Button
@@ -101,6 +101,7 @@
         </div>
         {#if selectedCtx === 'custom'}
           <input
+            id="ctx-size-input"
             type="number"
             bind:value={ctxSize}
             placeholder="e.g. 32768"
@@ -112,7 +113,7 @@
 
       <!-- Backend -->
       <div class="space-y-2">
-        <label class="text-sm font-medium">Backend</label>
+        <label for="backend-input" class="text-sm font-medium">Backend</label>
         <div class="flex gap-1.5">
           {#each backends as b}
             <Button
@@ -129,8 +130,9 @@
 
       <!-- Extra Args (advanced) -->
       <div class="space-y-2">
-        <label class="text-sm font-medium">Extra llama.cpp args <span class="text-muted-foreground font-normal">(optional)</span></label>
+        <label for="extra-args-input" class="text-sm font-medium">Extra llama.cpp args <span class="text-muted-foreground font-normal">(optional)</span></label>
         <input
+          id="extra-args-input"
           type="text"
           bind:value={llamacppArgs}
           placeholder="e.g. --no-mmap --keep 256"
@@ -140,11 +142,11 @@
       </div>
 
       <!-- Save options checkbox -->
-      <label class="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" bind:checked={saveOptions}
+      <div class="flex items-center gap-2 cursor-pointer">
+        <input id="save-options" type="checkbox" bind:checked={saveOptions}
                class="rounded border-border" />
-        <span class="text-sm text-muted-foreground">Save as default for this model</span>
-      </label>
+        <label for="save-options" class="text-sm text-muted-foreground">Save as default for this model</label>
+      </div>
     </div>
 
     {#if $loadAction.error}

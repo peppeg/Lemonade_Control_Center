@@ -44,10 +44,11 @@
       </div>
 
       <div class="space-y-1.5">
-        <label class="text-sm font-medium">
+        <label for="delete-confirm-input" class="text-sm font-medium">
           Type the model name to confirm:
         </label>
         <input
+          id="delete-confirm-input"
           type="text"
           bind:value={confirmText}
           placeholder={modelName}
