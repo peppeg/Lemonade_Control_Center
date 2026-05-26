@@ -1,0 +1,150 @@
+@import 'tailwindcss';
+
+/*
+ * 🍋 Lemonade Control Center — Design System
+ *
+ * Theme: Dark mode di default, accenti ambra/lime.
+ * La palette richiama il colore del limone: caldo, luminoso,
+ * con toni scuri di sfondo per contrasto professionale.
+ */
+
+@theme inline {
+  /* ── Lemonade accent colors ── */
+  --color-lemon:          oklch(0.85 0.15 85);
+  --color-lemon-light:    oklch(0.92 0.12 90);
+  --color-lemon-dark:     oklch(0.70 0.15 80);
+  --color-lime:           oklch(0.78 0.18 135);
+  --color-amber:          oklch(0.75 0.16 65);
+  --color-amber-dark:     oklch(0.60 0.14 60);
+
+  /* ── Status colors ── */
+  --color-status-ok:      oklch(0.72 0.19 145);
+  --color-status-warn:    oklch(0.80 0.16 75);
+  --color-status-error:   oklch(0.63 0.21 25);
+  --color-status-off:     oklch(0.55 0.03 260);
+
+  /* ── Danger zone ── */
+  --color-danger:         oklch(0.58 0.22 25);
+  --color-danger-hover:   oklch(0.52 0.24 25);
+
+  /* ── Shadcn-svelte tokens ── */
+  --background:           oklch(0.15 0.02 260);
+  --foreground:           oklch(0.98 0.01 260);
+  --card:                 oklch(0.20 0.02 260);
+  --card-foreground:      oklch(0.98 0.01 260);
+  --popover:              oklch(0.20 0.02 260);
+  --popover-foreground:   oklch(0.98 0.01 260);
+  --primary:              oklch(0.75 0.16 65);
+  --primary-foreground:   oklch(0.15 0.02 260);
+  --secondary:            oklch(0.25 0.02 260);
+  --secondary-foreground: oklch(0.98 0.01 260);
+  --muted:                oklch(0.25 0.02 260);
+  --muted-foreground:     oklch(0.65 0.01 260);
+  --accent:               oklch(0.25 0.02 260);
+  --accent-foreground:    oklch(0.98 0.01 260);
+  --destructive:          oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.98 0.01 260);
+  --border:               oklch(0.25 0.02 260);
+  --input:                oklch(0.25 0.02 260);
+  --ring:                 oklch(0.75 0.16 65);
+}
+
+/* ── Typography ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+code, pre, .font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Scrollbar styling (dark theme) ── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0.01 260);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.45 0.01 260);
+}
+
+/* ── Utility classes ── */
+.text-lemon {
+  color: var(--color-lemon);
+}
+.bg-lemon {
+  background-color: var(--color-lemon);
+}
+.text-status-ok {
+  color: var(--color-status-ok);
+}
+.text-status-warn {
+  color: var(--color-status-warn);
+}
+.text-status-error {
+  color: var(--color-status-error);
+}
+.text-status-off {
+  color: var(--color-status-off);
+}
+
+/* ── Aggiunte a app.css per M3 ── */
+
+/* Smooth page transitions */
+main {
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Sidebar collapse transition */
+aside {
+  will-change: width;
+}
+
+/* Ping animation for connection dot */
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* Subtle hover lift for cards */
+.card-hover {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.card-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Focus ring style (Lemonade accent) */
+:focus-visible {
+  outline: 2px solid var(--color-lemon);
+  outline-offset: 2px;
+}
+
+/* Reduced motion: disable animations */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

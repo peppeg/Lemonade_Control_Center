@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+.svelte-kit/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.claude/
+.codex/
+.agents/
+.private/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Probe results (opzionale: potremmo volerli committare)
+# capabilities/results/
+
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/.env
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/dist/
+frontend/build/
+frontend/.env
