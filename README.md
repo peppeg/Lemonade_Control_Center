@@ -398,6 +398,27 @@ Near-term priorities:
 4. expose guarded configuration editing
 5. expose parsed logs, stats, and diagnostics cleanly
 
+## Runtime Direction
+
+Development and final runtime are intentionally not the same thing.
+
+- **Development** uses two processes:
+  - SvelteKit/Vite for the frontend
+  - FastAPI for the backend
+- **Final runtime** is planned as a single local service:
+  - FastAPI serves `/api/*`
+  - FastAPI also serves the built frontend dashboard
+
+The target user experience is one application, one port, one start command.
+
+Planned default runtime shape:
+
+- dev backend: `127.0.0.1:8000`
+- dev frontend: `localhost:5173`
+- final app runtime: `127.0.0.1:17600`
+
+`8000` is treated as a development port, not the intended product-facing default.
+
 ## Contributing
 
 This project is still early, so contribution quality matters more than contribution volume.
