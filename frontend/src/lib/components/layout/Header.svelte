@@ -16,7 +16,7 @@
     '/system': 'System',
   };
 
-  const currentLabel = $derived(routeLabels[$page.url.pathname] || 'Dashboard');
+  $: currentLabel = routeLabels[$page.url.pathname] || 'Dashboard';
 </script>
 
 <header class="flex items-center justify-between px-4 py-2.5 border-b border-border bg-card/80 backdrop-blur-sm min-h-[52px]">

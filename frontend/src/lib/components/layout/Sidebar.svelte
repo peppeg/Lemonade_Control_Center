@@ -1,13 +1,3 @@
-/**
-  Sidebar — Collapsible navigation with icon-only and full modes.
-
-  Features:
-  - Collapse/expand with animation
-  - Active route highlighting
-  - Danger zone (Stop & Unload) at bottom
-  - Keyboard shortcut: Ctrl+B to toggle
-  - Capability-driven: disabled items show tooltip
-*/
 <script lang="ts">
   import { page } from '$app/stores';
   import { capabilities, hasDangerZone } from '$lib/stores/capabilities';
@@ -19,7 +9,6 @@
   } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { Separator } from '$lib/components/ui/separator';
-  import * as Tooltip from '$lib/components/ui/tooltip';
 
   interface NavItem {
     href: string;
@@ -89,32 +78,24 @@
   <!-- Navigation -->
   <nav class="flex-1 flex flex-col gap-0.5 px-2 py-3 overflow-y-auto">
     {#each navItems as item}
-      <Tooltip.Root openDelay={$sidebarCollapsed ? 0 : 1000}>
-        <Tooltip.Trigger asChild>
-          <a
-            href={item.href}
-            class="flex items-center gap-3 rounded-md text-sm transition-all duration-150
-                   {$sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2'}
-                   {isActive(item.href)
-                     ? 'bg-lemon/10 text-lemon font-medium shadow-sm shadow-lemon/5'
-                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
-          >
-            <svelte:component
-              this={item.icon}
-              class="h-4 w-4 shrink-0 transition-colors
-                     {isActive(item.href) ? 'text-lemon' : ''}"
-            />
-            {#if !$sidebarCollapsed}
-              <span class="truncate">{item.label}</span>
-            {/if}
-          </a>
-        </Tooltip.Trigger>
-        {#if $sidebarCollapsed}
-          <Tooltip.Content side="right">
-            <p>{item.label}</p>
-          </Tooltip.Content>
+      <a
+        href={item.href}
+        title={$sidebarCollapsed ? item.label : ''}
+        class="flex items-center gap-3 rounded-md text-sm transition-all duration-150
+               {$sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2'}
+               {isActive(item.href)
+                 ? 'bg-lemon/10 text-lemon font-medium shadow-sm shadow-lemon/5'
+                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
+      >
+        <svelte:component
+          this={item.icon}
+          class="h-4 w-4 shrink-0 transition-colors
+                 {isActive(item.href) ? 'text-lemon' : ''}"
+        />
+        {#if !$sidebarCollapsed}
+          <span class="truncate">{item.label}</span>
         {/if}
-      </Tooltip.Root>
+      </a>
     {/each}
   </nav>
 
@@ -122,24 +103,18 @@
   {#if $hasDangerZone}
     <div class="px-2 pb-3">
       <Separator class="mb-3" />
-      <Tooltip.Root openDelay={0}>
-        <Tooltip.Trigger asChild>
-          <Button
-            variant="ghost"
-            class="w-full gap-3 text-destructive hover:text-destructive hover:bg-destructive/10
-                   {$sidebarCollapsed ? 'justify-center px-2' : 'justify-start'}"
-            disabled={$connectionStatus === 'disconnected'}
-          >
-            <OctagonX class="h-4 w-4 shrink-0" />
-            {#if !$sidebarCollapsed}
-              <span class="text-sm truncate">Stop & Unload</span>
-            {/if}
-          </Button>
-        </Tooltip.Trigger>
-        <Tooltip.Content side={$sidebarCollapsed ? 'right' : 'top'}>
-          <p>Unload the current model from memory</p>
-        </Tooltip.Content>
-      </Tooltip.Root>
+      <Button
+        variant="ghost"
+        class="w-full gap-3 text-destructive hover:text-destructive hover:bg-destructive/10
+               {$sidebarCollapsed ? 'justify-center px-2' : 'justify-start'}"
+        disabled={$connectionStatus === 'disconnected'}
+        title="Unload the current model from memory"
+      >
+        <OctagonX class="h-4 w-4 shrink-0" />
+        {#if !$sidebarCollapsed}
+          <span class="text-sm truncate">Stop & Unload</span>
+        {/if}
+      </Button>
     </div>
   {/if}
 </aside>

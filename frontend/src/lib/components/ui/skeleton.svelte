@@ -1,5 +1,5 @@
 <script lang="ts">
-  export let class: className = '';
+  export let className = '';
 </script>
 
 <div class="animate-pulse rounded-md bg-muted {className}" {...$$restProps}>

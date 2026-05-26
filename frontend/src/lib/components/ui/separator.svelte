@@ -21,4 +21,4 @@
   class={separatorVariants({ orientation })}
   data-orientation={orientation}
   {...$$restProps}
-/>
+></div>

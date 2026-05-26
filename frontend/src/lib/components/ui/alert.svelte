@@ -1,9 +1,10 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
+  import type { ComponentType } from 'svelte';
 
-  let { class: className = '' } = $$props;
-  let { variant = 'default' } = $$props;
-  let { icon = null } = $$props;
+  export let className = '';
+  export let variant = 'default';
+  export let icon: ComponentType | null = null;
 </script>
 
 <div
@@ -22,6 +23,6 @@
     </div>
   {/if}
   <div class="flex-1 space-y-1">
-    <p class="text-sm font-medium leading-none">{$$slots.default?.()}</p>
+    <p class="text-sm font-medium leading-none"><slot /></p>
   </div>
 </div>

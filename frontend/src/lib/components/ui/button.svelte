@@ -25,12 +25,13 @@
     },
   });
 
-  let { variant = 'default', size = 'default', ...restProps } = $props();
+  export let variant: VariantProps<typeof buttonVariants>['variant'] = 'default';
+  export let size: VariantProps<typeof buttonVariants>['size'] = 'default';
 </script>
 
 <button
   class={buttonVariants({ variant, size })}
-  {...restProps}
+  {...$$restProps}
 >
   <slot />
 </button>

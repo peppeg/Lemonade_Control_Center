@@ -10,14 +10,16 @@
   import Header from '$lib/components/layout/Header.svelte';
   import StatusBar from '$lib/components/layout/StatusBar.svelte';
   import MobileNav from '$lib/components/layout/MobileNav.svelte';
-  import { sidebarCollapsed } from '$lib/stores/sidebar';
   import { onMount } from 'svelte';
-  import { stopHealthPolling } from '$lib/stores/connection';
+  import { loadCapabilities } from '$lib/stores/capabilities';
+  import { startHealthPolling, stopHealthPolling } from '$lib/stores/connection';
 
-  let { children } = $props();
-  let mobileNavOpen = $state(false);
+  let mobileNavOpen = false;
 
   onMount(() => {
+    loadCapabilities();
+    startHealthPolling(5000);
+
     return () => {
       stopHealthPolling();
     };
@@ -41,7 +43,7 @@
     <!-- Page content with smooth transition -->
     <main class="flex-1 overflow-y-auto">
       <div class="p-4 md:p-6 max-w-7xl mx-auto w-full">
-        {@render children()}
+        <slot />
       </div>
     </main>
 
