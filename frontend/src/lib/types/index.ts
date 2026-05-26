@@ -148,3 +148,63 @@ export interface SmartAlert {
 }
 
 export type DashboardLoadingState = 'loading' | 'loaded' | 'error' | 'partial';
+
+// ═══════════════════════════════════════════════
+// Models Types (M5)
+// ═══════════════════════════════════════════════
+
+export interface ModelEntry {
+  name: string;
+  model: string | null;
+  size: number | null;
+  sizeFormatted: string;
+  digest: string | null;
+  modifiedAt: string | null;
+  details: Record<string, unknown> | null;
+  isLoaded: boolean;
+}
+
+export interface RuntimeParams {
+  executable: string | null;
+  modelPath: string | null;
+  ctxSize: number | null;
+  port: number | null;
+  host: string | null;
+  ngl: number | null;
+  backend: string | null;
+  mmap: boolean | null;
+  jinja: boolean;
+  mmproj: string | null;
+  contextShift: boolean | null;
+  keep: number | null;
+  reasoningFormat: string | null;
+  specType: string | null;
+  specDraftMax: number | null;
+  specDraftPMin: number | null;
+  rawCmdline: string;
+}
+
+export interface LoadedModelDetail {
+  name: string;
+  params: RuntimeParams | null;
+  process: {
+    pid: number;
+    rssGb: number;
+    cpuPercent: number;
+    uptime: string;
+    uptimeSeconds: number;
+  } | null;
+}
+
+export interface LoadModelOptions {
+  modelName: string;
+  ctxSize: number | null;
+  llamacppBackend: string | null;
+  llamacppArgs: string;
+  saveOptions: boolean;
+}
+
+export interface ActionState {
+  loading: boolean;
+  error: string | null;
+}

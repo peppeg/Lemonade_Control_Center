@@ -67,8 +67,15 @@ export const api = {
     models: () => get<{ models: unknown[]; source: string }>('/lemonade/models'),
     running: () => get<{ models: unknown[] }>('/lemonade/running'),
     showModel: (name: string) => get<Record<string, unknown>>(`/lemonade/models/${encodeURIComponent(name)}`),
-    loadModel: (body: { model_name: string; ctx_size?: number; llamacpp_backend?: string }) =>
-      post<{ success: boolean; message: string }>('/lemonade/load', body),
+    loadModel: (
+    body: {
+      model_name: string;
+      ctx_size?: number;
+      llamacpp_backend?: string;
+      llamacpp_args?: string;
+      save_options?: boolean;
+    }
+  ) => post<{ success: boolean; message: string }>('/lemonade/load', body),
     unloadModel: (name?: string) =>
       post<{ success: boolean }>('/lemonade/unload', { model_name: name }),
     deleteModel: (name: string) =>
