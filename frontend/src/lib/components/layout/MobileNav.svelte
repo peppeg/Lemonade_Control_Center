@@ -13,13 +13,15 @@
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/models',    label: 'Models',    icon: Cpu },
-    { href: '/config',    label: 'Config',    icon: Settings },
-    { href: '/logs',      label: 'Logs',      icon: ScrollText },
+    { href: '/config',    label: 'Configuration', icon: Settings },
+    { href: '/logs',      label: 'Logs & Stats',  icon: ScrollText },
     { href: '/system',    label: 'System',    icon: Monitor },
   ];
 
-  function isActive(href: string): boolean {
-    return $page.url.pathname.startsWith(href);
+  $: currentPath = $page.url.pathname;
+
+  function isActive(href: string, pathname: string): boolean {
+    return pathname === href || pathname.startsWith(href + '/');
   }
 
   function navigate() {
@@ -28,10 +30,10 @@
 </script>
 
 <Sheet bind:open side="left">
-  <div class="px-4 py-4 border-b border-border">
-    <div class="flex items-center gap-2">
-      <span class="text-xl">🍋</span>
-      <span class="text-sm font-semibold">Lemonade Control Center</span>
+  <div class="border-b border-[#34392d] px-4 py-4">
+    <div class="flex flex-col">
+      <span class="text-lg font-black leading-tight text-lemon">Lemonade</span>
+      <span class="text-xs text-muted-foreground">Control Center</span>
     </div>
   </div>
 
@@ -39,10 +41,10 @@
     {#each navItems as item}
       <a
         href={item.href}
-        class="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors
-               {isActive(item.href)
-                 ? 'bg-lemon/10 text-lemon font-medium'
-                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
+        class="flex items-center gap-3 rounded px-3 py-2.5 text-sm transition-colors
+               {isActive(item.href, currentPath)
+                 ? 'bg-[#4a4d49] text-lemon font-semibold'
+                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
         on:click={navigate}
       >
         <svelte:component this={item.icon} class="h-4 w-4" />

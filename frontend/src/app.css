@@ -1,52 +1,49 @@
 @import 'tailwindcss';
 
 /*
- * 🍋 Lemonade Control Center — Design System
- *
- * Theme: Dark mode di default, accenti ambra/lime.
- * La palette richiama il colore del limone: caldo, luminoso,
- * con toni scuri di sfondo per contrasto professionale.
+ * Lemonade Control Center - operations console design system.
+ * Dark by default, compact, technical, and explicit.
  */
 
 @theme inline {
   /* ── Lemonade accent colors ── */
-  --color-lemon:          oklch(0.85 0.15 85);
-  --color-lemon-light:    oklch(0.92 0.12 90);
-  --color-lemon-dark:     oklch(0.70 0.15 80);
-  --color-lime:           oklch(0.78 0.18 135);
-  --color-amber:          oklch(0.75 0.16 65);
-  --color-amber-dark:     oklch(0.60 0.14 60);
+  --color-lemon:          #d8ff00;
+  --color-lemon-light:    #efff7a;
+  --color-lemon-dark:     #a7c700;
+  --color-lime:           #40f078;
+  --color-amber:          #f2c94c;
+  --color-amber-dark:     #b99021;
 
   /* ── Status colors ── */
-  --color-status-ok:      oklch(0.72 0.19 145);
-  --color-status-warn:    oklch(0.80 0.16 75);
-  --color-status-error:   oklch(0.63 0.21 25);
-  --color-status-off:     oklch(0.55 0.03 260);
+  --color-status-ok:      #43f084;
+  --color-status-warn:    #ffd166;
+  --color-status-error:   #ff9b92;
+  --color-status-off:     #7c8077;
 
   /* ── Danger zone ── */
-  --color-danger:         oklch(0.58 0.22 25);
-  --color-danger-hover:   oklch(0.52 0.24 25);
+  --color-danger:         #ffb0a8;
+  --color-danger-hover:   #ff8b80;
 
   /* ── Shadcn-svelte tokens ── */
-  --color-background:           oklch(0.15 0.02 260);
-  --color-foreground:           oklch(0.98 0.01 260);
-  --color-card:                 oklch(0.20 0.02 260);
-  --color-card-foreground:      oklch(0.98 0.01 260);
-  --color-popover:              oklch(0.20 0.02 260);
-  --color-popover-foreground:   oklch(0.98 0.01 260);
-  --color-primary:              oklch(0.75 0.16 65);
-  --color-primary-foreground:   oklch(0.15 0.02 260);
-  --color-secondary:            oklch(0.25 0.02 260);
-  --color-secondary-foreground: oklch(0.98 0.01 260);
-  --color-muted:                oklch(0.25 0.02 260);
-  --color-muted-foreground:     oklch(0.65 0.01 260);
-  --color-accent:               oklch(0.25 0.02 260);
-  --color-accent-foreground:    oklch(0.98 0.01 260);
-  --color-destructive:          oklch(0.58 0.22 25);
-  --color-destructive-foreground: oklch(0.98 0.01 260);
-  --color-border:               oklch(0.25 0.02 260);
-  --color-input:                oklch(0.25 0.02 260);
-  --color-ring:                 oklch(0.75 0.16 65);
+  --color-background:           #0d0f0f;
+  --color-foreground:           #f4f4ef;
+  --color-card:                 #171a19;
+  --color-card-foreground:      #f4f4ef;
+  --color-popover:              #1b1d1c;
+  --color-popover-foreground:   #f4f4ef;
+  --color-primary:              #d8ff00;
+  --color-primary-foreground:   #111310;
+  --color-secondary:            #2b2d2c;
+  --color-secondary-foreground: #f4f4ef;
+  --color-muted:                #252827;
+  --color-muted-foreground:     #b7b9ae;
+  --color-accent:               #343734;
+  --color-accent-foreground:    #f4f4ef;
+  --color-destructive:          #7a241f;
+  --color-destructive-foreground: #ffdfdb;
+  --color-border:               #3f432d;
+  --color-input:                #343734;
+  --color-ring:                 #d8ff00;
 
   /* Legacy aliases for local CSS that still references the old names */
   --background:           var(--color-background);
@@ -77,6 +74,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: var(--color-background);
   color: var(--color-foreground);
+  letter-spacing: 0;
 }
 
 code, pre, .font-mono {
@@ -92,11 +90,11 @@ code, pre, .font-mono {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.35 0.01 260);
+  background: #3b3f37;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.45 0.01 260);
+  background: #565c4e;
 }
 
 /* ── Utility classes ── */
@@ -119,7 +117,260 @@ code, pre, .font-mono {
   color: var(--color-status-off);
 }
 
-/* ── Aggiunte a app.css per M3 ── */
+/* ── Operations UI primitives ── */
+
+.ops-page {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.ops-section {
+  margin-top: 16px;
+}
+
+.ops-panel {
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  background: #171918;
+  border-radius: 4px;
+}
+
+.ops-panel-soft {
+  border: 1px solid #2d3226;
+  background: #141716;
+  border-radius: 4px;
+}
+
+.ops-card {
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  background: #181b1a;
+  border-radius: 4px;
+}
+
+.ops-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #30342b;
+}
+
+.ops-card-body {
+  padding: 16px 18px;
+}
+
+.ops-title {
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--color-foreground);
+}
+
+.ops-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--color-muted-foreground);
+}
+
+.ops-label {
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #dbded2;
+}
+
+.ops-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.ops-value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--color-foreground);
+}
+
+.ops-muted {
+  color: var(--color-muted-foreground);
+}
+
+.ops-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #444936;
+  background: #282b28;
+  color: #e9ecd9;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ops-badge-ok {
+  border-color: #135b2d;
+  background: #0f321d;
+  color: var(--color-status-ok);
+}
+
+.ops-badge-warn {
+  border-color: #5a4720;
+  background: #2e2719;
+  color: var(--color-status-warn);
+}
+
+.ops-badge-danger {
+  border-color: #70302d;
+  background: #321715;
+  color: var(--color-danger);
+}
+
+.ops-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #4a4d39;
+  border-radius: 4px;
+  background: #2c2f2c;
+  padding: 0 14px;
+  color: var(--color-foreground);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.ops-button:hover:not(:disabled) {
+  border-color: #6d744a;
+  background: #373b35;
+}
+
+.ops-button-primary {
+  border-color: var(--color-lemon);
+  background: var(--color-lemon);
+  color: #111310;
+}
+
+.ops-button-primary:hover:not(:disabled) {
+  background: var(--color-lemon-light);
+}
+
+.ops-button-danger {
+  border-color: #ffaaa1;
+  background: transparent;
+  color: #ffb4ad;
+}
+
+.ops-button-danger:hover:not(:disabled) {
+  background: #3a1816;
+}
+
+.ops-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ops-input,
+.ops-select,
+.ops-textarea {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #444936;
+  border-radius: 4px;
+  background: #111312;
+  color: var(--color-foreground);
+  padding: 8px 10px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+}
+
+.ops-textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.ops-input:disabled,
+.ops-select:disabled,
+.ops-textarea:disabled {
+  color: #666b60;
+  background: #131514;
+}
+
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ops-table th {
+  border-bottom: 1px solid #33372d;
+  color: #c9ccbd;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  padding: 12px 18px;
+}
+
+.ops-table td {
+  border-bottom: 1px solid #2c3029;
+  padding: 12px 18px;
+  vertical-align: middle;
+}
+
+.ops-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #303330;
+}
+
+.ops-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-lemon);
+}
+
+.ops-banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid #4b4f39;
+  background: #202321;
+  border-radius: 4px;
+  padding: 14px 16px;
+}
+
+.ops-banner-danger {
+  border-color: #8d1118;
+  background: #310b11;
+  color: #ffd9d6;
+}
+
+.ops-banner-muted {
+  border-color: #424537;
+  background: #303331;
+}
+
+.ops-terminal {
+  border: 1px solid #33372d;
+  background: #070808;
+  border-radius: 4px;
+  color: #e7e9de;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
 
 /* Smooth page transitions */
 main {

@@ -5,10 +5,9 @@
   import { connectionStatus } from '$lib/stores/connection';
   import {
     LayoutDashboard, Cpu, Settings, ScrollText, Monitor,
-    OctagonX, PanelLeftClose, PanelLeftOpen
+    OctagonX, PanelLeft
   } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
-  import { Separator } from '$lib/components/ui/separator';
 
   interface NavItem {
     href: string;
@@ -20,13 +19,15 @@
   const navItems: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, milestone: 'M4' },
     { href: '/models',    label: 'Models',    icon: Cpu,             milestone: 'M5' },
-    { href: '/config',    label: 'Config',    icon: Settings,        milestone: 'M6' },
-    { href: '/logs',      label: 'Logs',      icon: ScrollText,      milestone: 'M7' },
+    { href: '/config',    label: 'Configuration', icon: Settings,    milestone: 'M6' },
+    { href: '/logs',      label: 'Logs & Stats',  icon: ScrollText,  milestone: 'M7' },
     { href: '/system',    label: 'System',    icon: Monitor,         milestone: 'M8' },
   ];
 
-  function isActive(href: string): boolean {
-    return $page.url.pathname === href || $page.url.pathname.startsWith(href + '/');
+  $: currentPath = $page.url.pathname;
+
+  function isActive(href: string, pathname: string): boolean {
+    return pathname === href || pathname.startsWith(href + '/');
   }
 
   // Keyboard shortcut: Ctrl+B
@@ -41,56 +42,58 @@
 <svelte:window on:keydown={handleKeydown} />
 
 <aside
-  class="group flex flex-col h-full border-r border-border bg-card transition-all duration-300 ease-in-out
-         {$sidebarCollapsed ? 'w-16' : 'w-56'}"
+  class="group relative flex h-full flex-col border-r border-[#34392d] bg-[#171a19] transition-all duration-200 ease-in-out
+         {$sidebarCollapsed ? 'w-[72px]' : 'w-[200px]'}"
 >
   <!-- Logo + Toggle -->
-  <div class="flex items-center justify-between px-3 py-4 border-b border-border min-h-[60px]">
-    {#if !$sidebarCollapsed}
-      <a href="/dashboard" class="flex items-center gap-2.5 group/logo">
-        <span class="text-xl transition-transform group-hover/logo:scale-110">🍋</span>
-        <div class="flex flex-col overflow-hidden">
-          <span class="text-sm font-semibold text-foreground leading-tight truncate">Lemonade</span>
-          <span class="text-[10px] text-muted-foreground leading-tight truncate">Control Center</span>
+  {#if !$sidebarCollapsed}
+    <div class="flex min-h-[80px] items-center border-b border-[#34392d] px-4 py-4">
+      <a href="/dashboard" class="group/logo flex min-w-0 flex-col">
+        <span class="truncate text-lg font-black leading-tight text-lemon">Lemonade</span>
+        <span class="truncate text-[11px] leading-tight text-[#e0e3d2]">
+          Control Center
+        </span>
+      </a>
+    </div>
+  {:else}
+    <div class="relative flex min-h-[80px] items-center justify-center border-b border-[#34392d] px-0 py-4">
+      <a href="/dashboard" class="shrink-0">
+        <div class="flex h-8 w-8 items-center justify-center rounded border border-[#51583c] text-sm font-black text-lemon">
+          L
         </div>
       </a>
-    {:else}
-      <a href="/dashboard" class="mx-auto">
-        <span class="text-xl hover:scale-110 transition-transform inline-block">🍋</span>
-      </a>
-    {/if}
+    </div>
+  {/if}
 
-    <Button
-      variant="ghost"
-      size="icon"
-      class="h-7 w-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity
-             {$sidebarCollapsed ? '!opacity-100 mx-auto' : ''}"
-      on:click={toggleSidebar}
-    >
-      {#if $sidebarCollapsed}
-        <PanelLeftOpen class="h-4 w-4" />
-      {:else}
-        <PanelLeftClose class="h-4 w-4" />
-      {/if}
-    </Button>
-  </div>
+  <button
+    type="button"
+    class="absolute -right-3 top-6 z-20 inline-flex h-6 w-6 items-center justify-center rounded border border-[#444936] bg-[#171a19] text-muted-foreground shadow-sm transition-colors hover:border-[#6b7349] hover:bg-[#242822] hover:text-foreground"
+    on:click={toggleSidebar}
+    aria-label={$sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+    title={$sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+  >
+    <PanelLeft class="h-3.5 w-3.5" />
+  </button>
 
   <!-- Navigation -->
-  <nav class="flex-1 flex flex-col gap-0.5 px-2 py-3 overflow-y-auto">
+  <nav class="flex flex-1 flex-col gap-0 px-0 py-4">
     {#each navItems as item}
       <a
         href={item.href}
         title={$sidebarCollapsed ? item.label : ''}
-        class="flex items-center gap-3 rounded-md text-sm transition-all duration-150
-               {$sidebarCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2'}
-               {isActive(item.href)
-                 ? 'bg-lemon/10 text-lemon font-medium shadow-sm shadow-lemon/5'
-                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
+        class="relative flex items-center gap-3 text-sm transition-colors duration-150
+               {$sidebarCollapsed ? 'justify-center px-2 py-3' : 'px-5 py-3'}
+               {isActive(item.href, currentPath)
+                 ? 'bg-[#4a4d49] text-lemon font-semibold'
+                 : 'text-[#d8dccb] hover:text-foreground hover:bg-[#222522]'}"
       >
+        {#if isActive(item.href, currentPath)}
+          <span class="absolute left-0 top-0 h-full w-1 bg-lemon"></span>
+        {/if}
         <svelte:component
           this={item.icon}
           class="h-4 w-4 shrink-0 transition-colors
-                 {isActive(item.href) ? 'text-lemon' : ''}"
+                 {isActive(item.href, currentPath) ? 'text-lemon' : ''}"
         />
         {#if !$sidebarCollapsed}
           <span class="truncate">{item.label}</span>
@@ -101,11 +104,10 @@
 
   <!-- Danger Zone -->
   {#if $hasDangerZone}
-    <div class="px-2 pb-3">
-      <Separator class="mb-3" />
+    <div class="border-t border-[#34392d] px-2 py-3">
       <Button
         variant="ghost"
-        class="w-full gap-3 text-destructive hover:text-destructive hover:bg-destructive/10
+        class="w-full gap-3 text-danger hover:bg-[#321715] hover:text-danger
                {$sidebarCollapsed ? 'justify-center px-2' : 'justify-start'}"
         disabled={$connectionStatus === 'disconnected'}
         title="Unload the current model from memory"

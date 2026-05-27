@@ -16,7 +16,7 @@
 <ModalFrame
   {open}
   title="Unload Model"
-  description={`This will unload {modelName} from memory. Any ongoing generation will be interrupted.`}
+  description={`This will unload ${modelName} from memory. Any ongoing generation will be interrupted.`}
   widthClass="sm:max-w-[400px]"
   on:close={() => (open = false)}
 >

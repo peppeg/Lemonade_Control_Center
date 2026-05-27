@@ -26,7 +26,7 @@
   });
 </script>
 
-<div class="flex h-screen overflow-hidden bg-background">
+<div class="flex h-screen overflow-hidden bg-background text-foreground">
   <!-- Desktop Sidebar (hidden on mobile) -->
   <div class="hidden lg:block">
     <Sidebar />
@@ -36,13 +36,13 @@
   <MobileNav bind:open={mobileNavOpen} />
 
   <!-- Main content area -->
-  <div class="flex flex-col flex-1 overflow-hidden min-w-0">
+  <div class="flex flex-col flex-1 overflow-hidden min-w-0 bg-background">
     <!-- Header -->
     <Header on:toggleMobileNav={() => mobileNavOpen = true} />
 
     <!-- Page content with smooth transition -->
     <main class="flex-1 overflow-y-auto">
-      <div class="p-4 md:p-6 max-w-7xl mx-auto w-full">
+      <div class="ops-page">
         <slot />
       </div>
     </main>
