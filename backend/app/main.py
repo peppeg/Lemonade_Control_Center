@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.capabilities import capabilities
-from app.routers import health, lemonade, system, logs, diagnostic, diagnostics, profiles
+from app.routers import health, lemonade, system, logs, diagnostic, diagnostics, metrics, profiles
+from app.services.metrics.collector import start_collector, stop_collector
 
 
 @asynccontextmanager
@@ -19,7 +20,9 @@ async def lifespan(app: FastAPI):
     print(f"   Restart:      {'ENABLED ⚠' if settings.enable_restart else 'disabled'}")
     print(f"   Capabilities: {capabilities.probe_timestamp or 'no probe results'}")
     print(f"   Lemonade ver: {capabilities.lemonade_version or 'unknown'}")
+    start_collector(interval_seconds=5)
     yield
+    stop_collector()
     print("🍋 Shutting down...")
 
 
@@ -50,3 +53,5 @@ app.include_router(logs.router)
 app.include_router(diagnostic.router)
 app.include_router(profiles.router)
 app.include_router(diagnostics.router)
+app.include_router(metrics.router)
+app.include_router(metrics.ws_router)

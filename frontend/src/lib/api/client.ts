@@ -12,10 +12,12 @@ import type {
   HardwareInfo,
   AlertHistoryEntry,
   DiagnosticReport,
+  MetricPoint,
   ModelProfiles,
   Profile,
   ProfileConfig,
   SmartRecommendation,
+  TaskRecord,
 } from '$lib/types';
 
 const BASE = '/api';
@@ -147,6 +149,15 @@ export const api = {
     run: () => get<DiagnosticReport>('/diagnostics'),
     history: (limit = 50) => get<{ entries: AlertHistoryEntry[] }>(`/diagnostics/history?limit=${limit}`),
     dismiss: (ruleId: string) => post<{ dismissed: string }>(`/diagnostics/dismiss?rule_id=${enc(ruleId)}`),
+  },
+
+  // ── Metrics (M12) ──
+  metrics: {
+    history: (minutes = 30) => get<{ points: MetricPoint[]; total: number; retention_minutes: number }>(`/metrics/history?minutes=${minutes}`),
+    latest: () => get<{ point: MetricPoint | null }>('/metrics/latest'),
+    tasks: (n = 20) => get<{ tasks: TaskRecord[] }>(`/metrics/tasks?n=${n}`),
+    clear: () => post<{ cleared: boolean }>('/metrics/clear'),
+    tasksCsvUrl: () => `${BASE}/metrics/tasks/csv`,
   },
 
   // ── Diagnostic (M2, used from M9) ──

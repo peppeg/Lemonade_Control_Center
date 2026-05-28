@@ -328,3 +328,32 @@ export interface AlertHistoryEntry {
   event: 'appeared' | 'resolved' | 'dismissed';
   title: string;
 }
+
+// ═══════════════════════════════════════════════
+// Metrics Types (M12)
+// ═══════════════════════════════════════════════
+
+export interface MetricPoint {
+  t: string;
+  ram_used: number;
+  ram_total: number;
+  ram_pct: number;
+  cpu_pct: number;
+  swap_used: number;
+  temps: Record<string, number>;
+}
+
+export interface TaskRecord {
+  timestamp: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  prompt_tps: number;
+  gen_tps: number;
+  ttft_seconds: number;
+  total_seconds: number;
+  finish_reason: string;
+  finish_confidence: string;
+}
+
+export type TimeRange = 5 | 15 | 30;
