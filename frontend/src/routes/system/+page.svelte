@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { capabilities } from '$lib/stores/capabilities';
+  import { notify } from '$lib/stores/notifications';
   import { unloadModel, unloadAction } from '$lib/stores/models';
   import { AlertTriangle, Bug, Cpu, Download, HardDrive, RefreshCw, Server, Thermometer } from 'lucide-svelte';
   import type { HardwareInfo } from '$lib/types';
@@ -97,13 +98,23 @@
     restartMessage = null;
     const result = await api.system.restart();
     restartMessage = result.ok ? result.data.message : result.error;
+    if (result.ok) {
+      notify.warning('Service restart requested', result.data.message || 'lemond.service restart command completed.', { href: '/system' });
+    } else {
+      notify.error('Service restart failed', result.error || 'systemctl restart failed.', { href: '/system' });
+    }
     restartLoading = false;
     await refreshSystem();
   }
 
   async function stopAndUnload() {
     confirmStopUnload = false;
-    await unloadModel(undefined);
+    const success = await unloadModel(undefined, { suppressNotification: true });
+    if (success) {
+      notify.warning('Emergency unload complete', 'The active model was unloaded from System recovery.', { href: '/system' });
+    } else {
+      notify.error('Emergency unload failed', $unloadAction.error || 'Lemonade rejected the unload request.', { href: '/system' });
+    }
     await refreshSystem();
   }
 

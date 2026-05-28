@@ -9,6 +9,7 @@
   import LoadModelDialog from '$lib/components/models/LoadModelDialog.svelte';
   import UnloadConfirmDialog from '$lib/components/models/UnloadConfirmDialog.svelte';
   import DeleteConfirmDialog from '$lib/components/models/DeleteConfirmDialog.svelte';
+  import { notify } from '$lib/stores/notifications';
   import type { ModelEntry } from '$lib/types';
   import { formatGB } from '$lib/utils/format';
 
@@ -38,6 +39,7 @@
   async function copyCli(name: string) {
     const command = `lemonade load ${name}`;
     await navigator.clipboard?.writeText(command);
+    notify.info('CLI copied', command, { toastOnly: true, toastDuration: 2200 });
   }
 
   function openLoad(name: string) {

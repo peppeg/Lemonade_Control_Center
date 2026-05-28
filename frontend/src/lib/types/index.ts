@@ -208,3 +208,29 @@ export interface ActionState {
   loading: boolean;
   error: string | null;
 }
+
+// ═══════════════════════════════════════════════
+// Notification Types (M9)
+// ═══════════════════════════════════════════════
+
+export type NotificationLevel = 'success' | 'error' | 'warning' | 'info';
+
+export interface Notification {
+  id: string;
+  level: NotificationLevel;
+  title: string;
+  message: string;
+  timestamp: Date;
+  read: boolean;
+  href: string | null;
+  toastDuration: number;
+}
+
+export interface ToastData {
+  id: string;
+  level: NotificationLevel;
+  title: string;
+  message: string;
+  duration: number;
+  exiting: boolean;
+}

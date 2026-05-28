@@ -4,6 +4,7 @@
  */
 import { writable, derived, get } from 'svelte/store';
 import { api } from '$lib/api/client';
+import { notify } from '$lib/stores/notifications';
 import type {
   ModelEntry,
   LoadedModelDetail,
@@ -155,24 +156,32 @@ export async function loadModel(opts: LoadModelOptions): Promise<boolean> {
   if (result.ok && result.data.success) {
     loadAction.set({ loading: false, error: null });
     await refreshModels();
+    notify.success('Model loaded', opts.modelName, { href: '/models' });
     return true;
   } else {
     const msg = result.ok ? result.data.message : result.error;
     loadAction.set({ loading: false, error: msg });
+    notify.error('Model load failed', msg || opts.modelName, { href: '/models' });
     return false;
   }
 }
 
-export async function unloadModel(name?: string): Promise<boolean> {
+export async function unloadModel(name?: string, options: { suppressNotification?: boolean } = {}): Promise<boolean> {
   unloadAction.set({ loading: true, error: null });
   const result = await api.lemonade.unloadModel(name);
 
   if (result.ok) {
     unloadAction.set({ loading: false, error: null });
     await refreshModels();
+    if (!options.suppressNotification) {
+      notify.success('Model unloaded', name ?? 'Current model was unloaded.', { href: '/models' });
+    }
     return true;
   } else {
     unloadAction.set({ loading: false, error: result.error });
+    if (!options.suppressNotification) {
+      notify.error('Unload failed', result.error || 'Lemonade rejected the unload request.', { href: '/models' });
+    }
     return false;
   }
 }
@@ -184,9 +193,11 @@ export async function deleteModel(name: string): Promise<boolean> {
   if (result.ok) {
     deleteAction.set({ loading: false, error: null });
     await refreshModels();
+    notify.success('Model deleted', name, { href: '/models' });
     return true;
   } else {
     deleteAction.set({ loading: false, error: result.error });
+    notify.error('Delete failed', result.error || name, { href: '/models' });
     return false;
   }
 }

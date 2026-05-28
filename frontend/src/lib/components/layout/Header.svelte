@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import ConnectionBadge from './ConnectionBadge.svelte';
+  import NotificationBell from '$lib/components/notifications/NotificationBell.svelte';
   import { Menu, RefreshCw } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
   import { createEventDispatcher } from 'svelte';
@@ -41,6 +42,7 @@
 
   <!-- Right: Connection indicator -->
   <div class="flex items-center gap-3">
+    <NotificationBell />
     <ConnectionBadge />
     <button
       class="flex h-8 w-8 items-center justify-center rounded border border-transparent text-muted-foreground hover:border-[#4a4f3a] hover:bg-[#1a1d1b] hover:text-foreground"

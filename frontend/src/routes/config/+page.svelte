@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { capabilities } from '$lib/stores/capabilities';
+  import { notify } from '$lib/stores/notifications';
   import { AlertCircle, Lock, SlidersHorizontal } from 'lucide-svelte';
 
   type PresetName = 'Safe' | 'Coding' | 'Long Context' | 'Stress' | 'Executor Strict';
@@ -65,8 +66,10 @@
     const result = await api.lemonade.setConfig(updates);
     if (result.ok) {
       runtimeConfig = { ...runtimeConfig, ...updates };
+      notify.success('Runtime config saved', `ctx_size ${contextSize}, timeout ${globalTimeoutSeconds}s`);
     } else {
       runtimeError = result.error;
+      notify.error('Runtime config failed', result.error || 'Lemonade did not accept the update.');
     }
     runtimeSaving = false;
   }
@@ -118,6 +121,7 @@
     };
     localStorage.setItem('lcc.requestDefaults', JSON.stringify(payload));
     localMessage = 'Local Request Defaults saved.';
+    notify.success('Request defaults saved', activePreset, { toastDuration: 2500 });
   }
 
   function loadLocalDefaults() {
@@ -149,6 +153,7 @@
     stopSequences = ['<|im_end|>', '\\n\\nUser:'];
     localStorage.removeItem('lcc.requestDefaults');
     localMessage = 'Local Request Defaults reset.';
+    notify.info('Request defaults reset', 'Local request defaults are back to Coding.');
   }
 </script>
 
