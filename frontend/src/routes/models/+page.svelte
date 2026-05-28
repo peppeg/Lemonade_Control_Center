@@ -223,6 +223,9 @@
                 </td>
                 <td>
                   <div class="flex justify-end gap-2">
+                    <a class="ops-button" href={`/models/${encodeURIComponent(model.name)}${model.size ? `?size=${model.size}` : ''}`}>
+                      Profiles
+                    </a>
                     {#if model.isLoaded}
                       <button class="ops-button" type="button" disabled>In Use</button>
                     {:else}

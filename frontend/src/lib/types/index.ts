@@ -234,3 +234,48 @@ export interface ToastData {
   duration: number;
   exiting: boolean;
 }
+
+// ═══════════════════════════════════════════════
+// Profile Types (M10)
+// ═══════════════════════════════════════════════
+
+export interface ProfileConfig {
+  ctx_size: number | null;
+  global_timeout: number | null;
+  llamacpp_backend: string | null;
+  llamacpp_args: string | null;
+  max_tokens: number | null;
+  temperature: number | null;
+  app_timeout: number | null;
+  stop_sequences: string | null;
+}
+
+export interface Profile {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  config: ProfileConfig;
+  is_builtin: boolean;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelProfiles {
+  model_name: string;
+  default_profile_id: string | null;
+  profiles: Profile[];
+}
+
+export interface SmartRecommendation {
+  model_name: string;
+  model_size_gb: number | null;
+  ram_total_gb: number;
+  ram_available_gb: number;
+  recommended_ctx: number;
+  safe_max_ctx: number;
+  risk_threshold_ctx: number;
+  warnings: string[];
+  notes: string[];
+}

@@ -10,6 +10,10 @@ import type {
   Capabilities,
   LemonadeHealth,
   HardwareInfo,
+  ModelProfiles,
+  Profile,
+  ProfileConfig,
+  SmartRecommendation,
 } from '$lib/types';
 
 const BASE = '/api';
@@ -50,8 +54,16 @@ async function post<T>(path: string, body?: unknown): Promise<ApiResult<T>> {
   return request<T>('POST', path, body);
 }
 
+async function put<T>(path: string, body?: unknown): Promise<ApiResult<T>> {
+  return request<T>('PUT', path, body);
+}
+
 async function del<T>(path: string): Promise<ApiResult<T>> {
   return request<T>('DELETE', path);
+}
+
+function enc(value: string): string {
+  return encodeURIComponent(value);
 }
 
 export const api = {
@@ -100,6 +112,32 @@ export const api = {
     recent: (n = 100) => get<{ entries: unknown[]; total_lines: number }>(`/logs/recent?n=${n}`),
     lastTask: (maxTokens?: number) =>
       get<Record<string, unknown>>(`/logs/last-task${maxTokens ? `?max_tokens=${maxTokens}` : ''}`),
+  },
+
+  // ── Profiles (M10) ──
+  profiles: {
+    list: (modelName: string) => get<ModelProfiles>(`/profiles/${enc(modelName)}`),
+    recommendation: (modelName: string, modelSizeGb?: number | null) => {
+      const size = typeof modelSizeGb === 'number' ? `?model_size_gb=${modelSizeGb}` : '';
+      return get<SmartRecommendation>(`/profiles/${enc(modelName)}/recommendation${size}`);
+    },
+    create: (modelName: string, body: { name: string; description?: string; icon?: string; config: ProfileConfig }) =>
+      post<Profile>(`/profiles/${enc(modelName)}`, body),
+    update: (
+      modelName: string,
+      profileId: string,
+      body: { name?: string; description?: string; icon?: string; config?: ProfileConfig; is_default?: boolean },
+    ) => put<Profile>(`/profiles/${enc(modelName)}/${enc(profileId)}`, body),
+    delete: (modelName: string, profileId: string) =>
+      del<{ deleted: boolean }>(`/profiles/${enc(modelName)}/${enc(profileId)}`),
+    clone: (modelName: string, profileId: string, newName: string) =>
+      post<Profile>(`/profiles/${enc(modelName)}/${enc(profileId)}/clone?new_name=${enc(newName)}`),
+    setDefault: (modelName: string, profileId: string) =>
+      post<{ default: string }>(`/profiles/${enc(modelName)}/${enc(profileId)}/set-default`),
+    export: (modelName: string, profileId: string) =>
+      get<Record<string, unknown>>(`/profiles/${enc(modelName)}/${enc(profileId)}/export`),
+    importProfile: (modelName: string, body: Record<string, unknown>) =>
+      post<Profile>(`/profiles/${enc(modelName)}/import`, body),
   },
 
   // ── Diagnostic (M2, used from M9) ──
