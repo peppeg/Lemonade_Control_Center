@@ -19,6 +19,7 @@ const DEFAULTS: Capabilities = {
   websocket: false, websocket_port: null,
   cmd_systemctl: false, cmd_journalctl: false, cmd_sensors: false,
   restart_enabled: false,
+  bench_lab: false,
   lemonade_version: null, probe_timestamp: null,
 };
 

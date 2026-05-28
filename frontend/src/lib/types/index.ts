@@ -40,6 +40,7 @@ export interface Capabilities {
   cmd_journalctl: boolean;
   cmd_sensors: boolean;
   restart_enabled: boolean;
+  bench_lab: boolean;
   lemonade_version: string | null;
   probe_timestamp: string | null;
 }
@@ -357,3 +358,63 @@ export interface TaskRecord {
 }
 
 export type TimeRange = 5 | 15 | 30;
+
+// ═══════════════════════════════════════════════
+// Bench Lab Types (M13)
+// ═══════════════════════════════════════════════
+
+export interface BenchPrompt {
+  id: string;
+  name: string;
+  prompt: string;
+  system_prompt: string;
+  max_tokens: number;
+  temperature: number;
+  expected_format: string | null;
+  tags: string[];
+}
+
+export interface BenchSuite {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  prompts: BenchPrompt[];
+  recommended_ctx: number;
+  recommended_temp: number;
+  estimated_minutes: number;
+}
+
+export interface BenchResult {
+  prompt_id: string;
+  prompt_name: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  prompt_eval_tps: number;
+  generation_tps: number;
+  ttft_seconds: number;
+  total_seconds: number;
+  finish_reason: string;
+  finish_confidence: string;
+  response_preview: string;
+  response_full: string;
+  timestamp: string;
+  error: string | null;
+}
+
+export interface SuiteResult {
+  suite_id: string;
+  suite_name: string;
+  model: string;
+  results: BenchResult[];
+  avg_gen_tps: number;
+  avg_ttft: number;
+  total_tokens: number;
+  total_seconds: number;
+  truncated_count: number;
+  error_count: number;
+  timestamp: string;
+}
+
+export type BenchStoredResult = BenchResult | SuiteResult;

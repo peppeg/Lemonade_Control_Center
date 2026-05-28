@@ -50,6 +50,7 @@ class CapabilitiesResponse(BaseModel):
     cmd_journalctl: bool
     cmd_sensors: bool
     restart_enabled: bool
+    bench_lab: bool
     lemonade_version: str | None
     probe_timestamp: str | None
 

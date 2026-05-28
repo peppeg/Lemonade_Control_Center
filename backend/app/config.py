@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # ── Safety Flags ──
     enable_delete: bool = False
     enable_restart: bool = False
+    enable_bench_lab: bool = False
 
     # ── Server ──
     host: str = "127.0.0.1"

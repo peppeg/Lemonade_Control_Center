@@ -4,7 +4,7 @@
   import { sidebarCollapsed, toggleSidebar } from '$lib/stores/sidebar';
   import { connectionStatus } from '$lib/stores/connection';
   import {
-    LayoutDashboard, Cpu, Settings, ScrollText, Monitor, Activity, LineChart,
+    LayoutDashboard, Cpu, Settings, ScrollText, Monitor, Activity, LineChart, FlaskConical,
     OctagonX, PanelLeft
   } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
@@ -14,6 +14,7 @@
     label: string;
     icon: typeof LayoutDashboard;
     milestone: string;
+    requiresBench?: boolean;
   }
 
   const navItems: NavItem[] = [
@@ -24,6 +25,7 @@
     { href: '/system',    label: 'System',    icon: Monitor,         milestone: 'M8' },
     { href: '/diagnostics', label: 'Diagnostics', icon: Activity,     milestone: 'M11' },
     { href: '/hardware', label: 'Hardware', icon: LineChart,          milestone: 'M12' },
+    { href: '/bench', label: 'Bench Lab', icon: FlaskConical,          milestone: 'M13', requiresBench: true },
   ];
 
   $: currentPath = $page.url.pathname;
@@ -80,27 +82,29 @@
   <!-- Navigation -->
   <nav class="flex flex-1 flex-col gap-0 px-0 py-4">
     {#each navItems as item}
-      <a
-        href={item.href}
-        title={$sidebarCollapsed ? item.label : ''}
-        class="relative flex items-center gap-3 text-sm transition-colors duration-150
-               {$sidebarCollapsed ? 'justify-center px-2 py-3' : 'px-5 py-3'}
-               {isActive(item.href, currentPath)
-                 ? 'bg-[#4a4d49] text-lemon font-semibold'
-                 : 'text-[#d8dccb] hover:text-foreground hover:bg-[#222522]'}"
-      >
-        {#if isActive(item.href, currentPath)}
-          <span class="absolute left-0 top-0 h-full w-1 bg-lemon"></span>
-        {/if}
-        <svelte:component
-          this={item.icon}
-          class="h-4 w-4 shrink-0 transition-colors
-                 {isActive(item.href, currentPath) ? 'text-lemon' : ''}"
-        />
-        {#if !$sidebarCollapsed}
-          <span class="truncate">{item.label}</span>
-        {/if}
-      </a>
+      {#if !item.requiresBench || $capabilities.bench_lab}
+        <a
+          href={item.href}
+          title={$sidebarCollapsed ? item.label : ''}
+          class="relative flex items-center gap-3 text-sm transition-colors duration-150
+                 {$sidebarCollapsed ? 'justify-center px-2 py-3' : 'px-5 py-3'}
+                 {isActive(item.href, currentPath)
+                   ? 'bg-[#4a4d49] text-lemon font-semibold'
+                   : 'text-[#d8dccb] hover:text-foreground hover:bg-[#222522]'}"
+        >
+          {#if isActive(item.href, currentPath)}
+            <span class="absolute left-0 top-0 h-full w-1 bg-lemon"></span>
+          {/if}
+          <svelte:component
+            this={item.icon}
+            class="h-4 w-4 shrink-0 transition-colors
+                   {isActive(item.href, currentPath) ? 'text-lemon' : ''}"
+          />
+          {#if !$sidebarCollapsed}
+            <span class="truncate">{item.label}</span>
+          {/if}
+        </a>
+      {/if}
     {/each}
   </nav>
 

@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
     print(f"   Admin key:    {'configured' if settings.lemonade_admin_api_key else 'not set'}")
     print(f"   Delete:       {'ENABLED ⚠' if settings.enable_delete else 'disabled'}")
     print(f"   Restart:      {'ENABLED ⚠' if settings.enable_restart else 'disabled'}")
+    print(f"   Bench Lab:    {'ENABLED' if settings.enable_bench_lab else 'disabled'}")
     print(f"   Capabilities: {capabilities.probe_timestamp or 'no probe results'}")
     print(f"   Lemonade ver: {capabilities.lemonade_version or 'unknown'}")
     start_collector(interval_seconds=5)
@@ -55,3 +56,8 @@ app.include_router(profiles.router)
 app.include_router(diagnostics.router)
 app.include_router(metrics.router)
 app.include_router(metrics.ws_router)
+
+if settings.enable_bench_lab:
+    from app.routers import bench
+
+    app.include_router(bench.router)

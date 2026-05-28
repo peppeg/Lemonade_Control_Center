@@ -11,6 +11,9 @@ import type {
   LemonadeHealth,
   HardwareInfo,
   AlertHistoryEntry,
+  BenchResult,
+  BenchStoredResult,
+  BenchSuite,
   DiagnosticReport,
   MetricPoint,
   ModelProfiles,
@@ -18,6 +21,7 @@ import type {
   ProfileConfig,
   SmartRecommendation,
   TaskRecord,
+  SuiteResult,
 } from '$lib/types';
 
 const BASE = '/api';
@@ -158,6 +162,20 @@ export const api = {
     tasks: (n = 20) => get<{ tasks: TaskRecord[] }>(`/metrics/tasks?n=${n}`),
     clear: () => post<{ cleared: boolean }>('/metrics/clear'),
     tasksCsvUrl: () => `${BASE}/metrics/tasks/csv`,
+  },
+
+  // ── Bench Lab (M13, backend-gated) ──
+  bench: {
+    suites: () => get<{ suites: BenchSuite[] }>('/bench/suites'),
+    runQuick: (body: { model: string; prompt: string; max_tokens: number; temperature: number; system_prompt?: string }) =>
+      post<BenchResult>('/bench/run', body),
+    runSuite: (body: { model: string; suite_id: string }) =>
+      post<SuiteResult>('/bench/run', body),
+    results: () => get<{ results: BenchStoredResult[] }>('/bench/results'),
+    clear: () => post<{ cleared: boolean }>('/bench/clear'),
+    csvUrl: () => `${BASE}/bench/results/csv`,
+    jsonUrl: () => `${BASE}/bench/results/json`,
+    markdownUrl: () => `${BASE}/bench/results/markdown`,
   },
 
   // ── Diagnostic (M2, used from M9) ──

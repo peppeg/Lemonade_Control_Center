@@ -88,6 +88,7 @@ async def get_capabilities():
         cmd_journalctl=capabilities.cmd_journalctl,
         cmd_sensors=capabilities.cmd_sensors,
         restart_enabled=capabilities.cmd_systemctl and settings.enable_restart,
+        bench_lab=settings.enable_bench_lab,
 
         # Meta
         lemonade_version=capabilities.lemonade_version,
