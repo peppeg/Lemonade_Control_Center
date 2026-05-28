@@ -16,7 +16,7 @@
   let runtimeSaving = false;
 
   let contextSize = 128000;
-  let globalTimeoutMs = 60000;
+  let globalTimeoutSeconds = 300;
   let primaryBackend = 'auto';
 
   let maxOutputTokens = 2048;
@@ -41,7 +41,7 @@
     if (result.ok && result.data.available) {
       runtimeConfig = result.data.raw ?? {};
       contextSize = Number(runtimeConfig.ctx_size ?? runtimeConfig.context_size ?? contextSize);
-      globalTimeoutMs = Number(runtimeConfig.global_timeout ?? runtimeConfig.timeout_ms ?? globalTimeoutMs);
+      globalTimeoutSeconds = Number(runtimeConfig.global_timeout ?? globalTimeoutSeconds);
       primaryBackend = String(runtimeConfig.llamacpp_backend ?? runtimeConfig.backend ?? primaryBackend);
     } else {
       runtimeError = result.ok
@@ -58,7 +58,7 @@
 
     const updates = {
       ctx_size: contextSize,
-      global_timeout: globalTimeoutMs,
+      global_timeout: globalTimeoutSeconds,
       llamacpp_backend: primaryBackend,
     };
 
@@ -203,8 +203,8 @@
           </label>
 
           <label class="block space-y-2">
-            <span class="ops-label">Global Timeout (ms)</span>
-            <input class="ops-input" type="number" bind:value={globalTimeoutMs} disabled={!canWriteRuntime} />
+            <span class="ops-label">Global Timeout (s)</span>
+            <input class="ops-input" type="number" min="1" bind:value={globalTimeoutSeconds} disabled={!canWriteRuntime} />
           </label>
 
           <label class="block space-y-2">

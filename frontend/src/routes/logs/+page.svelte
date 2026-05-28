@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
-  import { Activity, Download, Gauge, Search, Timer, TimerReset } from 'lucide-svelte';
+  import { Activity, Download, Gauge, RefreshCw, Search, Timer, TimerReset } from 'lucide-svelte';
   import { formatDuration, formatNumber, formatTPS } from '$lib/utils/format';
 
   interface FinishReason {
@@ -44,6 +44,8 @@
     { label: 'Perf', value: 'performance' },
     { label: 'Model', value: 'model' },
     { label: 'Gen', value: 'generation' },
+    { label: 'Slot', value: 'slot' },
+    { label: 'Info', value: 'info' },
   ];
 
   onMount(() => {
@@ -125,20 +127,26 @@
       <h2 class="ops-title">Performance & Telemetry</h2>
       <p class="ops-subtitle">Real execution metrics parsed from Lemonade logs.</p>
     </div>
-    <div class="flex items-center gap-2 rounded border border-[#444936] bg-[#202321] p-1">
-      <button
-        class="rounded px-4 py-2 text-sm {activePanel === 'stats' ? 'bg-[#111312] text-foreground' : 'text-muted-foreground hover:bg-[#292c29] hover:text-foreground'}"
-        type="button"
-        on:click={() => activePanel = 'stats'}
-      >
-        Stats
-      </button>
-      <button
-        class="rounded px-4 py-2 text-sm {activePanel === 'logs' ? 'bg-[#111312] text-foreground' : 'text-muted-foreground hover:bg-[#292c29] hover:text-foreground'}"
-        type="button"
-        on:click={() => activePanel = 'logs'}
-      >
-        Logs
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex items-center gap-2 rounded border border-[#444936] bg-[#202321] p-1">
+        <button
+          class="rounded px-4 py-2 text-sm {activePanel === 'stats' ? 'bg-[#111312] text-foreground' : 'text-muted-foreground hover:bg-[#292c29] hover:text-foreground'}"
+          type="button"
+          on:click={() => activePanel = 'stats'}
+        >
+          Stats
+        </button>
+        <button
+          class="rounded px-4 py-2 text-sm {activePanel === 'logs' ? 'bg-[#111312] text-foreground' : 'text-muted-foreground hover:bg-[#292c29] hover:text-foreground'}"
+          type="button"
+          on:click={() => activePanel = 'logs'}
+        >
+          Logs
+        </button>
+      </div>
+      <button class="ops-button" type="button" on:click={refreshLogs} disabled={loading}>
+        <RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
+        Refresh
       </button>
     </div>
   </section>

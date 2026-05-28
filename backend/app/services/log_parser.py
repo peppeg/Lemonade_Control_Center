@@ -54,6 +54,7 @@ RE_ERROR = re.compile(r"\b(?:error|exception|fail|fatal)\b", re.IGNORECASE)
 RE_WARNING = re.compile(r"\b(?:warn|warning|timeout|truncat)\b", re.IGNORECASE)
 
 RE_TIMESTAMP = re.compile(r"^(\d{4}-\d{2}-\d{2}T[\d:.]+[+-]\d{2}:\d{2}|\w{3}\s+\d+\s+[\d:]+)")
+RE_LEMONADE_TIMESTAMP = re.compile(r"^(\d{4}-\d{2}-\d{2}\s+[\d:.]+)")
 
 
 def get_recent_logs(
@@ -190,6 +191,10 @@ def _parse_log_line(line: str) -> LogEntry:
     m = RE_TIMESTAMP.match(line)
     if m:
         timestamp = m.group(1)
+    else:
+        m = RE_LEMONADE_TIMESTAMP.match(line)
+        if m:
+            timestamp = m.group(1)
 
     if RE_ERROR.search(line):
         return LogEntry(

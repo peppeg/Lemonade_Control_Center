@@ -47,6 +47,9 @@
   let error: string | null = null;
   let restartMessage: string | null = null;
   let restartLoading = false;
+  let confirmStopUnload = false;
+
+  $: canRestartService = $capabilities.cmd_systemctl && $capabilities.restart_enabled;
 
   onMount(() => {
     refreshSystem();
@@ -99,6 +102,7 @@
   }
 
   async function stopAndUnload() {
+    confirmStopUnload = false;
     await unloadModel(undefined);
     await refreshSystem();
   }
@@ -161,9 +165,11 @@
         {:else}
           <div class="divide-y divide-[#34382d]">
             {#each temperatures as reading}
-              <div class="flex justify-between gap-4 py-3">
+              <div class="grid grid-cols-[1fr_auto_auto_auto] gap-4 py-3 text-sm">
                 <span>{reading.label}</span>
                 <span class="ops-value">{reading.current.toFixed(1)} C</span>
+                <span class="text-muted-foreground">{reading.high ? `${reading.high.toFixed(1)} high` : 'high --'}</span>
+                <span class="text-muted-foreground">{reading.critical ? `${reading.critical.toFixed(1)} crit` : 'crit --'}</span>
               </div>
             {/each}
           </div>
@@ -212,7 +218,7 @@
       <h2 class="text-lg font-bold">Top Processes (by RAM)</h2>
       <button class="ops-button" type="button" on:click={refreshSystem} disabled={loading}>
         <RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
-        Filter
+        Refresh
       </button>
     </div>
     <div class="overflow-x-auto">
@@ -253,15 +259,28 @@
             Stop & Unload interrupts active inference by unloading the current model. Restart Service restarts lemond.service and should only be used when the system is unresponsive or models fail to unload cleanly.
           </p>
           <p class="mt-2 text-xs text-muted-foreground">Service status: <span class="ops-value">{serviceStatus}</span></p>
+          {#if !$capabilities.cmd_systemctl}
+            <p class="mt-2 text-sm text-status-warn">Restart Service is unavailable because systemctl is not available.</p>
+          {:else if !$capabilities.restart_enabled}
+            <p class="mt-2 text-sm text-status-warn">Restart Service is disabled. Set <code class="ops-mono">ENABLE_RESTART=true</code> in the backend environment to enable it.</p>
+          {/if}
           {#if restartMessage}
             <p class="mt-2 text-sm text-muted-foreground">{restartMessage}</p>
           {/if}
           <div class="mt-6 flex flex-wrap gap-4">
-            <button class="ops-button ops-button-danger" type="button" on:click={stopAndUnload} disabled={$unloadAction.loading}>
-              <Server class="h-4 w-4" />
-              {$unloadAction.loading ? 'Unloading' : 'Stop & Unload'}
-            </button>
-            <button class="ops-button ops-button-danger bg-[#ffb0a8] text-[#20100e] hover:bg-[#ffc4be]" type="button" on:click={restartService} disabled={!$capabilities.restart_enabled || restartLoading}>
+            {#if confirmStopUnload}
+              <button class="ops-button ops-button-danger bg-[#ffb0a8] text-[#20100e] hover:bg-[#ffc4be]" type="button" on:click={stopAndUnload} disabled={$unloadAction.loading}>
+                <Server class="h-4 w-4" />
+                {$unloadAction.loading ? 'Unloading' : 'Confirm Unload'}
+              </button>
+              <button class="ops-button" type="button" on:click={() => confirmStopUnload = false}>Cancel</button>
+            {:else}
+              <button class="ops-button ops-button-danger" type="button" on:click={() => confirmStopUnload = true} disabled={$unloadAction.loading}>
+                <Server class="h-4 w-4" />
+                Stop & Unload
+              </button>
+            {/if}
+            <button class="ops-button ops-button-danger bg-[#ffb0a8] text-[#20100e] hover:bg-[#ffc4be]" type="button" on:click={restartService} disabled={!canRestartService || restartLoading}>
               <RefreshCw class="h-4 w-4 {restartLoading ? 'animate-spin' : ''}" />
               Restart Service
             </button>
