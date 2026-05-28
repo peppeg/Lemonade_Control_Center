@@ -20,7 +20,7 @@
   $: readiness = $connectionStatus === 'connected' ? 'Connected' : $connectionStatus === 'degraded' ? 'Degraded' : $connectionStatus === 'checking' ? 'Checking' : 'Offline';
 
   onMount(() => {
-    startDashboardPolling(10_000);
+    startDashboardPolling(30_000);
   });
 
   onDestroy(() => {

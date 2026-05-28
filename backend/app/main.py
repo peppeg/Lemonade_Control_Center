@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
     print(f"   Bench Lab:    {'ENABLED' if settings.enable_bench_lab else 'disabled'}")
     print(f"   Capabilities: {capabilities.probe_timestamp or 'no probe results'}")
     print(f"   Lemonade ver: {capabilities.lemonade_version or 'unknown'}")
-    start_collector(interval_seconds=5)
+    start_collector(interval_seconds=10)
     yield
     stop_collector()
     print("🍋 Shutting down...")

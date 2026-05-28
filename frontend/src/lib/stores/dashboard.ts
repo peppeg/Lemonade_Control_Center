@@ -2,7 +2,7 @@
  * Dashboard store — aggregates data from multiple backend endpoints
  * and runs the smart alert engine.
  *
- * Polls every 10 seconds. Each card can show independently:
+ * Polls on a relaxed interval. Each card can show independently:
  * if one endpoint fails, the others still render.
  */
 import { writable, get } from 'svelte/store';

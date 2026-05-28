@@ -19,7 +19,7 @@
 
   onMount(() => {
     loadCapabilities();
-    startHealthPolling(5000);
+    startHealthPolling(15_000);
 
     return () => {
       stopHealthPolling();

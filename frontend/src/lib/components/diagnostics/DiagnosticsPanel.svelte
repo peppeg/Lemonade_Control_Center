@@ -11,12 +11,18 @@
   } from '$lib/stores/diagnostics';
   import AlertCard from './AlertCard.svelte';
 
+  export let autoPoll = false;
+
   onMount(() => {
-    startDiagnosticsPolling(30_000);
+    if (autoPoll) {
+      startDiagnosticsPolling(60_000);
+    } else if (!$diagnosticReport) {
+      runDiagnostics(false);
+    }
   });
 
   onDestroy(() => {
-    stopDiagnosticsPolling();
+    if (autoPoll) stopDiagnosticsPolling();
   });
 
   $: alerts = $diagnosticReport?.alerts ?? [];
