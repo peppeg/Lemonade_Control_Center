@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.capabilities import capabilities
-from app.routers import health, lemonade, system, logs, diagnostic, profiles
+from app.routers import health, lemonade, system, logs, diagnostic, diagnostics, profiles
 
 
 @asynccontextmanager
@@ -49,3 +49,4 @@ app.include_router(system.router)
 app.include_router(logs.router)
 app.include_router(diagnostic.router)
 app.include_router(profiles.router)
+app.include_router(diagnostics.router)

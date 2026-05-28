@@ -10,6 +10,8 @@ import type {
   Capabilities,
   LemonadeHealth,
   HardwareInfo,
+  AlertHistoryEntry,
+  DiagnosticReport,
   ModelProfiles,
   Profile,
   ProfileConfig,
@@ -138,6 +140,13 @@ export const api = {
       get<Record<string, unknown>>(`/profiles/${enc(modelName)}/${enc(profileId)}/export`),
     importProfile: (modelName: string, body: Record<string, unknown>) =>
       post<Profile>(`/profiles/${enc(modelName)}/import`, body),
+  },
+
+  // ── Diagnostics (M11) ──
+  diagnostics: {
+    run: () => get<DiagnosticReport>('/diagnostics'),
+    history: (limit = 50) => get<{ entries: AlertHistoryEntry[] }>(`/diagnostics/history?limit=${limit}`),
+    dismiss: (ruleId: string) => post<{ dismissed: string }>(`/diagnostics/dismiss?rule_id=${enc(ruleId)}`),
   },
 
   // ── Diagnostic (M2, used from M9) ──

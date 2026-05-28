@@ -279,3 +279,52 @@ export interface SmartRecommendation {
   warnings: string[];
   notes: string[];
 }
+
+// ═══════════════════════════════════════════════
+// Diagnostics Types (M11)
+// ═══════════════════════════════════════════════
+
+export type DiagnosticSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+export type AlertStatus = 'active' | 'resolved' | 'dismissed';
+
+export interface DiagnosticAlert {
+  rule_id: string;
+  rule_name: string;
+  severity: DiagnosticSeverity;
+  title: string;
+  description: string;
+  impact: string;
+  suggestion: string;
+  evidence: Record<string, unknown>;
+  timestamp: string;
+  status: AlertStatus;
+}
+
+export interface RuleResult {
+  rule_id: string;
+  rule_name: string;
+  description: string;
+  passed: boolean;
+  alert: DiagnosticAlert | null;
+  execution_time_ms: number;
+}
+
+export interface DiagnosticReport {
+  timestamp: string;
+  total_rules: number;
+  passed: number;
+  warnings: number;
+  errors: number;
+  results: RuleResult[];
+  alerts: DiagnosticAlert[];
+  execution_time_ms: number;
+}
+
+export interface AlertHistoryEntry {
+  timestamp: string;
+  rule_id: string;
+  rule_name: string;
+  severity: DiagnosticSeverity;
+  event: 'appeared' | 'resolved' | 'dismissed';
+  title: string;
+}

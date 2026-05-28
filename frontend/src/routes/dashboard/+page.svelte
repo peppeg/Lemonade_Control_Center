@@ -7,6 +7,7 @@
   import { capabilities } from '$lib/stores/capabilities';
   import { connectionStatus } from '$lib/stores/connection';
   import { AlertTriangle, Check, Clock3, Cpu, HardDrive, Info, RefreshCw, Server, TimerReset } from 'lucide-svelte';
+  import DiagnosticsPanel from '$lib/components/diagnostics/DiagnosticsPanel.svelte';
   import type { HardwareInfo, LastTaskInfo, LoadedModelInfo, ServerStatus } from '$lib/types';
   import { formatDuration, formatNumber, formatPercent, formatTPS } from '$lib/utils/format';
 
@@ -200,6 +201,8 @@
       {/if}
     </article>
   </section>
+
+  <DiagnosticsPanel />
 
   {#if data.alerts.length > 0}
     <section class="ops-section space-y-3">

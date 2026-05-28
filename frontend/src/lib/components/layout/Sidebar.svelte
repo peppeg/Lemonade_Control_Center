@@ -4,7 +4,7 @@
   import { sidebarCollapsed, toggleSidebar } from '$lib/stores/sidebar';
   import { connectionStatus } from '$lib/stores/connection';
   import {
-    LayoutDashboard, Cpu, Settings, ScrollText, Monitor,
+    LayoutDashboard, Cpu, Settings, ScrollText, Monitor, Activity,
     OctagonX, PanelLeft
   } from 'lucide-svelte';
   import { Button } from '$lib/components/ui/button';
@@ -22,6 +22,7 @@
     { href: '/config',    label: 'Configuration', icon: Settings,    milestone: 'M6' },
     { href: '/logs',      label: 'Logs & Stats',  icon: ScrollText,  milestone: 'M7' },
     { href: '/system',    label: 'System',    icon: Monitor,         milestone: 'M8' },
+    { href: '/diagnostics', label: 'Diagnostics', icon: Activity,     milestone: 'M11' },
   ];
 
   $: currentPath = $page.url.pathname;
