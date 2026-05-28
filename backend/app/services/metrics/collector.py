@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 import psutil
 
@@ -74,7 +74,7 @@ def _sample() -> DataPoint:
         pass
 
     return DataPoint(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         ram_used_gb=memory.used / (1024**3),
         ram_total_gb=memory.total / (1024**3),
         ram_percent=memory.percent,

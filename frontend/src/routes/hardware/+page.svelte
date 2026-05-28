@@ -48,13 +48,18 @@
   }
 
   function formatTime(point: MetricPoint): string {
-    return new Date(point.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(parseMetricTimestamp(point.t)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
   function primaryTemperature(point: MetricPoint): number | null {
     const values = Object.values(point.temps);
     if (values.length === 0) return null;
     return Math.max(...values);
+  }
+
+  function parseMetricTimestamp(value: string): number {
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value);
+    return new Date(hasTimezone ? value : `${value}Z`).getTime();
   }
 </script>
 

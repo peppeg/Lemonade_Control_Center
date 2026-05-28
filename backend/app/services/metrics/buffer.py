@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 @dataclass
@@ -35,8 +35,8 @@ class TimeSeriesBuffer:
             points = list(self._buffer)
 
         if minutes:
-            cutoff = datetime.utcnow() - timedelta(minutes=minutes)
-            points = [point for point in points if point.timestamp >= cutoff]
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+            points = [point for point in points if self._aware_timestamp(point.timestamp) >= cutoff]
 
         return [self._serialize(point) for point in points]
 
@@ -57,7 +57,7 @@ class TimeSeriesBuffer:
 
     def _serialize(self, point: DataPoint) -> dict:
         return {
-            "t": point.timestamp.isoformat(),
+            "t": self._aware_timestamp(point.timestamp).isoformat(),
             "ram_used": round(point.ram_used_gb, 2),
             "ram_total": round(point.ram_total_gb, 2),
             "ram_pct": round(point.ram_percent, 1),
@@ -65,3 +65,8 @@ class TimeSeriesBuffer:
             "swap_used": round(point.swap_used_gb, 2),
             "temps": {key: round(value, 1) for key, value in point.temperatures.items()},
         }
+
+    def _aware_timestamp(self, timestamp: datetime) -> datetime:
+        if timestamp.tzinfo is None:
+            return timestamp.replace(tzinfo=timezone.utc)
+        return timestamp.astimezone(timezone.utc)

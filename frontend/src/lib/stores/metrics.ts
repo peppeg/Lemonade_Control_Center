@@ -48,7 +48,7 @@ export function connectMetricsWs(): void {
       const cutoff = Date.now() - get(timeRange) * 60 * 1000;
       timeSeriesData.update((points) =>
         [...points, message.data as MetricPoint]
-          .filter((point) => new Date(point.t).getTime() >= cutoff)
+          .filter((point) => parseMetricTimestamp(point.t) >= cutoff)
           .slice(-MAX_POINTS),
       );
     } catch {
@@ -90,4 +90,9 @@ export function exportTasksCsv(): void {
   anchor.href = api.metrics.tasksCsvUrl();
   anchor.download = 'lcc-tasks.csv';
   anchor.click();
+}
+
+function parseMetricTimestamp(value: string): number {
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(value);
+  return new Date(hasTimezone ? value : `${value}Z`).getTime();
 }
