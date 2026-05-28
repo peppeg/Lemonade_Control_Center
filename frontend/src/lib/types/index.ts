@@ -65,6 +65,16 @@ export interface LemonadeHealth {
   websocket_port: number | null;
 }
 
+export interface LemonadeSavedOptions {
+  available: boolean;
+  path: string;
+  options: Record<string, Record<string, unknown>>;
+  model_name: string | null;
+  selected_key: string | null;
+  selected_options: Record<string, unknown> | null;
+  error: string | null;
+}
+
 // ── Hardware ──
 
 export interface HardwareInfo {

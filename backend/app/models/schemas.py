@@ -145,6 +145,17 @@ class LemonadeConfigResponse(BaseModel):
     available: bool = True
 
 
+class LemonadeSavedOptionsResponse(BaseModel):
+    """Saved per-model Lemonade load options from recipe_options.json."""
+    available: bool = False
+    path: str
+    options: dict[str, dict] = Field(default_factory=dict)
+    model_name: str | None = None
+    selected_key: str | None = None
+    selected_options: dict | None = None
+    error: str | None = None
+
+
 # ═══════════════════════════════════════════════════════════
 # Fase 2.2 — System & Process
 # ═══════════════════════════════════════════════════════════

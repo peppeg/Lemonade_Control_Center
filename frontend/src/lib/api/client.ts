@@ -9,6 +9,7 @@ import type {
   HealthResponse,
   Capabilities,
   LemonadeHealth,
+  LemonadeSavedOptions,
   HardwareInfo,
   AlertHistoryEntry,
   BenchResult,
@@ -86,6 +87,8 @@ export const api = {
     systemInfo: () => get<Record<string, unknown>>('/lemonade/system-info'),
     models: () => get<{ models: unknown[]; source: string }>('/lemonade/models'),
     running: () => get<{ models: unknown[] }>('/lemonade/running'),
+    savedOptions: (modelName?: string) =>
+      get<LemonadeSavedOptions>(`/lemonade/saved-options${modelName ? `?model_name=${enc(modelName)}` : ''}`),
     showModel: (name: string) => get<Record<string, unknown>>(`/lemonade/models/${encodeURIComponent(name)}`),
     loadModel: (
     body: {

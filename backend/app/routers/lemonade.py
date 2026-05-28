@@ -18,8 +18,10 @@ from app.models.schemas import (
     LoadModelResponse,
     UnloadModelRequest,
     LemonadeConfigResponse,
+    LemonadeSavedOptionsResponse,
     ConfigUpdateRequest,
 )
+from app.services.lemonade_options import read_saved_options
 
 router = APIRouter(prefix="/api/lemonade", tags=["lemonade"])
 
@@ -52,6 +54,12 @@ async def list_models(provider: LemonadeProvider = Depends(get_provider)):
 async def running_models(provider: LemonadeProvider = Depends(get_provider)):
     """List currently loaded/running models."""
     return await provider.get_running_models()
+
+
+@router.get("/saved-options", response_model=LemonadeSavedOptionsResponse)
+async def saved_options(model_name: str | None = None):
+    """Read Lemonade's official saved per-model load options."""
+    return read_saved_options(model_name)
 
 
 @router.get("/models/{model_name}", response_model=ModelShowResponse)

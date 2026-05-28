@@ -4,7 +4,9 @@
   import { ArrowLeft, RefreshCw, Upload } from 'lucide-svelte';
   import ProfileCard from '$lib/components/profiles/ProfileCard.svelte';
   import ProfileEditor from '$lib/components/profiles/ProfileEditor.svelte';
+  import LemonadeSavedOptions from '$lib/components/profiles/LemonadeSavedOptions.svelte';
   import SmartRecommendation from '$lib/components/profiles/SmartRecommendation.svelte';
+  import { api } from '$lib/api/client';
   import {
     activeProfileId,
     applyAndLoadProfile,
@@ -22,17 +24,46 @@
     setDefaultProfile,
     updateProfile,
   } from '$lib/stores/profiles';
-  import type { Profile, ProfileConfig } from '$lib/types';
+  import type { LemonadeSavedOptions as LemonadeSavedOptionsData, Profile, ProfileConfig } from '$lib/types';
 
   $: modelName = $page.params.name ?? '';
   $: modelSizeGb = readModelSizeGb($page.url.searchParams.get('size'));
 
   let editingProfile: Profile | null = null;
   let cloneName = '';
+  let savedOptions: LemonadeSavedOptionsData | null = null;
+  let savedOptionsLoading = true;
 
   onMount(() => {
-    if (modelName) loadProfiles(modelName, modelSizeGb);
+    if (modelName) {
+      loadProfiles(modelName, modelSizeGb);
+      loadSavedOptions();
+    }
   });
+
+  async function refreshAll() {
+    await Promise.all([
+      loadProfiles(modelName, modelSizeGb),
+      loadSavedOptions(),
+    ]);
+  }
+
+  async function loadSavedOptions() {
+    savedOptionsLoading = true;
+    const result = await api.lemonade.savedOptions(modelName);
+    savedOptions = result.ok
+      ? result.data
+      : {
+          available: false,
+          path: '',
+          options: {},
+          model_name: modelName,
+          selected_key: null,
+          selected_options: null,
+          error: result.error,
+        };
+    savedOptionsLoading = false;
+  }
 
   async function handleCreate(event: CustomEvent<{ name: string; description: string; icon: string; config: ProfileConfig }>) {
     await createProfile(event.detail);
@@ -78,8 +109,8 @@
       </p>
     </div>
     <div class="flex flex-wrap gap-2">
-      <button class="ops-button" type="button" on:click={() => loadProfiles(modelName, modelSizeGb)} disabled={$profilesLoading}>
-        <RefreshCw class="h-4 w-4 {$profilesLoading ? 'animate-spin' : ''}" />
+      <button class="ops-button" type="button" on:click={refreshAll} disabled={$profilesLoading || savedOptionsLoading}>
+        <RefreshCw class="h-4 w-4 {$profilesLoading || savedOptionsLoading ? 'animate-spin' : ''}" />
         Refresh
       </button>
       <label class="ops-button cursor-pointer">
@@ -97,6 +128,8 @@
   {#if $recommendation}
     <SmartRecommendation data={$recommendation} />
   {/if}
+
+  <LemonadeSavedOptions data={savedOptions} loading={savedOptionsLoading} />
 
   {#if editingProfile}
     <ProfileEditor profile={editingProfile} submitLabel="Update Profile" on:save={handleUpdate} on:cancel={() => editingProfile = null} />

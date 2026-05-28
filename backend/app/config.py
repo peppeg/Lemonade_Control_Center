@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # ── Lemonade Server ──
     lemonade_url: str = "http://localhost:13305"
     lemonade_admin_api_key: str | None = None
+    lemonade_recipe_options_file: str = "/opt/var/lib/lemonade/.cache/lemonade/recipe_options.json"
 
     # ── Safety Flags ──
     enable_delete: bool = False
