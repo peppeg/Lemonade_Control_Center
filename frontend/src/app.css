@@ -303,6 +303,10 @@ code, pre, .font-mono {
   font-size: 13px;
 }
 
+.ops-input-icon-left {
+  padding-left: 36px;
+}
+
 .ops-textarea {
   min-height: 88px;
   resize: vertical;

@@ -92,10 +92,10 @@
             <Clipboard class="h-4 w-4" />
             CLI
           </button>
-          <button class="ops-button" type="button" title="Inspect runtime parameters">
+          <a class="ops-button" href="/system" title="Inspect runtime process details">
             <Info class="h-4 w-4" />
             Details
-          </button>
+          </a>
           <button
             class="ops-button ops-button-danger"
             type="button"
@@ -188,7 +188,7 @@
       <h2 class="ops-title">Local Inventory</h2>
       <label class="relative block w-full max-w-xs">
         <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input class="ops-input pl-9" placeholder="Filter models..." bind:value={filter} />
+        <input class="ops-input ops-input-icon-left" placeholder="Filter models..." bind:value={filter} />
       </label>
     </div>
 

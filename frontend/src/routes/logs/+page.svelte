@@ -252,7 +252,7 @@
         <div class="flex flex-col gap-2 sm:flex-row">
           <label class="relative block">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <input class="ops-input min-w-64 pl-9" placeholder="Search logs..." bind:value={search} />
+            <input class="ops-input ops-input-icon-left min-w-64" placeholder="Search logs..." bind:value={search} />
           </label>
           <button class="ops-button" type="button" on:click={exportLogs}>
             <Download class="h-4 w-4" />

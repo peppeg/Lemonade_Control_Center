@@ -5,9 +5,8 @@
   import { connectionStatus } from '$lib/stores/connection';
   import {
     LayoutDashboard, Cpu, Settings, ScrollText, Monitor, Activity, LineChart, FlaskConical,
-    OctagonX, PanelLeft
+    PanelLeft, Server
   } from 'lucide-svelte';
-  import { Button } from '$lib/components/ui/button';
 
   interface NavItem {
     href: string;
@@ -111,18 +110,19 @@
   <!-- Danger Zone -->
   {#if $hasDangerZone}
     <div class="border-t border-[#34392d] px-2 py-3">
-      <Button
-        variant="ghost"
-        class="w-full gap-3 text-danger hover:bg-[#321715] hover:text-danger
+      <a
+        href="/system"
+        class="inline-flex min-h-10 w-full items-center gap-3 rounded px-3 py-2 text-sm text-danger transition-colors hover:bg-[#321715] hover:text-danger
+               {$connectionStatus === 'disconnected' ? 'pointer-events-none opacity-45' : ''}
                {$sidebarCollapsed ? 'justify-center px-2' : 'justify-start'}"
-        disabled={$connectionStatus === 'disconnected'}
-        title="Unload the current model from memory"
+        aria-disabled={$connectionStatus === 'disconnected'}
+        title="Open System emergency recovery"
       >
-        <OctagonX class="h-4 w-4 shrink-0" />
+        <Server class="h-4 w-4 shrink-0" />
         {#if !$sidebarCollapsed}
           <span class="text-sm truncate">Stop & Unload</span>
         {/if}
-      </Button>
+      </a>
     </div>
   {/if}
 </aside>
