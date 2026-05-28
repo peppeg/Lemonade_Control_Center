@@ -2,7 +2,7 @@ import { get, writable } from 'svelte/store';
 import { api } from '$lib/api/client';
 import { loadModel } from '$lib/stores/models';
 import { notify } from '$lib/stores/notifications';
-import type { ModelProfiles, Profile, ProfileConfig, SmartRecommendation } from '$lib/types';
+import type { LemonadeSavedOptions, ModelProfiles, Profile, ProfileConfig, SmartRecommendation } from '$lib/types';
 
 export const currentModelName = writable<string | null>(null);
 export const modelProfiles = writable<ModelProfiles | null>(null);
@@ -198,18 +198,57 @@ export async function applyProfile(profile: Profile): Promise<boolean> {
   return false;
 }
 
-export async function applyAndLoadProfile(profile: Profile): Promise<boolean> {
+export async function applyAndLoadProfile(profile: Profile, saveOptions = false): Promise<boolean> {
   await applyProfile(profile);
-  return loadModel({
+  const success = await loadModel({
     modelName: get(currentModelName) ?? '',
     ctxSize: profile.config.ctx_size,
     llamacppBackend: profile.config.llamacpp_backend,
     llamacppArgs: profile.config.llamacpp_args ?? '',
-    saveOptions: false,
+    saveOptions,
+  });
+  if (success && saveOptions) {
+    notify.success('Lemonade defaults saved', profile.name, { href: `/models/${encodeURIComponent(get(currentModelName) ?? '')}` });
+  }
+  return success;
+}
+
+export async function importFromLemonadeSavedOptions(savedOptions: LemonadeSavedOptions): Promise<boolean> {
+  const modelName = get(currentModelName);
+  const options = savedOptions.selected_options;
+  if (!modelName || !options) return false;
+
+  return createProfile({
+    name: 'Lemonade Defaults',
+    description: `Imported from Lemonade saved options (${savedOptions.selected_key ?? 'recipe_options.json'}).`,
+    icon: 'lemonade',
+    config: {
+      ctx_size: numberOrNull(options.ctx_size),
+      global_timeout: numberOrNull(options.global_timeout),
+      llamacpp_backend: stringOrNull(options.llamacpp_backend ?? options.llamacpp),
+      llamacpp_args: stringOrNull(options.llamacpp_args),
+      max_tokens: numberOrNull(options.max_tokens),
+      temperature: numberOrNull(options.temperature),
+      app_timeout: null,
+      stop_sequences: null,
+    },
   });
 }
 
 function parseStopSequences(value: string | null): string[] {
   if (!value) return [];
   return value.split('\n').map((item) => item.trim()).filter(Boolean);
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
 }

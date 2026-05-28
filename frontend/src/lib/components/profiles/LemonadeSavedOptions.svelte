@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+  import { Download } from 'lucide-svelte';
   import type { LemonadeSavedOptions } from '$lib/types';
 
   export let data: LemonadeSavedOptions | null = null;
   export let loading = false;
+
+  const dispatch = createEventDispatcher<{ importOptions: LemonadeSavedOptions }>();
 </script>
 
 <section class="ops-panel">
@@ -38,6 +42,10 @@
           <p class="mt-2 break-all ops-value text-lemon">{data.selected_key}</p>
           <span class="ops-label mt-5 block">Source File</span>
           <p class="mt-2 break-all text-xs text-muted-foreground">{data.path}</p>
+          <button class="ops-button mt-5 w-full" type="button" on:click={() => dispatch('importOptions', data as LemonadeSavedOptions)}>
+            <Download class="h-4 w-4" />
+            Import as LCC Profile
+          </button>
         </div>
         <div>
           <span class="ops-label">Saved Load Options</span>

@@ -15,6 +15,7 @@
     createProfile,
     deleteProfile,
     exportProfile,
+    importFromLemonadeSavedOptions,
     importProfile,
     loadProfiles,
     modelProfiles,
@@ -33,6 +34,7 @@
   let cloneName = '';
   let savedOptions: LemonadeSavedOptionsData | null = null;
   let savedOptionsLoading = true;
+  let saveApplyLoadToLemonade = false;
 
   onMount(() => {
     if (modelName) {
@@ -88,6 +90,21 @@
     input.value = '';
   }
 
+  async function handleImportSavedOptions() {
+    if (!savedOptions?.selected_options) return;
+    await importFromLemonadeSavedOptions(savedOptions);
+  }
+
+  async function handleSaveToLemonade(profile: Profile) {
+    const confirmed = window.confirm(
+      `Save "${profile.name}" as Lemonade defaults for ${modelName}?\n\n` +
+      'This will load the model through Lemonade and persist the profile runtime options to recipe_options.json.',
+    );
+    if (!confirmed) return;
+    await applyAndLoadProfile(profile, true);
+    await loadSavedOptions();
+  }
+
   function readModelSizeGb(raw: string | null): number | null {
     if (!raw) return null;
     const bytes = Number(raw);
@@ -129,7 +146,11 @@
     <SmartRecommendation data={$recommendation} />
   {/if}
 
-  <LemonadeSavedOptions data={savedOptions} loading={savedOptionsLoading} />
+  <LemonadeSavedOptions
+    data={savedOptions}
+    loading={savedOptionsLoading}
+    on:importOptions={handleImportSavedOptions}
+  />
 
   {#if editingProfile}
     <ProfileEditor profile={editingProfile} submitLabel="Update Profile" on:save={handleUpdate} on:cancel={() => editingProfile = null} />
@@ -143,7 +164,11 @@
         <h2 class="ops-title">Model Profiles</h2>
         <p class="ops-subtitle">Built-in profiles are fixed. Clone one to create a custom editable variant.</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-3">
+        <label class="flex items-center gap-2 text-xs text-muted-foreground">
+          <input type="checkbox" bind:checked={saveApplyLoadToLemonade} />
+          Save Apply & Load to Lemonade defaults
+        </label>
         <input class="ops-input max-w-56" bind:value={cloneName} placeholder="Clone name..." />
       </div>
     </div>
@@ -159,7 +184,8 @@
             {profile}
             active={$activeProfileId === profile.id}
             on:apply={() => applyProfile(profile)}
-            on:applyLoad={() => applyAndLoadProfile(profile)}
+            on:applyLoad={() => applyAndLoadProfile(profile, saveApplyLoadToLemonade)}
+            on:saveLemonade={() => handleSaveToLemonade(profile)}
             on:edit={() => editingProfile = profile}
             on:clone={() => handleClone(profile)}
             on:export={() => exportProfile(profile.id)}

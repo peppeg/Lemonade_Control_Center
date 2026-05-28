@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Copy, Download, Pencil, Play, Power, Star, Trash2 } from 'lucide-svelte';
+  import { Copy, Database, Download, Pencil, Play, Power, Star, Trash2 } from 'lucide-svelte';
   import type { Profile } from '$lib/types';
 
   export let profile: Profile;
@@ -14,6 +14,7 @@
     export: Profile;
     delete: Profile;
     default: Profile;
+    saveLemonade: Profile;
   }>();
 
   function ctxLabel(value: number | null): string {
@@ -50,6 +51,10 @@
       <button class="ops-button" type="button" on:click={() => dispatch('applyLoad', profile)}>
         <Power class="h-4 w-4" />
         Apply & Load
+      </button>
+      <button class="ops-button" type="button" on:click={() => dispatch('saveLemonade', profile)}>
+        <Database class="h-4 w-4" />
+        Save to Lemonade
       </button>
       <button class="ops-button" type="button" on:click={() => dispatch('edit', profile)}>
         <Pencil class="h-4 w-4" />
