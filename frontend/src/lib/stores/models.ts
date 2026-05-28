@@ -19,11 +19,13 @@ export const models = writable<ModelEntry[]>([]);
 export const loadedModel = writable<LoadedModelDetail | null>(null);
 export const modelsLoading = writable(true);
 export const modelsError = writable<string | null>(null);
+export const modelsSource = writable<string>('none');
 
 // Action states (per-action loading/error)
 export const loadAction = writable<ActionState>({ loading: false, error: null });
 export const unloadAction = writable<ActionState>({ loading: false, error: null });
 export const deleteAction = writable<ActionState>({ loading: false, error: null });
+export const pullAction = writable<ActionState & { modelName: string | null }>({ loading: false, error: null, modelName: null });
 
 // ── Derived ──
 
@@ -37,13 +39,13 @@ export const modelCount = derived(models, ($m) => ({
 
 // ── Data Fetching ──
 
-export async function refreshModels(): Promise<void> {
+export async function refreshModels(includeCatalog = false): Promise<void> {
   modelsLoading.set(true);
   modelsError.set(null);
 
   // Fetch models list + running models + process info in parallel
   const [modelsResult, runningResult, processResult] = await Promise.allSettled([
-    api.lemonade.models(),
+    api.lemonade.models(includeCatalog),
     api.lemonade.running(),
     api.system.llamaServer(),
   ]);
@@ -60,6 +62,7 @@ export async function refreshModels(): Promise<void> {
 
   // Parse models list
   if (modelsResult.status === 'fulfilled' && modelsResult.value.ok) {
+    modelsSource.set(modelsResult.value.data.source);
     const raw = modelsResult.value.data.models as Array<Record<string, unknown>>;
     const parsed: ModelEntry[] = raw.map((m) => {
       const name = (m.name as string) ?? (m.model as string) ?? 'unknown';
@@ -73,17 +76,20 @@ export async function refreshModels(): Promise<void> {
         modifiedAt: (m.modified_at as string) ?? null,
         details: (m.details as Record<string, unknown>) ?? null,
         isLoaded: Boolean(m.is_loaded),
+        downloaded: parseDownloaded(m.downloaded),
       };
     });
 
     // Sort: loaded first, then alphabetical
     parsed.sort((a, b) => {
       if (a.isLoaded !== b.isLoaded) return a.isLoaded ? -1 : 1;
+      if (a.downloaded !== b.downloaded) return a.downloaded ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
 
     models.set(parsed);
   } else {
+    modelsSource.set('none');
     modelsError.set('Failed to load models list');
   }
 
@@ -166,6 +172,23 @@ export async function loadModel(opts: LoadModelOptions): Promise<boolean> {
   }
 }
 
+export async function pullModel(name: string): Promise<boolean> {
+  pullAction.set({ loading: true, error: null, modelName: name });
+  const result = await api.lemonade.pullModel(name);
+
+  if (result.ok && result.data.success) {
+    pullAction.set({ loading: false, error: null, modelName: null });
+    await refreshModels();
+    notify.success('Model downloaded', result.data.message || name, { href: '/models' });
+    return true;
+  }
+
+  const msg = result.ok ? result.data.message : result.error;
+  pullAction.set({ loading: false, error: msg, modelName: null });
+  notify.error('Model download failed', msg || name, { href: '/models' });
+  return false;
+}
+
 export async function unloadModel(name?: string, options: { suppressNotification?: boolean } = {}): Promise<boolean> {
   unloadAction.set({ loading: true, error: null });
   const result = await api.lemonade.unloadModel(name);
@@ -215,4 +238,11 @@ function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.round((seconds % 3600) / 60);
   return `${h}h ${m}m`;
+}
+
+function parseDownloaded(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  if (typeof value === 'number') return value !== 0;
+  return true;
 }

@@ -42,7 +42,7 @@ class LLMProvider(ABC):
         ...
 
     @abstractmethod
-    async def list_models(self) -> ModelsListResponse:
+    async def list_models(self, include_catalog: bool = False) -> ModelsListResponse:
         """List all downloaded/available models."""
         ...
 

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    models, loadedModel, modelsLoading, modelsError, refreshModels,
-    unloadAction,
+    models, loadedModel, modelsLoading, modelsError, modelsSource, refreshModels,
+    pullAction, pullModel, unloadAction,
   } from '$lib/stores/models';
   import { capabilities } from '$lib/stores/capabilities';
-  import { Clipboard, Info, RefreshCw, Search, TriangleAlert } from 'lucide-svelte';
+  import { Clipboard, Download, Info, RefreshCw, Search, TriangleAlert } from 'lucide-svelte';
   import LoadModelDialog from '$lib/components/models/LoadModelDialog.svelte';
   import UnloadConfirmDialog from '$lib/components/models/UnloadConfirmDialog.svelte';
   import DeleteConfirmDialog from '$lib/components/models/DeleteConfirmDialog.svelte';
@@ -21,6 +21,7 @@
   let loadDialogOpen = false;
   let unloadDialogOpen = false;
   let deleteDialogOpen = false;
+  let catalogLoaded = false;
 
   onMount(() => {
     refreshModels();
@@ -29,10 +30,21 @@
   $: filteredModels = $models.filter((model) =>
     model.name.toLowerCase().includes(filter.trim().toLowerCase())
   );
+  $: remoteCount = $models.filter((model) => !model.downloaded).length;
+  $: downloadedCount = $models.filter((model) => model.downloaded).length;
+  $: sourceLabel = formatSourceLabel($modelsSource);
 
   async function handleRefresh() {
     isRefreshing = true;
     await refreshModels();
+    catalogLoaded = false;
+    isRefreshing = false;
+  }
+
+  async function handleCatalogRefresh() {
+    isRefreshing = true;
+    await refreshModels(true);
+    catalogLoaded = true;
     isRefreshing = false;
   }
 
@@ -57,6 +69,15 @@
     deleteDialogOpen = true;
   }
 
+  async function downloadModel(model: ModelEntry) {
+    const confirmed = window.confirm(
+      `Download "${model.name}" through Lemonade?\n\n` +
+      'This may be a large download and can take a while. The model will be installed into Lemonade storage.',
+    );
+    if (!confirmed) return;
+    await pullModel(model.name);
+  }
+
   $: if (!loadDialogOpen) loadTarget = null;
   $: if (!unloadDialogOpen) unloadTarget = null;
   $: if (!deleteDialogOpen) deleteTarget = null;
@@ -67,6 +88,13 @@
     const quant = details.quantization_level as string | undefined;
     const family = details.family as string | undefined;
     return [format, quant || family].filter(Boolean).join('/') || 'Unknown';
+  }
+
+  function formatSourceLabel(source: string): string {
+    if (source === 'merged_catalog') return 'local inventory + Lemonade catalog';
+    if (source === 'openai_models') return 'Lemonade catalog';
+    if (source === 'ollama_tags') return 'local inventory';
+    return 'no source';
   }
 </script>
 
@@ -185,15 +213,28 @@
 
   <section class="ops-panel">
     <div class="ops-card-header">
-      <h2 class="ops-title">Local Inventory</h2>
-      <label class="relative block w-full max-w-xs">
-        <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input class="ops-input ops-input-icon-left" placeholder="Filter models..." bind:value={filter} />
-      </label>
+      <div>
+        <h2 class="ops-title">Model Inventory</h2>
+        <p class="ops-subtitle">
+          {catalogLoaded
+            ? `${downloadedCount} downloaded, ${remoteCount} remote from ${sourceLabel}.`
+            : 'Local models. Refresh remote catalog to search downloadable models.'}
+        </p>
+      </div>
+      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <button class="ops-button whitespace-nowrap" type="button" on:click={handleCatalogRefresh} disabled={isRefreshing}>
+          <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
+          Refresh Remote Catalog
+        </button>
+        <label class="relative block w-full max-w-xs">
+          <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input class="ops-input ops-input-icon-left" placeholder="Filter models..." bind:value={filter} />
+        </label>
+      </div>
     </div>
 
     {#if $modelsLoading}
-      <div class="p-8 text-sm text-muted-foreground">Loading local inventory...</div>
+      <div class="p-8 text-sm text-muted-foreground">Loading model inventory...</div>
     {:else if filteredModels.length === 0}
       <div class="p-8 text-sm text-muted-foreground">No matching models found.</div>
     {:else}
@@ -217,26 +258,40 @@
                 <td>
                   {#if model.isLoaded}
                     <span class="ops-badge ops-badge-ok">Active</span>
+                  {:else if model.downloaded}
+                    <span class="ops-badge">Downloaded</span>
                   {:else}
-                    <span class="ops-badge">Available</span>
+                    <span class="ops-badge ops-badge-warn">Remote</span>
                   {/if}
                 </td>
                 <td>
                   <div class="flex justify-end gap-2">
-                    <a class="ops-button" href={`/models/${encodeURIComponent(model.name)}${model.size ? `?size=${model.size}` : ''}`}>
-                      Profiles
-                    </a>
-                    {#if model.isLoaded}
-                      <button class="ops-button" type="button" disabled>In Use</button>
+                    {#if !model.downloaded}
+                      <button
+                        class="ops-button ops-button-primary"
+                        type="button"
+                        on:click={() => downloadModel(model)}
+                        disabled={!$capabilities.pull || $pullAction.loading}
+                      >
+                        <Download class="h-4 w-4 {$pullAction.loading && $pullAction.modelName === model.name ? 'animate-pulse' : ''}" />
+                        {$pullAction.loading && $pullAction.modelName === model.name ? 'Downloading' : 'Download'}
+                      </button>
                     {:else}
-                      <button class="ops-button ops-button-primary" type="button" on:click={() => openLoad(model.name)}>
-                        Load
-                      </button>
-                    {/if}
-                    {#if $capabilities.delete_enabled && !model.isLoaded}
-                      <button class="ops-button ops-button-danger" type="button" on:click={() => openDelete(model.name)}>
-                        Delete
-                      </button>
+                      <a class="ops-button" href={`/models/${encodeURIComponent(model.name)}${model.size ? `?size=${model.size}` : ''}`}>
+                        Profiles
+                      </a>
+                      {#if model.isLoaded}
+                        <button class="ops-button" type="button" disabled>In Use</button>
+                      {:else}
+                        <button class="ops-button ops-button-primary" type="button" on:click={() => openLoad(model.name)}>
+                          Load
+                        </button>
+                      {/if}
+                      {#if $capabilities.delete_enabled && !model.isLoaded}
+                        <button class="ops-button ops-button-danger" type="button" on:click={() => openDelete(model.name)}>
+                          Delete
+                        </button>
+                      {/if}
                     {/if}
                   </div>
                 </td>

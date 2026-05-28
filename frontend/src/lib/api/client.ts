@@ -85,7 +85,7 @@ export const api = {
     health: () => get<LemonadeHealth>('/lemonade/health'),
     stats: () => get<Record<string, unknown>>('/lemonade/stats'),
     systemInfo: () => get<Record<string, unknown>>('/lemonade/system-info'),
-    models: () => get<{ models: unknown[]; source: string }>('/lemonade/models'),
+    models: (catalog = false) => get<{ models: unknown[]; source: string }>(`/lemonade/models${catalog ? '?catalog=true' : ''}`),
     running: () => get<{ models: unknown[] }>('/lemonade/running'),
     savedOptions: (modelName?: string) =>
       get<LemonadeSavedOptions>(`/lemonade/saved-options${modelName ? `?model_name=${enc(modelName)}` : ''}`),
@@ -99,6 +99,8 @@ export const api = {
       save_options?: boolean;
     }
   ) => post<{ success: boolean; message: string }>('/lemonade/load', body),
+    pullModel: (modelName: string) =>
+      post<{ success: boolean; message: string; raw?: Record<string, unknown> }>('/lemonade/pull', { model_name: modelName }),
     unloadModel: (name?: string) =>
       post<{ success: boolean }>('/lemonade/unload', { model_name: name }),
     deleteModel: (name: string) =>

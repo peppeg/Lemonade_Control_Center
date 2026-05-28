@@ -177,6 +177,7 @@ export interface ModelEntry {
   modifiedAt: string | null;
   details: Record<string, unknown> | null;
   isLoaded: boolean;
+  downloaded: boolean;
 }
 
 export interface RuntimeParams {

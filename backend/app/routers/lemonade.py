@@ -4,7 +4,7 @@ Router that proxies all Lemonade API calls through the LemonadeProvider.
 Every endpoint is capability-driven: if the underlying Lemonade endpoint
 isn't available, the provider raises a clean 501 error.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_provider
 from app.providers.lemonade import LemonadeProvider
@@ -16,6 +16,8 @@ from app.models.schemas import (
     ModelShowResponse,
     LoadModelRequest,
     LoadModelResponse,
+    PullModelRequest,
+    PullModelResponse,
     UnloadModelRequest,
     LemonadeConfigResponse,
     LemonadeSavedOptionsResponse,
@@ -45,9 +47,12 @@ async def lemonade_system_info(provider: LemonadeProvider = Depends(get_provider
 
 
 @router.get("/models", response_model=ModelsListResponse)
-async def list_models(provider: LemonadeProvider = Depends(get_provider)):
-    """List all downloaded models."""
-    return await provider.list_models()
+async def list_models(
+    catalog: bool = Query(default=False),
+    provider: LemonadeProvider = Depends(get_provider),
+):
+    """List downloaded models, optionally including the Lemonade catalog."""
+    return await provider.list_models(include_catalog=catalog)
 
 
 @router.get("/running", response_model=RunningModelsResponse)
@@ -78,6 +83,15 @@ async def load_model(
 ):
     """Load a model into memory with optional configuration."""
     return await provider.load_model(request)
+
+
+@router.post("/pull", response_model=PullModelResponse)
+async def pull_model(
+    request: PullModelRequest,
+    provider: LemonadeProvider = Depends(get_provider),
+):
+    """Download/install a registered Lemonade model."""
+    return await provider.pull_model(request)
 
 
 @router.post("/unload")

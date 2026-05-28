@@ -5,6 +5,8 @@ All calls proxy through httpx to localhost:13305 (configurable).
 Every method checks capabilities before calling — if the endpoint isn't
 available, raises a clean error or returns a degraded response.
 """
+import asyncio
+
 import httpx
 from fastapi import HTTPException
 
@@ -21,6 +23,8 @@ from app.models.schemas import (
     ModelShowResponse,
     LoadModelRequest,
     LoadModelResponse,
+    PullModelRequest,
+    PullModelResponse,
     LemonadeConfigResponse,
     ConfigUpdateRequest,
 )
@@ -110,51 +114,78 @@ class LemonadeProvider(LLMProvider):
             raise HTTPException(resp.status_code, resp.text)
         return resp.json()
 
-    async def list_models(self) -> ModelsListResponse:
-        """List downloaded models. Prefers /api/tags (Ollama), falls back to /api/v1/models."""
+    async def list_models(self, include_catalog: bool = False) -> ModelsListResponse:
+        """List local and catalog models, marking which ones are already downloaded."""
 
         running_names: set[str] = set()
         try:
-            running = await self.get_running_models()
-            running_names = {m.name for m in running.models}
+            resp = await asyncio.wait_for(self._get("/api/ps", timeout=3.0), timeout=3.5)
+            if resp.status_code == 200:
+                data = resp.json()
+                running_names = {
+                    _canonical_model_name(m.get("name", m.get("model", "")))
+                    for m in data.get("models", [])
+                }
         except Exception:
             pass
 
+        by_name: dict[str, ModelInfo] = {}
+        source: str = "none"
+
         if self.capabilities.ollama_tags:
-            resp = await self._get("/api/tags")
-            if resp.status_code == 200:
+            try:
+                resp = await asyncio.wait_for(self._get("/api/tags", timeout=5.0), timeout=5.5)
+            except Exception:
+                resp = None
+            if resp is not None and resp.status_code == 200:
                 data = resp.json()
                 raw_models = data.get("models", [])
-                models = [
-                    ModelInfo(
-                        name=m.get("name", m.get("model", "unknown")),
+                for m in raw_models:
+                    raw_name = m.get("model") or m.get("name") or "unknown"
+                    name = _canonical_model_name(raw_name)
+                    by_name[name] = ModelInfo(
+                        name=name,
                         model=m.get("model"),
-                        size=m.get("size"),
+                        size=_size_to_bytes(m.get("size")),
                         digest=m.get("digest"),
                         modified_at=m.get("modified_at"),
                         details=m.get("details"),
-                        is_loaded=m.get("name", "") in running_names,
+                        is_loaded=name in running_names,
+                        downloaded=True,
                     )
-                    for m in raw_models
-                ]
-                return ModelsListResponse(models=models, source="ollama_tags")
+                source = "ollama_tags"
 
-        if self.capabilities.openai_models:
-            resp = await self._get("/api/v1/models")
-            if resp.status_code == 200:
+        if include_catalog and self.capabilities.openai_models:
+            try:
+                resp = await asyncio.wait_for(self._get("/api/v1/models?show_all=true", timeout=45.0), timeout=45.5)
+            except Exception:
+                resp = None
+            if resp is not None and resp.status_code == 200:
                 data = resp.json()
                 raw_models = data.get("data", [])
-                models = [
-                    ModelInfo(
-                        name=m.get("id", "unknown"),
-                        model=m.get("id"),
-                        is_loaded=m.get("id", "") in running_names,
-                    )
-                    for m in raw_models
-                ]
-                return ModelsListResponse(models=models, source="openai_models")
+                for m in raw_models:
+                    name = _canonical_model_name(m.get("id", m.get("name", "unknown")))
+                    downloaded = bool(m.get("downloaded", name in by_name))
+                    if name in by_name:
+                        existing = by_name[name]
+                        existing.downloaded = existing.downloaded or downloaded
+                        existing.details = existing.details or m
+                        existing.is_loaded = existing.is_loaded or name in running_names
+                        continue
 
-        return ModelsListResponse(models=[], source="none")
+                    by_name[name] = ModelInfo(
+                        name=name,
+                        model=m.get("id", name),
+                        size=_size_to_bytes(m.get("size")),
+                        digest=m.get("digest"),
+                        modified_at=m.get("modified_at"),
+                        details=m,
+                        is_loaded=name in running_names,
+                        downloaded=downloaded,
+                    )
+                source = "openai_models" if source == "none" else "merged_catalog"
+
+        return ModelsListResponse(models=list(by_name.values()), source=source)
 
     async def get_running_models(self) -> RunningModelsResponse:
         """Get currently loaded models via /api/ps."""
@@ -167,7 +198,7 @@ class LemonadeProvider(LLMProvider):
             RunningModelInfo(
                 name=m.get("name", "unknown"),
                 model=m.get("model"),
-                size=m.get("size"),
+                size=_size_to_bytes(m.get("size")),
                 digest=m.get("digest"),
                 expires_at=m.get("expires_at"),
                 size_vram=m.get("size_vram"),
@@ -209,6 +240,31 @@ class LemonadeProvider(LLMProvider):
                 message=f"Load failed ({resp.status_code}): {resp.text[:300]}",
                 raw=None
             )
+
+    async def pull_model(self, request: PullModelRequest) -> PullModelResponse:
+        body = {"model_name": request.model_name}
+        resp = await self._post("/api/v1/pull", body, timeout=3600.0)
+        if resp.status_code == 404:
+            resp = await self._post("/v1/pull", body, timeout=3600.0)
+
+        raw = None
+        try:
+            raw = resp.json()
+        except ValueError:
+            raw = {"text": resp.text[:500]}
+
+        if resp.status_code == 200 and raw.get("status") != "error":
+            return PullModelResponse(
+                success=True,
+                message=raw.get("message", f"Installed model: {request.model_name}"),
+                raw=raw,
+            )
+
+        return PullModelResponse(
+            success=False,
+            message=raw.get("message", f"Pull failed ({resp.status_code}): {resp.text[:300]}"),
+            raw=raw,
+        )
 
     async def unload_model(self, model_name: str | None = None) -> bool:
         body = {}
@@ -257,3 +313,22 @@ class LemonadeProvider(LLMProvider):
         if resp.status_code != 200:
             raise HTTPException(resp.status_code, f"Config update failed: {resp.text[:300]}")
         return resp.json()
+
+
+def _size_to_bytes(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value <= 0:
+            return None
+        if value < 10_000:
+            return int(value * (1024 ** 3))
+        return int(value)
+    return None
+
+
+def _canonical_model_name(value: object) -> str:
+    name = str(value or "unknown")
+    return name.removesuffix(":latest")

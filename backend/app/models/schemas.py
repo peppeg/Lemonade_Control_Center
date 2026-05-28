@@ -83,12 +83,13 @@ class ModelInfo(BaseModel):
     modified_at: str | None = None
     details: dict | None = None
     is_loaded: bool = False
+    downloaded: bool = True
 
 
 class ModelsListResponse(BaseModel):
     """List of downloaded models."""
     models: list[ModelInfo] = Field(default_factory=list)
-    source: Literal["ollama_tags", "openai_models", "none"] = "none"
+    source: Literal["ollama_tags", "openai_models", "merged_catalog", "none"] = "none"
 
 
 class RunningModelInfo(BaseModel):
@@ -124,6 +125,18 @@ class LoadModelRequest(BaseModel):
 
 class LoadModelResponse(BaseModel):
     """Response from loading a model."""
+    success: bool
+    message: str
+    raw: dict | None = None
+
+
+class PullModelRequest(BaseModel):
+    """Request to download/install a registered Lemonade model."""
+    model_name: str
+
+
+class PullModelResponse(BaseModel):
+    """Response from pulling a model."""
     success: bool
     message: str
     raw: dict | None = None
