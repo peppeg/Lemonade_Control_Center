@@ -216,21 +216,39 @@ class ProfileService:
         model_size_gb: float | None,
         ram_total_gb: float,
         ram_available_gb: float,
+        model_loaded: bool = False,
+        loaded_model_rss_gb: float | None = None,
     ) -> SmartRecommendation:
         warnings: list[str] = []
         notes: list[str] = []
         model_gb = model_size_gb or 0
-        ram_after_model = ram_available_gb - model_gb
+
+        reserved_system_gb = max(8.0, ram_total_gb * 0.12)
+        recoverable_active_model_gb = loaded_model_rss_gb if model_loaded and loaded_model_rss_gb else 0
+        planning_headroom_gb = max(0, ram_available_gb + recoverable_active_model_gb - reserved_system_gb)
+        ram_after_model = planning_headroom_gb - model_gb
 
         if model_gb <= 0:
             notes.append("Model size is unknown. Recommendations use RAM-only estimates.")
         if ram_after_model < 0:
-            warnings.append(
-                f"Model size ({model_gb:.1f} GB) exceeds available RAM ({ram_available_gb:.1f} GB)."
-            )
+            if model_loaded:
+                warnings.append(
+                    f"Model plus reserved system overhead exceeds the current planning headroom "
+                    f"({model_gb:.1f} GB model, {planning_headroom_gb:.1f} GB headroom)."
+                )
+            else:
+                warnings.append(
+                    f"Cold-load estimate exceeds current headroom "
+                    f"({model_gb:.1f} GB model, {planning_headroom_gb:.1f} GB headroom). "
+                    "Unload the active model or close other workloads before loading."
+                )
             ram_after_model = 0
         if model_gb > ram_total_gb * 0.6:
             notes.append("This model occupies more than 60% of total RAM. Keep other workloads low.")
+        if model_loaded:
+            notes.append(
+                "This model is already loaded. Recommendations account for the active llama-server process as recoverable memory."
+            )
 
         gb_per_8k = 1.0
         if model_gb > 60:
@@ -244,15 +262,18 @@ class ProfileService:
         risk_threshold_ctx = self._ctx_from_kv_budget(ram_after_model, gb_per_8k, 262144)
 
         if recommended_ctx < 8192:
-            warnings.append("Limited RAM headroom. Use a small context window or unload other workloads.")
+            warnings.append("Limited RAM headroom for additional KV cache. Use a small context window.")
         if risk_threshold_ctx <= safe_max_ctx:
             warnings.append("Safe and risk thresholds are close. Avoid stress profiles for this model.")
 
         return SmartRecommendation(
             model_name=model_name,
             model_size_gb=model_size_gb,
+            model_loaded=model_loaded,
             ram_total_gb=round(ram_total_gb, 1),
             ram_available_gb=round(ram_available_gb, 1),
+            planning_headroom_gb=round(planning_headroom_gb, 1),
+            reserved_system_gb=round(reserved_system_gb, 1),
             recommended_ctx=recommended_ctx,
             safe_max_ctx=safe_max_ctx,
             risk_threshold_ctx=risk_threshold_ctx,

@@ -170,6 +170,10 @@ class HardwareInfo(BaseModel):
     swap_used_gb: float
     cpu_percent: float
     cpu_count: int
+    gpu_available: bool = False
+    gpu_name: str | None = None
+    gpu_load_percent: float | None = None
+    gpu_temp_c: float | None = None
     disk_total_gb: float | None = None
     disk_used_gb: float | None = None
     disk_free_gb: float | None = None

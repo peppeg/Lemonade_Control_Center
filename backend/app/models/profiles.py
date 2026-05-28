@@ -46,8 +46,11 @@ class SmartRecommendation(BaseModel):
 
     model_name: str
     model_size_gb: float | None = None
+    model_loaded: bool = False
     ram_total_gb: float
     ram_available_gb: float
+    planning_headroom_gb: float | None = None
+    reserved_system_gb: float | None = None
     recommended_ctx: int
     safe_max_ctx: int
     risk_threshold_ctx: int

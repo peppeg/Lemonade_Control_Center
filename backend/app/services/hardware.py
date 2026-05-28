@@ -5,6 +5,7 @@ Provides: RAM, CPU, disk, temperatures, top processes.
 """
 import platform
 import subprocess
+from pathlib import Path
 
 import psutil
 
@@ -23,6 +24,7 @@ def get_hardware_info(model_cache_path: str | None = None) -> HardwareInfo:
     swap = psutil.swap_memory()
     cpu = psutil.cpu_percent(interval=0.1)
     cpu_count = psutil.cpu_count() or 1
+    gpu_info = get_gpu_info()
 
     disk_info = {}
     disk_path = model_cache_path
@@ -55,8 +57,62 @@ def get_hardware_info(model_cache_path: str | None = None) -> HardwareInfo:
         swap_used_gb=round(swap.used / (1024**3), 1),
         cpu_percent=cpu,
         cpu_count=cpu_count,
+        **gpu_info,
         **disk_info,
     )
+
+
+def get_gpu_info() -> dict:
+    """Read lightweight AMDGPU telemetry from sysfs when available."""
+    for card in sorted(Path("/sys/class/drm").glob("card[0-9]*")):
+        device = card / "device"
+        vendor = _read_text(device / "vendor")
+        if vendor and vendor.lower() != "0x1002":
+            continue
+
+        load = _read_float(device / "gpu_busy_percent")
+        temp = _read_amdgpu_temp_c(device)
+        if load is None and temp is None:
+            continue
+
+        return {
+            "gpu_available": True,
+            "gpu_name": card.name,
+            "gpu_load_percent": load,
+            "gpu_temp_c": temp,
+        }
+
+    return {
+        "gpu_available": False,
+        "gpu_name": None,
+        "gpu_load_percent": None,
+        "gpu_temp_c": None,
+    }
+
+
+def _read_amdgpu_temp_c(device: Path) -> float | None:
+    for temp_path in sorted(device.glob("hwmon/hwmon*/temp1_input")):
+        value = _read_float(temp_path)
+        if value is not None:
+            return round(value / 1000, 1)
+    return None
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _read_float(path: Path) -> float | None:
+    raw = _read_text(path)
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
 
 
 def get_temperatures() -> TemperaturesResponse:

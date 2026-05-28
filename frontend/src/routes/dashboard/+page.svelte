@@ -35,7 +35,8 @@
   function hardwarePressure(hw: HardwareInfo | null): string {
     if (!hw) return 'Unavailable';
     const cpu = hw.cpu_percent < 35 ? 'low' : hw.cpu_percent < 75 ? 'medium' : 'high';
-    return `RAM ${formatPercent(hw.ram_percent)} (${hw.ram_used_gb.toFixed(1)}/${hw.ram_total_gb.toFixed(1)} GB), CPU ${cpu}`;
+    const gpu = typeof hw.gpu_load_percent === 'number' ? `, GPU ${formatPercent(hw.gpu_load_percent)}` : '';
+    return `RAM ${formatPercent(hw.ram_percent)} (${hw.ram_used_gb.toFixed(1)}/${hw.ram_total_gb.toFixed(1)} GB)${gpu}, CPU ${cpu}`;
   }
 
   function runtimeLabel(serverStatus: ServerStatus | null, loaded: LoadedModelInfo | null): string {
@@ -165,6 +166,16 @@
             <span class="text-status-ok">{hardware ? formatPercent(hardware.cpu_percent) : 'Unavailable'}</span>
           </div>
           <div class="ops-progress"><span class="!bg-status-ok" style:width={percentWidth(hardware?.cpu_percent)}></span></div>
+        </div>
+        <div>
+          <div class="mb-2 flex justify-between text-sm">
+            <span>GPU Load</span>
+            <span class="text-status-warn">{hardware?.gpu_available && typeof hardware.gpu_load_percent === 'number' ? formatPercent(hardware.gpu_load_percent) : 'Unavailable'}</span>
+          </div>
+          <div class="ops-progress"><span class="!bg-status-warn" style:width={percentWidth(hardware?.gpu_load_percent)}></span></div>
+          <p class="mt-2 text-right ops-value text-sm">
+            {hardware?.gpu_available && typeof hardware.gpu_temp_c === 'number' ? `${hardware.gpu_temp_c.toFixed(1)} C` : 'Temp unavailable'}
+          </p>
         </div>
       </div>
     </article>

@@ -38,8 +38,15 @@
     {#if data.model_size_gb}
       <span>Model: <strong class="ops-value">~{formatGB(data.model_size_gb)}</strong></span>
     {/if}
+    <span>Basis: <strong class="ops-value">{data.model_loaded ? 'active model' : 'cold load'}</strong></span>
     <span>RAM: <strong class="ops-value">{formatGB(data.ram_total_gb)}</strong></span>
     <span>Available: <strong class="ops-value">{formatGB(data.ram_available_gb)}</strong></span>
+    {#if data.planning_headroom_gb !== null}
+      <span>Planning headroom: <strong class="ops-value">{formatGB(data.planning_headroom_gb)}</strong></span>
+    {/if}
+    {#if data.reserved_system_gb !== null}
+      <span>Reserved system: <strong class="ops-value">{formatGB(data.reserved_system_gb)}</strong></span>
+    {/if}
   </div>
 
   {#if data.warnings.length > 0 || data.notes.length > 0}

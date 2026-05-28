@@ -137,6 +137,10 @@
       </div>
       <div class="ops-progress mt-4"><span style:width={percentWidth(hardware?.ram_percent)}></span></div>
       <p class="mt-4 text-right ops-value">{hardware ? bytesLabel(hardware.ram_used_gb, hardware.ram_total_gb) : 'Unavailable'}</p>
+      <div class="mt-3 flex justify-between text-xs text-muted-foreground">
+        <span>Swap</span>
+        <span class="ops-value">{hardware ? bytesLabel(hardware.swap_used_gb, hardware.swap_total_gb) : 'Unavailable'}</span>
+      </div>
     </article>
     <article class="ops-card p-5">
       <div class="flex justify-between">
@@ -156,11 +160,13 @@
     </article>
     <article class="ops-card p-5">
       <div class="flex justify-between">
-        <span class="ops-label">Swap Usage</span>
-        <span>{hardware && hardware.swap_total_gb > 0 ? formatPercent((hardware.swap_used_gb / hardware.swap_total_gb) * 100) : '0%'}</span>
+        <span class="ops-label">GPU Load</span>
+        <span>{hardware?.gpu_available && typeof hardware.gpu_load_percent === 'number' ? formatPercent(hardware.gpu_load_percent) : 'Unavailable'}</span>
       </div>
-      <div class="ops-progress mt-4"><span class="!bg-[#60655a]" style:width={hardware && hardware.swap_total_gb > 0 ? percentWidth((hardware.swap_used_gb / hardware.swap_total_gb) * 100) : '0%'}></span></div>
-      <p class="mt-4 text-right ops-value">{hardware ? bytesLabel(hardware.swap_used_gb, hardware.swap_total_gb) : 'Unavailable'}</p>
+      <div class="ops-progress mt-4"><span class="!bg-status-warn" style:width={percentWidth(hardware?.gpu_load_percent)}></span></div>
+      <p class="mt-4 text-right ops-value">
+        {hardware?.gpu_available && typeof hardware.gpu_temp_c === 'number' ? `${hardware.gpu_temp_c.toFixed(1)} C` : 'Temp unavailable'}
+      </p>
     </article>
   </section>
 

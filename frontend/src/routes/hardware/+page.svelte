@@ -36,8 +36,9 @@
   $: ramValues = $timeSeriesData.map((point) => point.ram_used);
   $: ramTotal = latest($timeSeriesData)?.ram_total ?? 0;
   $: cpuValues = $timeSeriesData.map((point) => point.cpu_pct);
-  $: swapValues = $timeSeriesData.map((point) => point.swap_used);
+  $: gpuValues = $timeSeriesData.map((point) => point.gpu_load_pct).filter((value): value is number => typeof value === 'number');
   $: tempValues = $timeSeriesData.map(primaryTemperature).filter((value): value is number => typeof value === 'number');
+  $: gpuTempValues = $timeSeriesData.map((point) => point.gpu_temp_c).filter((value): value is number => typeof value === 'number');
   $: tpsValues = $taskHistory.map((task) => task.gen_tps);
   $: ttftValues = $taskHistory.map((task) => task.ttft_seconds);
   $: throughputValues = $taskHistory.map((task) => task.output_tokens);
@@ -68,7 +69,7 @@
     <div>
       <h1 class="text-3xl font-bold">Hardware Monitor</h1>
       <p class="mt-2 max-w-3xl text-sm text-muted-foreground">
-        Real-time time-series metrics for RAM, CPU, thermals, swap, and task performance.
+        Real-time time-series metrics for RAM, CPU, GPU load, thermals, and task performance.
       </p>
     </div>
     <div class="flex flex-wrap gap-2">
@@ -122,8 +123,8 @@
       <SvgLineChart title="Temperature" values={tempValues} {labels} yMax={100} unit=" C" color="#f2c94c" />
     </ChartPanel>
 
-    <ChartPanel title="Swap" value={swapValues.at(-1) !== undefined ? `${swapValues.at(-1)?.toFixed(2)} GB` : 'No data'}>
-      <SvgLineChart title="Swap usage" values={swapValues} {labels} unit=" GB" color="#b7b9ae" />
+    <ChartPanel title="GPU Load" value={gpuValues.at(-1) !== undefined ? `${gpuValues.at(-1)?.toFixed(1)}%${gpuTempValues.at(-1) !== undefined ? ` / ${gpuTempValues.at(-1)?.toFixed(1)} C` : ''}` : 'No data'}>
+      <SvgLineChart title="GPU load" values={gpuValues} {labels} yMax={100} unit="%" color="#ffb84d" />
     </ChartPanel>
 
     <ChartPanel title="TPS per Task" value={tpsValues.at(-1) !== undefined ? `${tpsValues.at(-1)?.toFixed(1)} t/s` : 'No tasks'}>

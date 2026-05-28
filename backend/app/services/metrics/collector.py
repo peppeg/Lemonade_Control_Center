@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import psutil
 
+from app.services.hardware import get_gpu_info
 from app.services.metrics.buffer import DataPoint, TimeSeriesBuffer
 
 buffer = TimeSeriesBuffer(retention_minutes=30, interval_seconds=5)
@@ -64,6 +65,7 @@ def stop_collector() -> None:
 def _sample() -> DataPoint:
     memory = psutil.virtual_memory()
     swap = psutil.swap_memory()
+    gpu_info = get_gpu_info()
     temperatures: dict[str, float] = {}
     try:
         for chip_name, entries in psutil.sensors_temperatures().items():
@@ -80,5 +82,7 @@ def _sample() -> DataPoint:
         ram_percent=memory.percent,
         cpu_percent=psutil.cpu_percent(interval=0),
         swap_used_gb=swap.used / (1024**3),
+        gpu_load_percent=gpu_info["gpu_load_percent"],
+        gpu_temp_c=gpu_info["gpu_temp_c"],
         temperatures=temperatures,
     )

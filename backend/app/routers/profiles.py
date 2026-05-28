@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import psutil
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.dependencies import get_provider
 from app.models.profiles import (
     ModelProfiles,
     Profile,
@@ -11,6 +13,8 @@ from app.models.profiles import (
     ProfileUpdateRequest,
     SmartRecommendation,
 )
+from app.providers.lemonade import LemonadeProvider
+from app.services.process import find_llama_server
 from app.services.profile_service import ProfileService
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
@@ -39,13 +43,37 @@ async def get_recommendation(
     model_name: str,
     model_size_gb: float | None = None,
     service: ProfileService = Depends(get_profile_service),
+    provider: LemonadeProvider = Depends(get_provider),
 ):
     memory = psutil.virtual_memory()
+    model_loaded = False
+    loaded_model_rss_gb: float | None = None
+
+    try:
+        running = await provider.get_running_models()
+        model_loaded = any(
+            model.name == model_name or model.model == model_name
+            for model in running.models
+        )
+    except Exception:
+        model_loaded = False
+
+    process = find_llama_server()
+    if process.found and process.params and process.params.model_path:
+        loaded_path = Path(process.params.model_path).name
+        if loaded_path == model_name or model_name in loaded_path or loaded_path in model_name:
+            model_loaded = True
+
+    if model_loaded and process.found and process.process:
+        loaded_model_rss_gb = process.process.rss_gb
+
     return service.compute_recommendation(
         model_name=model_name,
         model_size_gb=model_size_gb,
         ram_total_gb=memory.total / (1024**3),
         ram_available_gb=memory.available / (1024**3),
+        model_loaded=model_loaded,
+        loaded_model_rss_gb=loaded_model_rss_gb,
     )
 
 

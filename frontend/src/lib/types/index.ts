@@ -86,6 +86,10 @@ export interface HardwareInfo {
   swap_used_gb: number;
   cpu_percent: number;
   cpu_count: number;
+  gpu_available: boolean;
+  gpu_name: string | null;
+  gpu_load_percent: number | null;
+  gpu_temp_c: number | null;
   disk_total_gb: number | null;
   disk_used_gb: number | null;
   disk_free_gb: number | null;
@@ -282,8 +286,11 @@ export interface ModelProfiles {
 export interface SmartRecommendation {
   model_name: string;
   model_size_gb: number | null;
+  model_loaded: boolean;
   ram_total_gb: number;
   ram_available_gb: number;
+  planning_headroom_gb: number | null;
+  reserved_system_gb: number | null;
   recommended_ctx: number;
   safe_max_ctx: number;
   risk_threshold_ctx: number;
@@ -351,6 +358,8 @@ export interface MetricPoint {
   ram_pct: number;
   cpu_pct: number;
   swap_used: number;
+  gpu_load_pct: number | null;
+  gpu_temp_c: number | null;
   temps: Record<string, number>;
 }
 
