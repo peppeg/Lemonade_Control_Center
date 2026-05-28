@@ -26,11 +26,13 @@ from app.models.schemas import (
 # ── Regex patterns for llama-server log parsing ────────────
 
 RE_PROMPT_EVAL = re.compile(
-    r"prompt eval time\s*=\s*[\d.]+\s*ms\s*/\s*(\d+)\s*tokens?\s*\([^)]*,\s*([\d.]+)\s*tokens?/s\)"
+    r"prompt eval time\s*=\s*[\d.]+\s*ms\s*/\s*(\d+)\s*tokens?\s*"
+    r"\([^)]*,\s*([\d.]+)\s*tokens?(?:/s|\s+per\s+second)\)"
 )
 
 RE_GENERATION = re.compile(
-    r"(?:generation|eval) (?:eval )?time\s*=\s*([\d.]+)\s*ms\s*/\s*(\d+)\s*tokens?\s*\([^)]*,\s*([\d.]+)\s*tokens?/s\)"
+    r"(?:generation|eval) (?:eval )?time\s*=\s*([\d.]+)\s*ms\s*/\s*(\d+)\s*tokens?\s*"
+    r"\([^)]*,\s*([\d.]+)\s*tokens?(?:/s|\s+per\s+second)\)"
 )
 
 RE_TOTAL_TIME = re.compile(
@@ -39,6 +41,12 @@ RE_TOTAL_TIME = re.compile(
 
 RE_SLOT_RELEASED = re.compile(r"slot\s+(?:released|freed)", re.IGNORECASE)
 RE_SLOT_PROCESSING = re.compile(r"slot\s+(?:is\s+)?processing", re.IGNORECASE)
+RE_SLOT_TRUNCATED = re.compile(r"truncated\s*=\s*(\d+)", re.IGNORECASE)
+
+RE_TELEMETRY_INPUT = re.compile(r"\bInput tokens:\s*(\d+)", re.IGNORECASE)
+RE_TELEMETRY_OUTPUT = re.compile(r"\bOutput tokens:\s*(\d+)", re.IGNORECASE)
+RE_TELEMETRY_TTFT = re.compile(r"\bTTFT\s*\(s\):\s*([\d.]+)", re.IGNORECASE)
+RE_TELEMETRY_TPS = re.compile(r"\bTPS:\s*([\d.]+)", re.IGNORECASE)
 
 RE_MODEL_LOADED = re.compile(r"model\s+loaded|all\s+slots\s+are\s+idle", re.IGNORECASE)
 
@@ -93,9 +101,31 @@ def parse_last_task(
     stats = LastTaskStats(available=True, raw_log_lines=lines[-50:])
 
     for line in reversed(lines):
+        m = RE_TELEMETRY_INPUT.search(line)
+        if m and stats.input_tokens is None:
+            stats.input_tokens = int(m.group(1))
+
+        m = RE_TELEMETRY_OUTPUT.search(line)
+        if m and stats.output_tokens is None:
+            stats.output_tokens = int(m.group(1))
+
+        m = RE_TELEMETRY_TTFT.search(line)
+        if m and stats.ttft_seconds is None:
+            stats.ttft_seconds = round(float(m.group(1)), 2)
+
+        m = RE_TELEMETRY_TPS.search(line)
+        if m and stats.generation_tps is None:
+            stats.generation_tps = float(m.group(1))
+
+        m = RE_SLOT_TRUNCATED.search(line)
+        if m and stats.truncated is None:
+            stats.truncated = bool(int(m.group(1)))
+
         m = RE_PROMPT_EVAL.search(line)
         if m and stats.input_tokens is None:
             stats.input_tokens = int(m.group(1))
+            stats.prompt_eval_tps = float(m.group(2))
+        elif m and stats.prompt_eval_tps is None:
             stats.prompt_eval_tps = float(m.group(2))
 
         m = RE_GENERATION.search(line)
@@ -108,7 +138,7 @@ def parse_last_task(
         if m and stats.total_duration_seconds is None:
             stats.total_duration_seconds = round(float(m.group(1)) / 1000, 1)
 
-    if stats.prompt_eval_tps and stats.input_tokens:
+    if stats.ttft_seconds is None and stats.prompt_eval_tps and stats.input_tokens:
         stats.ttft_seconds = round(stats.input_tokens / stats.prompt_eval_tps, 2)
 
     stats.finish_reason = _infer_finish_reason(stats, configured_max_tokens)
@@ -171,7 +201,15 @@ def _parse_log_line(line: str) -> LogEntry:
             timestamp=timestamp, level=LogEntryLevel.WARNING,
             message=line, raw=line, icon="⚠️"
         )
-    if RE_PROMPT_EVAL.search(line) or RE_GENERATION.search(line) or RE_TOTAL_TIME.search(line):
+    if (
+        RE_PROMPT_EVAL.search(line)
+        or RE_GENERATION.search(line)
+        or RE_TOTAL_TIME.search(line)
+        or RE_TELEMETRY_INPUT.search(line)
+        or RE_TELEMETRY_OUTPUT.search(line)
+        or RE_TELEMETRY_TTFT.search(line)
+        or RE_TELEMETRY_TPS.search(line)
+    ):
         return LogEntry(
             timestamp=timestamp, level=LogEntryLevel.PERFORMANCE,
             message=line, raw=line, icon="📊"
