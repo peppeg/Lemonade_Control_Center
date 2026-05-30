@@ -1,71 +1,134 @@
 <!--
-  LoadModelDialog — Dialog to load a model with optional config.
-  Allows setting ctx_size, backend, and extra args.
+  LoadModelDialog — explicit Lemonade load planner.
+  Structured controls are compiled into llamacpp_args before calling the backend.
 -->
 <script lang="ts">
   import ModalFrame from './ModalFrame.svelte';
-  import { Button } from '$lib/components/ui/button';
   import { loadModel, loadAction } from '$lib/stores/models';
-  import { Loader2 } from 'lucide-svelte';
+  import { AlertTriangle, Cpu, Loader2, Save, SlidersHorizontal, Terminal } from 'lucide-svelte';
 
   export let modelName: string;
-  export let open: boolean = false;
+  export let open = false;
 
-  // Form state
   let ctxSize: number | null = null;
-  let selectedCtx: string = 'default';
-  let backend: string = 'auto';
-  let llamacppArgs: string = '';
-  let saveOptions: boolean = false;
+  let selectedCtx = 'default';
+  let backend = 'auto';
+  let flashAttention = false;
+  let mmapMode = 'default';
+  let parallelSlots: number | null = null;
+  let keepTokens: number | null = null;
+  let reasoningMode = 'default';
+  let manualArgs = '';
+  let saveOptions = false;
 
   const ctxPresets = [
-    { label: 'Default', value: 'default', size: null },
-    { label: '8K', value: '8k', size: 8192, desc: 'Safe' },
-    { label: '16K', value: '16k', size: 16384, desc: 'Coding' },
-    { label: '32K', value: '32k', size: 32768, desc: 'Long' },
-    { label: '64K', value: '64k', size: 65536, desc: 'Stress' },
-    { label: '128K', value: '128k', size: 131072, desc: 'Experimental' },
-    { label: 'Custom', value: 'custom', size: null },
+    { label: 'Default', value: 'default', size: null, note: 'Lemonade' },
+    { label: '8K', value: '8k', size: 8192, note: 'Safe' },
+    { label: '16K', value: '16k', size: 16384, note: 'Coding' },
+    { label: '32K', value: '32k', size: 32768, note: 'Long' },
+    { label: '64K', value: '64k', size: 65536, note: 'Heavy' },
+    { label: '128K', value: '128k', size: 131072, note: 'Stress' },
+    { label: '256K', value: '256k', size: 262144, note: 'Extreme' },
+    { label: 'Custom', value: 'custom', size: null, note: 'Manual' },
   ];
 
-  const backends = [
-    { value: 'auto', label: 'Auto' },
-    { value: 'vulkan', label: 'Vulkan' },
-    { value: 'rocm', label: 'ROCm' },
-    { value: 'cpu', label: 'CPU' },
+  const backendOptions = [
+    { value: 'auto', label: 'auto' },
+    { value: 'vulkan', label: 'vulkan' },
+    { value: 'rocm', label: 'rocm' },
+    { value: 'metal', label: 'metal' },
+    { value: 'cpu', label: 'cpu' },
+  ];
+
+  const forbiddenManualArgFlags = [
+    '-m',
+    '--model',
+    '--port',
+    '--ctx-size',
+    '-c',
+    '-ngl',
+    '--jinja',
+    '--mmproj',
+    '--embeddings',
+    '--reranking',
   ];
 
   $: {
-    if (selectedCtx === 'custom') {
-      // Keep custom value
-    } else if (selectedCtx === 'default') {
+    if (selectedCtx === 'default') {
       ctxSize = null;
-    } else {
-      const preset = ctxPresets.find(p => p.value === selectedCtx);
+    } else if (selectedCtx !== 'custom') {
+      const preset = ctxPresets.find((item) => item.value === selectedCtx);
       ctxSize = preset?.size ?? null;
     }
   }
 
+  $: compiledArgs = buildArgs();
+  $: blockedManualArgs = findForbiddenManualArgs(manualArgs);
+  $: effectiveCtx = selectedCtx === 'default' ? null : ctxSize;
+  $: canLoad = (selectedCtx === 'default' || Boolean(ctxSize && ctxSize > 0)) && blockedManualArgs.length === 0;
+
   async function handleLoad() {
+    if (!canLoad) return;
+
     const success = await loadModel({
       modelName,
-      ctxSize: selectedCtx === 'default' ? null : ctxSize,
+      ctxSize: effectiveCtx,
       llamacppBackend: backend === 'auto' ? null : backend,
-      llamacppArgs,
+      llamacppArgs: compiledArgs,
       saveOptions,
     });
+
     if (success) {
       open = false;
       resetForm();
     }
   }
 
+  function buildArgs(): string {
+    const args: string[] = [];
+
+    if (flashAttention) args.push('--flash-attn', 'on');
+    if (mmapMode === 'on') args.push('--mmap');
+    if (mmapMode === 'off') args.push('--no-mmap');
+    if (parallelSlots !== null && parallelSlots > 0) args.push('-np', String(parallelSlots));
+    if (keepTokens !== null && keepTokens >= 0) args.push('--keep', String(keepTokens));
+    if (reasoningMode === 'off') args.push('--reasoning', 'off');
+    if (manualArgs.trim()) args.push(manualArgs.trim());
+
+    return args.join(' ').trim();
+  }
+
   function resetForm() {
     ctxSize = null;
     selectedCtx = 'default';
     backend = 'auto';
-    llamacppArgs = '';
+    flashAttention = false;
+    mmapMode = 'default';
+    parallelSlots = null;
+    keepTokens = null;
+    reasoningMode = 'default';
+    manualArgs = '';
     saveOptions = false;
+  }
+
+  function findForbiddenManualArgs(value: string): string[] {
+    const tokens = value.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
+    const blocked = new Set<string>();
+
+    for (const rawToken of tokens) {
+      const token = rawToken.replace(/^['"]|['"]$/g, '');
+      const normalized = token.includes('=') ? token.split('=')[0] : token;
+      if (forbiddenManualArgFlags.includes(normalized)) {
+        blocked.add(normalized);
+      }
+    }
+
+    return Array.from(blocked).sort();
+  }
+
+  function closeDialog() {
+    open = false;
+    resetForm();
   }
 </script>
 
@@ -73,108 +136,190 @@
   {open}
   title="Load Model"
   description={modelName}
-  widthClass="sm:max-w-[480px]"
-  on:close={() => {
-    open = false;
-    resetForm();
-  }}
+  widthClass="sm:max-w-[860px]"
+  on:close={closeDialog}
 >
-
-    <div class="space-y-5 py-2">
-      <!-- Context Size -->
-      <div class="space-y-2">
-        <label for="ctx-size-input" class="text-sm font-medium">Context Size</label>
-        <div class="flex flex-wrap gap-1.5">
-          {#each ctxPresets as preset}
-            <Button
-              variant={selectedCtx === preset.value ? 'default' : 'outline'}
-              size="sm"
-              class="h-7 text-xs {selectedCtx === preset.value ? 'bg-lemon text-black hover:bg-lemon-dark' : ''}"
-              on:click={() => selectedCtx = preset.value}
-            >
-              {preset.label}
-              {#if preset.desc}
-                <span class="text-[9px] opacity-70 ml-1">{preset.desc}</span>
-              {/if}
-            </Button>
-          {/each}
+  <div class="space-y-5">
+    <section class="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div class="border border-[#30342b] bg-[#111312] p-4">
+        <div class="mb-3 flex items-center gap-2">
+          <SlidersHorizontal class="h-4 w-4 text-lemon" />
+          <h3 class="ops-label">Runtime Plan</h3>
         </div>
-        {#if selectedCtx === 'custom'}
-          <input
-            id="ctx-size-input"
-            type="number"
-            bind:value={ctxSize}
-            placeholder="e.g. 32768"
-            class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm
-                   focus:outline-none focus:ring-2 focus:ring-lemon/50"
-          />
+        <p class="ops-muted text-sm">Choose explicit load settings before sending the request to Lemonade.</p>
+      </div>
+      <div class="border border-[#30342b] bg-[#111312] p-4">
+        <p class="ops-label">ctx_size</p>
+        <p class="ops-value mt-2 text-lg">{effectiveCtx ? effectiveCtx.toLocaleString() : 'Default'}</p>
+      </div>
+      <div class="border border-[#30342b] bg-[#111312] p-4">
+        <p class="ops-label">backend</p>
+        <p class="ops-value mt-2 text-lg">{backend}</p>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h3 class="ops-label">Context Window</h3>
+          <p class="ops-subtitle">Large context sizes increase RAM and KV cache pressure.</p>
+        </div>
+        {#if selectedCtx === '128k' || selectedCtx === '256k'}
+          <span class="ops-badge ops-badge-warn">Stress</span>
         {/if}
       </div>
 
-      <!-- Backend -->
-      <div class="space-y-2">
-        <label for="backend-input" class="text-sm font-medium">Backend</label>
-        <div class="flex gap-1.5">
-          {#each backends as b}
-            <Button
-              variant={backend === b.value ? 'default' : 'outline'}
-              size="sm"
-              class="h-7 text-xs {backend === b.value ? 'bg-lemon text-black hover:bg-lemon-dark' : ''}"
-              on:click={() => backend = b.value}
-            >
-              {b.label}
-            </Button>
-          {/each}
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+        {#each ctxPresets as preset}
+          <button
+            class="border px-3 py-3 text-left transition-colors {selectedCtx === preset.value ? 'border-lemon bg-[#d8ff00] text-[#111310]' : 'border-[#3f432d] bg-[#202320] text-foreground hover:border-[#6d744a] hover:bg-[#282c27]'}"
+            type="button"
+            on:click={() => selectedCtx = preset.value}
+          >
+            <span class="block font-mono text-sm font-bold uppercase">{preset.label}</span>
+            <span class="mt-1 block text-[11px] uppercase opacity-75">{preset.note}</span>
+          </button>
+        {/each}
+      </div>
+
+      {#if selectedCtx === 'custom'}
+        <label class="block space-y-2">
+          <span class="ops-label">custom ctx_size</span>
+          <input class="ops-input" type="number" min="1" bind:value={ctxSize} placeholder="262144" />
+        </label>
+      {/if}
+    </section>
+
+    <section class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr]">
+      <div class="space-y-4 border border-[#30342b] bg-[#111312] p-4">
+        <div class="flex items-center gap-2">
+          <Cpu class="h-4 w-4 text-lemon" />
+          <h3 class="ops-label">Backend & Memory</h3>
         </div>
+
+        <label class="block space-y-2">
+          <span class="ops-label">llamacpp_backend</span>
+          <select class="ops-select" bind:value={backend}>
+            {#each backendOptions as option}
+              <option value={option.value}>{option.label}</option>
+            {/each}
+          </select>
+        </label>
+
+        <fieldset class="space-y-2">
+          <legend class="ops-label">memory map</legend>
+          <div class="grid grid-cols-3 gap-2">
+            {#each ['default', 'on', 'off'] as value}
+              <button
+                class="ops-button min-h-9 px-2 {mmapMode === value ? 'ops-button-primary' : ''}"
+                type="button"
+                on:click={() => mmapMode = value}
+              >
+                {value === 'on' ? '--mmap' : value === 'off' ? '--no-mmap' : 'default'}
+              </button>
+            {/each}
+          </div>
+        </fieldset>
       </div>
 
-      <!-- Extra Args (advanced) -->
-      <div class="space-y-2">
-        <label for="extra-args-input" class="text-sm font-medium">Extra llama.cpp args <span class="text-muted-foreground font-normal">(optional)</span></label>
-        <input
-          id="extra-args-input"
-          type="text"
-          bind:value={llamacppArgs}
-          placeholder="e.g. --no-mmap --keep 256"
-          class="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm font-mono
-                 focus:outline-none focus:ring-2 focus:ring-lemon/50"
-        />
-      </div>
+      <div class="space-y-4 border border-[#30342b] bg-[#111312] p-4">
+        <div class="flex items-center gap-2">
+          <Terminal class="h-4 w-4 text-lemon" />
+          <h3 class="ops-label">llama.cpp Flags</h3>
+        </div>
 
-      <!-- Save options checkbox -->
-      <div class="flex items-center gap-2 cursor-pointer">
-        <input id="save-options" type="checkbox" bind:checked={saveOptions}
-               class="rounded border-border" />
-        <label for="save-options" class="text-sm text-muted-foreground">Save as default for this model</label>
-      </div>
-    </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block space-y-2">
+            <span class="ops-label">parallel slots (-np)</span>
+            <input class="ops-input" type="number" min="1" bind:value={parallelSlots} placeholder="1" />
+          </label>
+          <label class="block space-y-2">
+            <span class="ops-label">keep tokens</span>
+            <input class="ops-input" type="number" min="0" bind:value={keepTokens} placeholder="256" />
+          </label>
+        </div>
 
-    {#if $loadAction.error}
-      <div class="rounded-md bg-status-error/10 border border-status-error/30 px-3 py-2 text-xs text-status-error">
-        {$loadAction.error}
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label class="flex min-h-10 items-center gap-3 border border-[#3f432d] bg-[#181b1a] px-3 py-2">
+            <input type="checkbox" bind:checked={flashAttention} />
+            <span class="ops-value text-sm">--flash-attn on</span>
+          </label>
+        </div>
+
+        <label class="block space-y-2">
+          <span class="ops-label">reasoning</span>
+          <select class="ops-select" bind:value={reasoningMode}>
+            <option value="default">default</option>
+            <option value="off">--reasoning off</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="border border-[#30342b] bg-[#101211] p-3">
+      <div class="mb-2 flex items-center gap-2">
+        <AlertTriangle class="h-4 w-4 text-status-warn" />
+        <span class="ops-label">Managed by Lemonade</span>
+      </div>
+      <p class="ops-muted text-sm">
+        Model path, port, ctx-size flag, GPU layer split, chat template/Jinja, mmproj, embeddings and reranking flags are managed by Lemonade and are not sent through manual args.
+      </p>
+    </section>
+
+    <section class="space-y-3">
+      <label class="block space-y-2">
+        <span class="ops-label">manual extra args</span>
+        <textarea class="ops-textarea ops-mono" bind:value={manualArgs} placeholder="Additional flags, e.g. --no-kv-offload"></textarea>
+      </label>
+
+      <div class="border border-[#30342b] bg-[#101211] p-3">
+        <div class="mb-2 flex items-center gap-2">
+          <Terminal class="h-4 w-4 text-lemon" />
+          <span class="ops-label">compiled llamacpp_args</span>
+        </div>
+        <p class="ops-value min-h-6 break-all text-sm">{compiledArgs || 'none'}</p>
+      </div>
+    </section>
+
+    <label class="flex items-start gap-3 border border-[#30342b] bg-[#111312] p-3">
+      <input class="mt-1" type="checkbox" bind:checked={saveOptions} />
+      <span>
+        <span class="flex items-center gap-2 ops-value text-sm">
+          <Save class="h-4 w-4 text-lemon" />
+          Save as default for this model
+        </span>
+        <span class="ops-muted mt-1 block text-xs">Lemonade will persist these runtime options for future loads.</span>
+      </span>
+    </label>
+
+    {#if !canLoad}
+      <div class="flex gap-3 border border-[#5a4720] bg-[#2e2719] p-3 text-status-warn">
+        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+        <p class="text-sm">
+          {blockedManualArgs.length > 0
+            ? `Remove Lemonade-managed manual args: ${blockedManualArgs.join(', ')}.`
+            : 'Custom ctx_size must be greater than zero.'}
+        </p>
       </div>
     {/if}
 
-    <div class="mt-5 flex items-center justify-end gap-2">
-      <Button
-        variant="outline"
-        on:click={() => {
-          open = false;
-          resetForm();
-        }}
-      >
-        Cancel
-      </Button>
-      <Button
-        on:click={handleLoad}
-        disabled={$loadAction.loading}
-        class="bg-lemon text-black hover:bg-lemon-dark"
-      >
+    {#if $loadAction.error}
+      <div class="flex gap-3 border border-[#70302d] bg-[#321715] p-3 text-status-error">
+        <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
+        <p class="text-sm">{$loadAction.error}</p>
+      </div>
+    {/if}
+
+    <div class="flex flex-col-reverse gap-2 border-t border-[#30342b] pt-4 sm:flex-row sm:justify-end">
+      <button class="ops-button" type="button" on:click={closeDialog}>Cancel</button>
+      <button class="ops-button ops-button-primary" type="button" on:click={handleLoad} disabled={$loadAction.loading || !canLoad}>
         {#if $loadAction.loading}
-          <Loader2 class="h-4 w-4 mr-2 animate-spin" /> Loading…
+          <Loader2 class="h-4 w-4 animate-spin" />
+          Loading
         {:else}
           Load Model
         {/if}
-      </Button>
+      </button>
     </div>
+  </div>
 </ModalFrame>

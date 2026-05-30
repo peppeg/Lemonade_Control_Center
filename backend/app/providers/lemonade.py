@@ -6,6 +6,7 @@ Every method checks capabilities before calling — if the endpoint isn't
 available, raises a clean error or returns a degraded response.
 """
 import asyncio
+import shlex
 
 import httpx
 from fastapi import HTTPException
@@ -217,6 +218,8 @@ class LemonadeProvider(LLMProvider):
         return ModelShowResponse(raw=resp.json())
 
     async def load_model(self, request: LoadModelRequest) -> LoadModelResponse:
+        _validate_llamacpp_args(request.llamacpp_args)
+
         body: dict = {"model_name": request.model_name}
         if request.ctx_size is not None:
             body["ctx_size"] = request.ctx_size
@@ -332,3 +335,41 @@ def _size_to_bytes(value: object) -> int | None:
 def _canonical_model_name(value: object) -> str:
     name = str(value or "unknown")
     return name.removesuffix(":latest")
+
+
+_FORBIDDEN_LLAMACPP_ARGS = {
+    "-m",
+    "--model",
+    "--port",
+    "--ctx-size",
+    "-c",
+    "-ngl",
+    "--jinja",
+    "--mmproj",
+    "--embeddings",
+    "--reranking",
+}
+
+
+def _validate_llamacpp_args(value: str | None) -> None:
+    if not value:
+        return
+
+    try:
+        tokens = shlex.split(value)
+    except ValueError as exc:
+        raise HTTPException(400, f"Invalid llamacpp_args quoting: {exc}") from exc
+
+    blocked = sorted({
+        token.split("=", 1)[0]
+        for token in tokens
+        if token in _FORBIDDEN_LLAMACPP_ARGS
+        or token.split("=", 1)[0] in _FORBIDDEN_LLAMACPP_ARGS
+    })
+    if blocked:
+        joined = ", ".join(blocked)
+        raise HTTPException(
+            400,
+            "Blocked llamacpp_args managed by Lemonade: "
+            f"{joined}. Use dedicated Lemonade fields instead of manual args.",
+        )
