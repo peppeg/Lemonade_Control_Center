@@ -60,23 +60,30 @@
     </div>
   {:else}
     <div class="relative flex min-h-[80px] items-center justify-center border-b border-[#34392d] px-0 py-4">
-      <a href="/dashboard" class="shrink-0">
-        <div class="flex h-8 w-8 items-center justify-center rounded border border-[#51583c] text-sm font-black text-lemon">
-          L
-        </div>
-      </a>
+      <button
+        type="button"
+        class="group/logo flex h-9 w-9 shrink-0 items-center justify-center rounded border border-[#51583c] bg-[#171a19] text-sm font-black text-lemon transition-colors hover:border-[#6b7349] hover:bg-[#242822] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lemon/70"
+        on:click={toggleSidebar}
+        aria-label="Expand sidebar"
+        title="Expand sidebar"
+      >
+        <span class="group-hover/logo:hidden group-focus-visible/logo:hidden">L</span>
+        <PanelLeft class="hidden h-4 w-4 group-hover/logo:block group-focus-visible/logo:block" />
+      </button>
     </div>
   {/if}
 
-  <button
-    type="button"
-    class="absolute -right-3 top-6 z-20 inline-flex h-6 w-6 items-center justify-center rounded border border-[#444936] bg-[#171a19] text-muted-foreground shadow-sm transition-colors hover:border-[#6b7349] hover:bg-[#242822] hover:text-foreground"
-    on:click={toggleSidebar}
-    aria-label={$sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-    title={$sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-  >
-    <PanelLeft class="h-3.5 w-3.5" />
-  </button>
+  {#if !$sidebarCollapsed}
+    <button
+      type="button"
+      class="absolute -right-3 top-6 z-20 inline-flex h-6 w-6 items-center justify-center rounded border border-[#444936] bg-[#171a19] text-muted-foreground shadow-sm transition-colors hover:border-[#6b7349] hover:bg-[#242822] hover:text-foreground"
+      on:click={toggleSidebar}
+      aria-label="Collapse sidebar"
+      title="Collapse sidebar"
+    >
+      <PanelLeft class="h-3.5 w-3.5" />
+    </button>
+  {/if}
 
   <!-- Navigation -->
   <nav class="flex flex-1 flex-col gap-0 px-0 py-4">
