@@ -415,7 +415,7 @@
           <div class="ops-card-body space-y-3">
             {#each config.runtimes as runtime}
               <div class="border border-[#30342b] bg-[#111312] p-4">
-                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div class="flex flex-col gap-4">
                   <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                       <p class="ops-value">{runtime.name}</p>
@@ -424,7 +424,7 @@
                       {/if}
                       <span class="ops-badge {statusClass(runtime)}">{runtime.test_status}</span>
                     </div>
-                    <p class="ops-muted mt-1 break-all">{runtime.type} · {runtime.url}</p>
+                    <p class="ops-muted mt-1 break-words">{runtime.type} · {runtime.url}</p>
                     <p class="ops-muted mt-1 text-xs">
                       {runtime.capabilities_count} capabilities · admin key {runtime.admin_key_configured ? 'configured' : 'not set'}
                       {#if runtime.type !== 'lemonade'}
@@ -432,21 +432,21 @@
                       {/if}
                     </p>
                   </div>
-                  <div class="flex shrink-0 flex-wrap gap-2">
-                    <button class="ops-button" type="button" on:click={() => testRuntime(runtime)} disabled={testingRuntimeId === runtime.id}>
+                  <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                    <button class="ops-button min-h-10 justify-center px-2" type="button" on:click={() => testRuntime(runtime)} disabled={testingRuntimeId === runtime.id}>
                       <RefreshCw class="h-4 w-4 {testingRuntimeId === runtime.id ? 'animate-spin' : ''}" />
                       Test
                     </button>
-                    <button class="ops-button" type="button" on:click={() => discoverRuntime(runtime)} disabled={discoveringRuntimeId === runtime.id}>
+                    <button class="ops-button min-h-10 justify-center px-2" type="button" on:click={() => discoverRuntime(runtime)} disabled={discoveringRuntimeId === runtime.id}>
                       <Search class="h-4 w-4 {discoveringRuntimeId === runtime.id ? 'animate-pulse' : ''}" />
                       Discover
                     </button>
-                    <button class="ops-button" type="button" on:click={() => startEditRuntime(runtime)}>
+                    <button class="ops-button min-h-10 justify-center px-2" type="button" on:click={() => startEditRuntime(runtime)}>
                       <Pencil class="h-4 w-4" />
                       Edit
                     </button>
                     <button
-                      class="ops-button"
+                      class="ops-button min-h-10 justify-center px-2"
                       type="button"
                       on:click={() => activateRuntime(runtime)}
                       disabled={runtime.is_active || runtime.type !== 'lemonade'}
@@ -454,7 +454,7 @@
                     >
                       Activate
                     </button>
-                    <button class="ops-button" type="button" on:click={() => removeRuntime(runtime)} disabled={removingRuntimeId === runtime.id || config.runtimes.length <= 1}>
+                    <button class="ops-button min-h-10 justify-center px-2" type="button" on:click={() => removeRuntime(runtime)} disabled={removingRuntimeId === runtime.id || config.runtimes.length <= 1}>
                       <Trash2 class="h-4 w-4" />
                       Remove
                     </button>
