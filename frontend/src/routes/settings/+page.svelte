@@ -647,6 +647,39 @@
               M14 backend settings are active. Existing app API routes now use the active Lemonade runtime URL. Non-Lemonade runtimes are prepared but not routable yet.
             </p>
           </div>
+          <div class="border border-[#30342b] bg-[#111312] p-4 md:col-span-3">
+            <p class="ops-label">Credits</p>
+            <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <p class="ops-value">Project owner</p>
+                <p class="ops-muted mt-1">
+                  Peppe / peppeg ·
+                  <a class="text-lemon hover:underline" href="https://github.com/peppeg" target="_blank" rel="noreferrer">GitHub</a>
+                  ·
+                  <a class="text-lemon hover:underline" href="https://yourfuture.me" target="_blank" rel="noreferrer">yourfuture.me</a>
+                </p>
+              </div>
+              <div>
+                <p class="ops-value">Development assistance</p>
+                <p class="ops-muted mt-1">OpenAI Codex, Qwen3-Coder-Next-GGUF, Google Stitch</p>
+              </div>
+              <div>
+                <p class="ops-value">Runtime ecosystem</p>
+                <p class="ops-muted mt-1">Lemonade Server, llama.cpp, FastAPI, SvelteKit</p>
+              </div>
+              <div>
+                <p class="ops-value">Development workstation</p>
+                <p class="ops-muted mt-1">Corsaier AI Workstation 300 · Fedora Linux 44 Workstation · Kernel 7.0.9-202.fc44.x86_64 · AMD Strix Halo · 128 GB RAM</p>
+              </div>
+              <div>
+                <p class="ops-value">Project repository</p>
+                <p class="ops-muted mt-1">
+                  <a class="text-lemon hover:underline" href="https://github.com/peppeg/Lemonade_Control_Center" target="_blank" rel="noreferrer">github.com/peppeg/Lemonade_Control_Center</a>
+                  · Apache-2.0
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     {/if}
