@@ -4,7 +4,7 @@
   import { sidebarCollapsed, toggleSidebar } from '$lib/stores/sidebar';
   import { connectionStatus } from '$lib/stores/connection';
   import {
-    LayoutDashboard, Cpu, Settings, ScrollText, Monitor, Activity, LineChart, FlaskConical,
+    LayoutDashboard, Cpu, Settings, ScrollText, Monitor, Activity, LineChart, FlaskConical, Cog,
     PanelLeft, Server
   } from 'lucide-svelte';
 
@@ -25,6 +25,7 @@
     { href: '/diagnostics', label: 'Diagnostics', icon: Activity,     milestone: 'M11' },
     { href: '/hardware', label: 'Hardware', icon: LineChart,          milestone: 'M12' },
     { href: '/bench', label: 'Bench Lab', icon: FlaskConical,          milestone: 'M13', requiresBench: true },
+    { href: '/settings', label: 'Settings', icon: Cog,                 milestone: 'M14' },
   ];
 
   $: currentPath = $page.url.pathname;

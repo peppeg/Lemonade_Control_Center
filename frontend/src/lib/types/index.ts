@@ -75,6 +75,100 @@ export interface LemonadeSavedOptions {
   error: string | null;
 }
 
+// ── Setup & Settings (M14) ──
+
+export type RuntimeType = 'lemonade' | 'ollama' | 'llamacpp' | 'custom';
+export type AccessMode = 'local' | 'ssh_tunnel' | 'tailscale' | 'remote';
+export type RuntimeTestStatus = 'untested' | 'ok' | 'error';
+export type OsType = 'linux_systemd' | 'windows' | 'macos' | 'docker' | 'other';
+export type Theme = 'dark' | 'light' | 'system';
+export type SidebarPosition = 'left' | 'right';
+export type DiscoveryStatus = 'ok' | 'warning' | 'error' | 'skip';
+
+export interface RuntimeConfigPublic {
+  id: string;
+  type: RuntimeType;
+  name: string;
+  url: string;
+  admin_key_configured: boolean;
+  is_active: boolean;
+  access_mode: AccessMode;
+  capabilities_count: number;
+  last_tested: string | null;
+  test_status: RuntimeTestStatus;
+}
+
+export interface RuntimeConfigRequest {
+  id: string;
+  type: RuntimeType;
+  name: string;
+  url: string;
+  admin_key?: string | null;
+  is_active?: boolean;
+  access_mode?: AccessMode;
+  capabilities_count?: number;
+  last_tested?: string | null;
+  test_status?: RuntimeTestStatus;
+}
+
+export interface SystemConfig {
+  os_type: OsType;
+  service_name: string;
+  enable_system_commands: boolean;
+  enable_restart: boolean;
+  enable_delete: boolean;
+}
+
+export interface AppearanceConfig {
+  theme: Theme;
+  accent_color: string;
+  polling_interval_s: number;
+  sidebar_position: SidebarPosition;
+}
+
+export interface LccConfigPublic {
+  setup_complete: boolean;
+  setup_date: string | null;
+  version: string;
+  runtimes: RuntimeConfigPublic[];
+  active_runtime_id: string | null;
+  system: SystemConfig;
+  appearance: AppearanceConfig;
+}
+
+export interface SetupStatusResponse {
+  setup_complete: boolean;
+  active_runtime_id: string | null;
+}
+
+export interface SetupConnectionRequest {
+  type: Exclude<RuntimeType, 'custom'>;
+  url: string;
+  admin_key?: string | null;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  version: string | null;
+  models_count: number;
+  error: string | null;
+  latency_ms: number;
+}
+
+export interface DiscoveryCheck {
+  name: string;
+  endpoint: string;
+  status: DiscoveryStatus;
+  detail: string;
+}
+
+export interface DiscoveryResult {
+  checks: DiscoveryCheck[];
+  total: number;
+  passed: number;
+  capabilities_json: Record<string, boolean>;
+}
+
 // ── Hardware ──
 
 export interface HardwareInfo {

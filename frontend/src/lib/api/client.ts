@@ -8,9 +8,18 @@
 import type {
   HealthResponse,
   Capabilities,
+  AppearanceConfig,
+  ConnectionTestResult,
+  DiscoveryResult,
+  LccConfigPublic,
   LemonadeHealth,
   LemonadeSavedOptions,
   HardwareInfo,
+  RuntimeConfigPublic,
+  RuntimeConfigRequest,
+  SetupConnectionRequest,
+  SetupStatusResponse,
+  SystemConfig,
   AlertHistoryEntry,
   BenchResult,
   BenchStoredResult,
@@ -79,6 +88,29 @@ export const api = {
   // ── Health & Capabilities (M1) ──
   health: () => get<HealthResponse>('/health'),
   capabilities: () => get<Capabilities>('/capabilities'),
+
+  // ── Setup & Settings (M14) ──
+  setup: {
+    status: () => get<SetupStatusResponse>('/setup/status'),
+    testConnection: (body: SetupConnectionRequest) =>
+      post<ConnectionTestResult>('/setup/test-connection', body),
+    discover: (runtime: RuntimeConfigRequest) =>
+      post<DiscoveryResult>('/setup/discover', runtime),
+    complete: (body: { runtime: RuntimeConfigRequest; system: SystemConfig; appearance: AppearanceConfig }) =>
+      post<LccConfigPublic>('/setup/complete', body),
+  },
+
+  settings: {
+    get: () => get<LccConfigPublic>('/settings'),
+    updateSystem: (system: SystemConfig) => put<LccConfigPublic>('/settings/system', system),
+    updateAppearance: (appearance: AppearanceConfig) => put<LccConfigPublic>('/settings/appearance', appearance),
+    addRuntime: (runtime: RuntimeConfigRequest) => post<RuntimeConfigPublic>('/settings/runtimes', runtime),
+    updateRuntime: (id: string, runtime: RuntimeConfigRequest) =>
+      put<RuntimeConfigPublic>(`/settings/runtimes/${enc(id)}`, runtime),
+    removeRuntime: (id: string) => del<{ deleted: boolean }>(`/settings/runtimes/${enc(id)}`),
+    activateRuntime: (id: string) => post<{ active: string }>(`/settings/runtimes/${enc(id)}/activate`),
+    testRuntime: (id: string) => post<ConnectionTestResult>(`/settings/runtimes/${enc(id)}/test`),
+  },
 
   // ── Lemonade API (M2, used from M4+) ──
   lemonade: {

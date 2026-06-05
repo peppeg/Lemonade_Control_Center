@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.capabilities import capabilities
-from app.routers import health, lemonade, system, logs, diagnostic, diagnostics, metrics, profiles
+from app.routers import health, lemonade, system, logs, diagnostic, diagnostics, metrics, profiles, setup, settings as settings_router
 from app.services.metrics.collector import start_collector, stop_collector
 
 
@@ -56,6 +56,8 @@ app.include_router(profiles.router)
 app.include_router(diagnostics.router)
 app.include_router(metrics.router)
 app.include_router(metrics.ws_router)
+app.include_router(setup.router)
+app.include_router(settings_router.router)
 
 if settings.enable_bench_lab:
     from app.routers import bench
