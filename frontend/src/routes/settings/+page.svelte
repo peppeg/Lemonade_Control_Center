@@ -70,6 +70,7 @@
   };
 
   $: activeRuntime = config?.runtimes.find((runtime) => runtime.id === config?.active_runtime_id) ?? null;
+  $: discoveryIssues = discoveryResult?.checks.filter((check) => check.status !== 'ok') ?? [];
 
   onMount(() => {
     loadSettings();
@@ -268,7 +269,9 @@
     if (result.ok) {
       discoveryRuntimeId = runtime.id;
       discoveryResult = result.data;
-      notify.success('Discovery complete', `${result.data.passed}/${result.data.total} checks passed`);
+      notify.success('Discovery complete', `${result.data.passed}/${result.data.total} checks passed. See Settings details.`, {
+        href: '/settings',
+      });
       await loadSettings();
     } else {
       notify.error('Discovery failed', result.error);
@@ -329,6 +332,37 @@
     </div>
   {:else if config}
     {#if activeTab === 'connection'}
+      {#if discoveryResult && discoveryRuntimeId}
+        <section class="ops-panel p-4">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p class="ops-label">Latest discovery</p>
+              <p class="ops-value mt-1">{discoveryResult.passed}/{discoveryResult.total} checks passed for {discoveryRuntimeId}</p>
+              {#if discoveryIssues.length > 0}
+                <p class="ops-muted mt-2 text-sm">
+                  Review {discoveryIssues.length} warning/error/skip checks in the Discovery Result table below.
+                </p>
+              {:else}
+                <p class="ops-muted mt-2 text-sm">All discovery checks passed.</p>
+              {/if}
+            </div>
+            <span class="ops-badge {discoveryIssues.length === 0 ? 'ops-badge-ok' : 'ops-badge-warn'}">
+              {discoveryIssues.length === 0 ? 'OK' : `${discoveryIssues.length} to review`}
+            </span>
+          </div>
+          {#if discoveryIssues.length > 0}
+            <div class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+              {#each discoveryIssues as check}
+                <div class="border border-[#4b4f39] bg-[#171a18] p-3">
+                  <p class="ops-value text-sm {checkClass(check)}">{check.name} · {check.status}</p>
+                  <p class="ops-muted mt-1 break-all text-xs">{check.endpoint} · {check.detail}</p>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </section>
+      {/if}
+
       <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr]">
         <article class="ops-panel">
           <div class="ops-card-header">
@@ -484,6 +518,9 @@
                       bind:value={runtimeSecret}
                       placeholder={editingRuntimeId === 'new' ? 'Optional' : 'Leave blank to keep the current key'}
                     />
+                    <span class="ops-muted block text-xs">
+                      Paste the Lemonade admin API key here. It is stored by the backend and redacted from Settings responses.
+                    </span>
                   </label>
                 </div>
 

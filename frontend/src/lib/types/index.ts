@@ -342,6 +342,7 @@ export interface ToastData {
   level: NotificationLevel;
   title: string;
   message: string;
+  href: string | null;
   duration: number;
   exiting: boolean;
 }

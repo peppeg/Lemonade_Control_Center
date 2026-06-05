@@ -65,6 +65,7 @@ function addNotification(
       level,
       title,
       message,
+      href: options.href ?? null,
       duration,
       exiting: false,
     };
