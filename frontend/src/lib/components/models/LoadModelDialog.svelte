@@ -242,7 +242,7 @@
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label class="flex min-h-10 items-center gap-3 border border-[#3f432d] bg-[#181b1a] px-3 py-2">
             <input type="checkbox" bind:checked={flashAttention} />
-            <span class="ops-value text-sm">--flash-attn on</span>
+            <span class="ops-value whitespace-nowrap text-sm">--flash-attn</span>
           </label>
         </div>
 
