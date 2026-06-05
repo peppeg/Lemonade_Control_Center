@@ -570,6 +570,10 @@
               <span class="ops-value text-sm">model delete</span>
             </label>
           </div>
+          <div class="ops-banner ops-banner-muted">
+            <CircleAlert class="mt-0.5 h-5 w-5 shrink-0 text-status-warn" />
+            <p class="text-sm">Restart and delete preferences are stored here, but the actual backend actions remain gated by `.env` safety flags.</p>
+          </div>
           <button class="ops-button ops-button-primary" type="button" on:click={saveSystem} disabled={savingSystem}>
             {savingSystem ? 'Saving' : 'Save System Settings'}
           </button>
