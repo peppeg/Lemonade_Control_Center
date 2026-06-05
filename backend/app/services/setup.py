@@ -243,8 +243,8 @@ class SetupService:
         headers = self._admin_headers(runtime.admin_key)
         endpoints = [
             ("Health", "/api/v1/health"),
-            ("Models list", "/api/v1/tags"),
-            ("Running models", "/api/v1/ps"),
+            ("Models list", "/api/tags"),
+            ("Running models", "/api/ps"),
             ("System info", "/api/v1/system-info"),
             ("Stats", "/api/v1/stats"),
         ]
@@ -324,7 +324,7 @@ class SetupService:
         headers: dict[str, str] | None,
     ) -> int:
         try:
-            response = await client.get(f"{url}/api/v1/tags", headers=headers)
+            response = await client.get(f"{url}/api/tags", headers=headers)
             if response.status_code != 200:
                 return 0
             return len(response.json().get("models", []))

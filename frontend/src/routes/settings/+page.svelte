@@ -70,7 +70,8 @@
   };
 
   $: activeRuntime = config?.runtimes.find((runtime) => runtime.id === config?.active_runtime_id) ?? null;
-  $: discoveryIssues = discoveryResult?.checks.filter((check) => check.status !== 'ok') ?? [];
+  $: discoveryIssues = discoveryResult?.checks.filter((check) => check.status === 'warning' || check.status === 'error') ?? [];
+  $: discoverySkipped = discoveryResult?.checks.filter((check) => check.status === 'skip') ?? [];
 
   onMount(() => {
     loadSettings();
@@ -340,7 +341,11 @@
               <p class="ops-value mt-1">{discoveryResult.passed}/{discoveryResult.total} checks passed for {discoveryRuntimeId}</p>
               {#if discoveryIssues.length > 0}
                 <p class="ops-muted mt-2 text-sm">
-                  Review {discoveryIssues.length} warning/error/skip checks in the Discovery Result table below.
+                  Review {discoveryIssues.length} warning/error checks in the Discovery Result table below.
+                </p>
+              {:else if discoverySkipped.length > 0}
+                <p class="ops-muted mt-2 text-sm">
+                  No warning/error checks. {discoverySkipped.length} check skipped because it depends on runtime state.
                 </p>
               {:else}
                 <p class="ops-muted mt-2 text-sm">All discovery checks passed.</p>
