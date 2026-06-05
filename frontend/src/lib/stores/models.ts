@@ -156,6 +156,7 @@ export async function loadModel(opts: LoadModelOptions): Promise<boolean> {
     ctx_size: opts.ctxSize ?? undefined,
     llamacpp_backend: opts.llamacppBackend ?? undefined,
     llamacpp_args: opts.llamacppArgs || undefined,
+    merge_args: opts.mergeArgs,
     save_options: opts.saveOptions,
   });
 

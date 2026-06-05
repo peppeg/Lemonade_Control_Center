@@ -217,6 +217,7 @@ export interface LoadModelOptions {
   ctxSize: number | null;
   llamacppBackend: string | null;
   llamacppArgs: string;
+  mergeArgs: boolean;
   saveOptions: boolean;
 }
 

@@ -96,6 +96,7 @@ export const api = {
       ctx_size?: number;
       llamacpp_backend?: string;
       llamacpp_args?: string;
+      merge_args?: boolean;
       save_options?: boolean;
     }
   ) => post<{ success: boolean; message: string }>('/lemonade/load', body),

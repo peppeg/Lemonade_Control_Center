@@ -205,6 +205,7 @@ export async function applyAndLoadProfile(profile: Profile, saveOptions = false)
     ctxSize: profile.config.ctx_size,
     llamacppBackend: profile.config.llamacpp_backend,
     llamacppArgs: profile.config.llamacpp_args ?? '',
+    mergeArgs: true,
     saveOptions,
   });
   if (success && saveOptions) {

@@ -14,11 +14,12 @@
   let selectedCtx = 'default';
   let backend = 'auto';
   let flashAttention = false;
+  let noContextShift = false;
   let mmapMode = 'default';
   let parallelSlots: number | null = null;
-  let keepTokens: number | null = null;
-  let reasoningMode = 'default';
+  let reasoningOff = false;
   let manualArgs = '';
+  let mergeArgs = true;
   let saveOptions = false;
 
   const ctxPresets = [
@@ -75,6 +76,7 @@
       ctxSize: effectiveCtx,
       llamacppBackend: backend === 'auto' ? null : backend,
       llamacppArgs: compiledArgs,
+      mergeArgs,
       saveOptions,
     });
 
@@ -91,8 +93,8 @@
     if (mmapMode === 'on') args.push('--mmap');
     if (mmapMode === 'off') args.push('--no-mmap');
     if (parallelSlots !== null && parallelSlots > 0) args.push('-np', String(parallelSlots));
-    if (keepTokens !== null && keepTokens >= 0) args.push('--keep', String(keepTokens));
-    if (reasoningMode === 'off') args.push('--reasoning', 'off');
+    if (noContextShift) args.push('--no-context-shift');
+    if (reasoningOff) args.push('--reasoning', 'off');
     if (manualArgs.trim()) args.push(manualArgs.trim());
 
     return args.join(' ').trim();
@@ -103,11 +105,12 @@
     selectedCtx = 'default';
     backend = 'auto';
     flashAttention = false;
+    noContextShift = false;
     mmapMode = 'default';
     parallelSlots = null;
-    keepTokens = null;
-    reasoningMode = 'default';
+    reasoningOff = false;
     manualArgs = '';
+    mergeArgs = true;
     saveOptions = false;
   }
 
@@ -136,7 +139,7 @@
   {open}
   title="Load Model"
   description={modelName}
-  widthClass="sm:max-w-[860px]"
+  widthClass="sm:max-w-[980px]"
   on:close={closeDialog}
 >
   <div class="space-y-5">
@@ -225,7 +228,7 @@
       <div class="space-y-4 border border-[#30342b] bg-[#111312] p-4">
         <div class="flex items-center gap-2">
           <Terminal class="h-4 w-4 text-lemon" />
-          <h3 class="ops-label">llama.cpp Flags</h3>
+          <h3 class="ops-label">Lemonade-safe llama.cpp args</h3>
         </div>
 
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -233,26 +236,22 @@
             <span class="ops-label">parallel slots (-np)</span>
             <input class="ops-input" type="number" min="1" bind:value={parallelSlots} placeholder="1" />
           </label>
-          <label class="block space-y-2">
-            <span class="ops-label">keep tokens</span>
-            <input class="ops-input" type="number" min="0" bind:value={keepTokens} placeholder="256" />
-          </label>
         </div>
 
-        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div class="flex flex-wrap gap-2">
           <label class="flex min-h-10 items-center gap-3 border border-[#3f432d] bg-[#181b1a] px-3 py-2">
             <input type="checkbox" bind:checked={flashAttention} />
             <span class="ops-value whitespace-nowrap text-sm">--flash-attn</span>
           </label>
+          <label class="flex min-h-10 items-center gap-3 border border-[#3f432d] bg-[#181b1a] px-3 py-2">
+            <input type="checkbox" bind:checked={reasoningOff} />
+            <span class="ops-value whitespace-nowrap text-sm">--reasoning off</span>
+          </label>
+          <label class="flex min-h-10 items-center gap-3 border border-[#3f432d] bg-[#181b1a] px-3 py-2">
+            <input type="checkbox" bind:checked={noContextShift} />
+            <span class="ops-value whitespace-nowrap text-sm">--no-context-shift</span>
+          </label>
         </div>
-
-        <label class="block space-y-2">
-          <span class="ops-label">reasoning</span>
-          <select class="ops-select" bind:value={reasoningMode}>
-            <option value="default">default</option>
-            <option value="off">--reasoning off</option>
-          </select>
-        </label>
       </div>
     </section>
 
@@ -266,10 +265,22 @@
       </p>
     </section>
 
+    <section class="border border-[#30342b] bg-[#101211] p-3">
+      <label class="flex items-start gap-3">
+        <input class="mt-1" type="checkbox" bind:checked={mergeArgs} />
+        <span>
+          <span class="ops-value text-sm">Merge with global Lemonade args</span>
+          <span class="ops-muted mt-1 block text-xs">
+            When disabled, this load request replaces global llama.cpp args for the model.
+          </span>
+        </span>
+      </label>
+    </section>
+
     <section class="space-y-3">
       <label class="block space-y-2">
-        <span class="ops-label">manual extra args</span>
-        <textarea class="ops-textarea ops-mono" bind:value={manualArgs} placeholder="Additional flags, e.g. --no-kv-offload"></textarea>
+        <span class="ops-label">Advanced manual llamacpp_args</span>
+        <textarea class="ops-textarea ops-mono" bind:value={manualArgs} placeholder="Advanced args, e.g. --no-context-shift"></textarea>
       </label>
 
       <div class="border border-[#30342b] bg-[#101211] p-3">

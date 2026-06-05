@@ -120,6 +120,7 @@ class LoadModelRequest(BaseModel):
     ctx_size: int | None = None
     llamacpp_backend: str | None = None
     llamacpp_args: str | None = None
+    merge_args: bool | None = None
     save_options: bool = False
 
 

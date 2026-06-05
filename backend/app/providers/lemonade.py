@@ -227,6 +227,8 @@ class LemonadeProvider(LLMProvider):
             body["llamacpp_backend"] = request.llamacpp_backend
         if request.llamacpp_args is not None:
             body["llamacpp_args"] = request.llamacpp_args
+        if request.merge_args is not None:
+            body["merge_args"] = request.merge_args
         if request.save_options:
             body["save_options"] = True
 
