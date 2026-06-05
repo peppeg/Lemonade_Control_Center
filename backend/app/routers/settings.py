@@ -85,6 +85,16 @@ async def activate_runtime(
     runtime_id: str,
     service: SetupService = Depends(get_setup_service),
 ):
+    config = service.get_config()
+    candidate = next((runtime for runtime in config.runtimes if runtime.id == runtime_id), None)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail=f"Runtime '{runtime_id}' not found")
+    if candidate.type != "lemonade":
+        raise HTTPException(
+            status_code=400,
+            detail="Only Lemonade runtimes can be activated until multi-runtime routing is implemented.",
+        )
+
     runtime = service.activate_runtime(runtime_id)
     if runtime is None:
         raise HTTPException(status_code=404, detail=f"Runtime '{runtime_id}' not found")

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import httpx
 
+from app.config import settings
 from app.models.setup import (
     AppearanceConfig,
     CompleteSetupRequest,
@@ -231,7 +232,7 @@ class SetupService:
                     id="lemonade-local",
                     type="lemonade",
                     name="Local Lemonade",
-                    url="http://localhost:13305",
+                    url=settings.lemonade_url,
                     is_active=True,
                 )
             ],

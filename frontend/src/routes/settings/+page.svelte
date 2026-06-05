@@ -393,6 +393,9 @@
                     <p class="ops-muted mt-1 break-all">{runtime.type} · {runtime.url}</p>
                     <p class="ops-muted mt-1 text-xs">
                       {runtime.capabilities_count} capabilities · admin key {runtime.admin_key_configured ? 'configured' : 'not set'}
+                      {#if runtime.type !== 'lemonade'}
+                        · prepared runtime
+                      {/if}
                     </p>
                   </div>
                   <div class="flex shrink-0 flex-wrap gap-2">
@@ -408,7 +411,13 @@
                       <Pencil class="h-4 w-4" />
                       Edit
                     </button>
-                    <button class="ops-button" type="button" on:click={() => activateRuntime(runtime)} disabled={runtime.is_active}>
+                    <button
+                      class="ops-button"
+                      type="button"
+                      on:click={() => activateRuntime(runtime)}
+                      disabled={runtime.is_active || runtime.type !== 'lemonade'}
+                      title={runtime.type !== 'lemonade' ? 'Only Lemonade runtimes can be activated in M14.' : 'Activate runtime'}
+                    >
                       Activate
                     </button>
                     <button class="ops-button" type="button" on:click={() => removeRuntime(runtime)} disabled={removingRuntimeId === runtime.id || config.runtimes.length <= 1}>
@@ -597,6 +606,10 @@
             <span class="ops-label">polling interval (seconds)</span>
             <input class="ops-input" type="number" min="2" max="60" bind:value={appearanceForm.polling_interval_s} />
           </label>
+          <div class="ops-banner ops-banner-muted">
+            <CircleAlert class="mt-0.5 h-5 w-5 shrink-0 text-status-warn" />
+            <p class="text-sm">Theme, accent, polling interval, and sidebar position are persisted now. Live application is deferred until the setup/settings flow is fully activated.</p>
+          </div>
           <button class="ops-button ops-button-primary" type="button" on:click={saveAppearance} disabled={savingAppearance}>
             {savingAppearance ? 'Saving' : 'Save Appearance'}
           </button>
@@ -627,7 +640,7 @@
           <div class="ops-banner ops-banner-muted md:col-span-3">
             <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0" />
             <p class="text-sm">
-              M14 backend settings are active. First-run wizard redirect is intentionally deferred until the wizard UI is complete.
+              M14 backend settings are active. Existing app API routes now use the active Lemonade runtime URL. Non-Lemonade runtimes are prepared but not routable yet.
             </p>
           </div>
         </div>

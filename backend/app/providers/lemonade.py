@@ -34,15 +34,25 @@ from app.models.schemas import (
 class LemonadeProvider(LLMProvider):
     """Lemonade Server API provider."""
 
-    def __init__(self):
-        self.base_url = settings.lemonade_url
+    def __init__(
+        self,
+        url: str | None = None,
+        admin_key: str | None = None,
+        *,
+        use_settings_admin_key: bool = True,
+    ):
+        self.base_url = (url or settings.lemonade_url).rstrip("/")
         self.capabilities = capabilities
         self.timeout = 30.0
 
+        effective_admin_key = admin_key
+        if effective_admin_key is None and use_settings_admin_key:
+            effective_admin_key = settings.lemonade_admin_api_key
+
         self.admin_headers: dict[str, str] | None = None
-        if settings.lemonade_admin_api_key:
+        if effective_admin_key:
             self.admin_headers = {
-                "Authorization": f"Bearer {settings.lemonade_admin_api_key}"
+                "Authorization": f"Bearer {effective_admin_key}"
             }
 
     def _require_capability(self, cap_name: str, endpoint: str) -> None:

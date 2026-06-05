@@ -41,7 +41,11 @@ class RuntimeRegistry:
             raise ValueError(f"Unknown runtime type: {config.type}")
 
         if config.type == "lemonade":
-            provider = provider_cls()
+            provider = provider_cls(
+                url=config.url,
+                admin_key=config.admin_key,
+                use_settings_admin_key=False,
+            )
         else:
             provider = provider_cls(url=config.url, admin_key=config.admin_key)
 
