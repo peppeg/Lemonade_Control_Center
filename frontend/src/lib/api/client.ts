@@ -110,6 +110,7 @@ export const api = {
     removeRuntime: (id: string) => del<{ deleted: boolean }>(`/settings/runtimes/${enc(id)}`),
     activateRuntime: (id: string) => post<{ active: string }>(`/settings/runtimes/${enc(id)}/activate`),
     testRuntime: (id: string) => post<ConnectionTestResult>(`/settings/runtimes/${enc(id)}/test`),
+    discoverRuntime: (id: string) => post<DiscoveryResult>(`/settings/runtimes/${enc(id)}/discover`),
   },
 
   // ── Lemonade API (M2, used from M4+) ──

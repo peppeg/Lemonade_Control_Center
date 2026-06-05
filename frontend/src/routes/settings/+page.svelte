@@ -2,8 +2,32 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { notify } from '$lib/stores/notifications';
-  import type { AppearanceConfig, LccConfigPublic, RuntimeConfigPublic, SystemConfig } from '$lib/types';
-  import { CheckCircle2, CircleAlert, Cpu, Palette, RefreshCw, ServerCog, Shield, SlidersHorizontal } from 'lucide-svelte';
+  import type {
+    AccessMode,
+    AppearanceConfig,
+    DiscoveryCheck,
+    DiscoveryResult,
+    LccConfigPublic,
+    RuntimeConfigPublic,
+    RuntimeConfigRequest,
+    RuntimeType,
+    SystemConfig,
+  } from '$lib/types';
+  import {
+    CheckCircle2,
+    CircleAlert,
+    Cpu,
+    Pencil,
+    Palette,
+    Plus,
+    RefreshCw,
+    Search,
+    ServerCog,
+    Shield,
+    SlidersHorizontal,
+    Trash2,
+    X,
+  } from 'lucide-svelte';
 
   type Tab = 'connection' | 'system' | 'appearance' | 'about';
 
@@ -19,8 +43,16 @@
   let loading = true;
   let error: string | null = null;
   let testingRuntimeId: string | null = null;
+  let discoveringRuntimeId: string | null = null;
+  let removingRuntimeId: string | null = null;
+  let savingRuntime = false;
   let savingSystem = false;
   let savingAppearance = false;
+  let editingRuntimeId: string | 'new' | null = null;
+  let runtimeForm: RuntimeConfigRequest = emptyRuntimeForm();
+  let runtimeSecret = '';
+  let discoveryRuntimeId: string | null = null;
+  let discoveryResult: DiscoveryResult | null = null;
 
   let systemForm: SystemConfig = {
     os_type: 'linux_systemd',
@@ -113,6 +145,146 @@
     if (runtime.test_status === 'error') return 'ops-badge-danger';
     return '';
   }
+
+  function emptyRuntimeForm(): RuntimeConfigRequest {
+    return {
+      id: 'lemonade-local',
+      type: 'lemonade',
+      name: 'Local Lemonade',
+      url: 'http://localhost:13305',
+      admin_key: null,
+      is_active: false,
+      access_mode: 'local',
+      capabilities_count: 0,
+      test_status: 'untested',
+    };
+  }
+
+  function defaultUrl(type: RuntimeType): string {
+    if (type === 'ollama') return 'http://localhost:11434';
+    if (type === 'llamacpp') return 'http://localhost:8080';
+    if (type === 'custom') return 'http://localhost:8000';
+    return 'http://localhost:13305';
+  }
+
+  function defaultName(type: RuntimeType): string {
+    if (type === 'ollama') return 'Local Ollama';
+    if (type === 'llamacpp') return 'Direct llama.cpp';
+    if (type === 'custom') return 'Custom Runtime';
+    return 'Local Lemonade';
+  }
+
+  function startAddRuntime() {
+    const next = emptyRuntimeForm();
+    const suffix = config ? config.runtimes.length + 1 : 1;
+    next.id = `lemonade-local-${suffix}`;
+    editingRuntimeId = 'new';
+    runtimeForm = next;
+    runtimeSecret = '';
+  }
+
+  function startEditRuntime(runtime: RuntimeConfigPublic) {
+    editingRuntimeId = runtime.id;
+    runtimeForm = {
+      id: runtime.id,
+      type: runtime.type,
+      name: runtime.name,
+      url: runtime.url,
+      admin_key: null,
+      is_active: runtime.is_active,
+      access_mode: runtime.access_mode,
+      capabilities_count: runtime.capabilities_count,
+      last_tested: runtime.last_tested,
+      test_status: runtime.test_status,
+    };
+    runtimeSecret = '';
+  }
+
+  function cancelRuntimeEdit() {
+    editingRuntimeId = null;
+    runtimeForm = emptyRuntimeForm();
+    runtimeSecret = '';
+  }
+
+  function changeRuntimeType(type: RuntimeType) {
+    runtimeForm = {
+      ...runtimeForm,
+      type,
+      name: runtimeForm.name.trim() ? runtimeForm.name : defaultName(type),
+      url: defaultUrl(type),
+    };
+    if (editingRuntimeId === 'new') {
+      runtimeForm = { ...runtimeForm, id: slugify(runtimeForm.name || defaultName(type)) };
+    }
+  }
+
+  async function saveRuntime() {
+    if (!editingRuntimeId) return;
+    if (!runtimeForm.id.trim() || !runtimeForm.name.trim() || !runtimeForm.url.trim()) {
+      notify.warning('Runtime form incomplete', 'ID, name, and URL are required.');
+      return;
+    }
+
+    savingRuntime = true;
+    const payload: RuntimeConfigRequest = {
+      ...runtimeForm,
+      id: runtimeForm.id.trim(),
+      name: runtimeForm.name.trim(),
+      url: runtimeForm.url.trim(),
+      admin_key: runtimeSecret.trim() || null,
+    };
+
+    const result = editingRuntimeId === 'new'
+      ? await api.settings.addRuntime(payload)
+      : await api.settings.updateRuntime(editingRuntimeId, payload);
+
+    if (result.ok) {
+      notify.success(editingRuntimeId === 'new' ? 'Runtime added' : 'Runtime updated', payload.name);
+      cancelRuntimeEdit();
+      await loadSettings();
+    } else {
+      notify.error('Runtime save failed', result.error);
+    }
+    savingRuntime = false;
+  }
+
+  async function removeRuntime(runtime: RuntimeConfigPublic) {
+    if (!window.confirm(`Remove runtime "${runtime.name}"?`)) return;
+    removingRuntimeId = runtime.id;
+    const result = await api.settings.removeRuntime(runtime.id);
+    if (result.ok) {
+      notify.success('Runtime removed', runtime.name);
+      if (editingRuntimeId === runtime.id) cancelRuntimeEdit();
+      await loadSettings();
+    } else {
+      notify.error('Runtime removal failed', result.error);
+    }
+    removingRuntimeId = null;
+  }
+
+  async function discoverRuntime(runtime: RuntimeConfigPublic) {
+    discoveringRuntimeId = runtime.id;
+    const result = await api.settings.discoverRuntime(runtime.id);
+    if (result.ok) {
+      discoveryRuntimeId = runtime.id;
+      discoveryResult = result.data;
+      notify.success('Discovery complete', `${result.data.passed}/${result.data.total} checks passed`);
+      await loadSettings();
+    } else {
+      notify.error('Discovery failed', result.error);
+    }
+    discoveringRuntimeId = null;
+  }
+
+  function checkClass(check: DiscoveryCheck): string {
+    if (check.status === 'ok') return 'text-status-ok';
+    if (check.status === 'warning' || check.status === 'skip') return 'text-status-warn';
+    return 'text-status-error';
+  }
+
+  function slugify(value: string): string {
+    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'runtime';
+  }
 </script>
 
 <div class="space-y-4">
@@ -201,7 +373,10 @@
               <Cpu class="h-5 w-5 text-lemon" />
               <h2 class="ops-title">Configured Runtimes</h2>
             </div>
-            <span class="ops-badge">{config.runtimes.length}</span>
+            <button class="ops-button" type="button" on:click={startAddRuntime}>
+              <Plus class="h-4 w-4" />
+              Add Runtime
+            </button>
           </div>
           <div class="ops-card-body space-y-3">
             {#each config.runtimes as runtime}
@@ -216,19 +391,135 @@
                       <span class="ops-badge {statusClass(runtime)}">{runtime.test_status}</span>
                     </div>
                     <p class="ops-muted mt-1 break-all">{runtime.type} · {runtime.url}</p>
+                    <p class="ops-muted mt-1 text-xs">
+                      {runtime.capabilities_count} capabilities · admin key {runtime.admin_key_configured ? 'configured' : 'not set'}
+                    </p>
                   </div>
                   <div class="flex shrink-0 flex-wrap gap-2">
                     <button class="ops-button" type="button" on:click={() => testRuntime(runtime)} disabled={testingRuntimeId === runtime.id}>
                       <RefreshCw class="h-4 w-4 {testingRuntimeId === runtime.id ? 'animate-spin' : ''}" />
                       Test
                     </button>
+                    <button class="ops-button" type="button" on:click={() => discoverRuntime(runtime)} disabled={discoveringRuntimeId === runtime.id}>
+                      <Search class="h-4 w-4 {discoveringRuntimeId === runtime.id ? 'animate-pulse' : ''}" />
+                      Discover
+                    </button>
+                    <button class="ops-button" type="button" on:click={() => startEditRuntime(runtime)}>
+                      <Pencil class="h-4 w-4" />
+                      Edit
+                    </button>
                     <button class="ops-button" type="button" on:click={() => activateRuntime(runtime)} disabled={runtime.is_active}>
                       Activate
+                    </button>
+                    <button class="ops-button" type="button" on:click={() => removeRuntime(runtime)} disabled={removingRuntimeId === runtime.id || config.runtimes.length <= 1}>
+                      <Trash2 class="h-4 w-4" />
+                      Remove
                     </button>
                   </div>
                 </div>
               </div>
             {/each}
+
+            {#if editingRuntimeId}
+              <div class="border border-[#4b4f39] bg-[#171a18] p-4">
+                <div class="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 class="ops-title text-base">{editingRuntimeId === 'new' ? 'Add Runtime' : 'Edit Runtime'}</h3>
+                    <p class="ops-subtitle">Runtime credentials are submitted to the backend and redacted from settings responses.</p>
+                  </div>
+                  <button class="ops-button" type="button" on:click={cancelRuntimeEdit} title="Cancel runtime edit">
+                    <X class="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label class="block space-y-2">
+                    <span class="ops-label">runtime id</span>
+                    <input class="ops-input" bind:value={runtimeForm.id} disabled={editingRuntimeId !== 'new'} />
+                  </label>
+                  <label class="block space-y-2">
+                    <span class="ops-label">runtime type</span>
+                    <select
+                      class="ops-select"
+                      bind:value={runtimeForm.type}
+                      on:change={(event) => changeRuntimeType(event.currentTarget.value as RuntimeType)}
+                    >
+                      <option value="lemonade">lemonade</option>
+                      <option value="ollama">ollama</option>
+                      <option value="llamacpp">llamacpp</option>
+                      <option value="custom">custom</option>
+                    </select>
+                  </label>
+                  <label class="block space-y-2">
+                    <span class="ops-label">runtime name</span>
+                    <input class="ops-input" bind:value={runtimeForm.name} />
+                  </label>
+                  <label class="block space-y-2">
+                    <span class="ops-label">access mode</span>
+                    <select class="ops-select" bind:value={runtimeForm.access_mode}>
+                      <option value="local">local</option>
+                      <option value="ssh_tunnel">ssh_tunnel</option>
+                      <option value="tailscale">tailscale</option>
+                      <option value="remote">remote</option>
+                    </select>
+                  </label>
+                  <label class="block space-y-2 md:col-span-2">
+                    <span class="ops-label">runtime URL</span>
+                    <input class="ops-input" bind:value={runtimeForm.url} />
+                  </label>
+                  <label class="block space-y-2 md:col-span-2">
+                    <span class="ops-label">admin key</span>
+                    <input
+                      class="ops-input"
+                      type="password"
+                      bind:value={runtimeSecret}
+                      placeholder={editingRuntimeId === 'new' ? 'Optional' : 'Leave blank to keep the current key'}
+                    />
+                  </label>
+                </div>
+
+                <div class="mt-4 flex flex-wrap gap-2">
+                  <button class="ops-button ops-button-primary" type="button" on:click={saveRuntime} disabled={savingRuntime}>
+                    {savingRuntime ? 'Saving' : editingRuntimeId === 'new' ? 'Add Runtime' : 'Save Runtime'}
+                  </button>
+                  <button class="ops-button" type="button" on:click={cancelRuntimeEdit}>Cancel</button>
+                </div>
+              </div>
+            {/if}
+
+            {#if discoveryResult && discoveryRuntimeId}
+              <div class="border border-[#30342b] bg-[#101211] p-4">
+                <div class="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 class="ops-title text-base">Discovery Result</h3>
+                    <p class="ops-subtitle">{discoveryResult.passed}/{discoveryResult.total} checks passed for {discoveryRuntimeId}.</p>
+                  </div>
+                  <span class="ops-badge">{discoveryResult.total} checks</span>
+                </div>
+                <div class="overflow-hidden border border-[#30342b]">
+                  <table class="ops-table">
+                    <thead>
+                      <tr>
+                        <th>Check</th>
+                        <th>Endpoint</th>
+                        <th>Status</th>
+                        <th>Detail</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each discoveryResult.checks as check}
+                        <tr>
+                          <td class={checkClass(check)}>{check.name}</td>
+                          <td class="ops-mono text-xs">{check.endpoint}</td>
+                          <td><span class="ops-badge">{check.status}</span></td>
+                          <td class="text-sm text-muted-foreground">{check.detail}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            {/if}
           </div>
         </article>
       </section>

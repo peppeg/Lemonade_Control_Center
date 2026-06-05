@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.models.setup import (
     AppearanceConfig,
     ConnectionTestResult,
+    DiscoveryResult,
     LccConfigPublic,
     RuntimeConfig,
     RuntimeConfigPublic,
@@ -97,6 +98,17 @@ async def test_runtime(
     service: SetupService = Depends(get_setup_service),
 ):
     result = await service.test_saved_runtime(runtime_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Runtime '{runtime_id}' not found")
+    return result
+
+
+@router.post("/runtimes/{runtime_id}/discover", response_model=DiscoveryResult)
+async def discover_runtime(
+    runtime_id: str,
+    service: SetupService = Depends(get_setup_service),
+):
+    result = await service.discover_saved_runtime(runtime_id)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Runtime '{runtime_id}' not found")
     return result

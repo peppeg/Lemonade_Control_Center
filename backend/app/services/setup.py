@@ -163,6 +163,8 @@ class SetupService:
             if current.id == runtime_id:
                 runtime.id = runtime_id
                 runtime.is_active = current.is_active
+                if runtime.admin_key is None:
+                    runtime.admin_key = current.admin_key
                 config.runtimes[index] = runtime
                 self.save_config(config)
                 return self._redact_runtime(runtime)
@@ -207,6 +209,17 @@ class SetupService:
             )
             runtime.last_tested = datetime.now(timezone.utc)
             runtime.test_status = "ok" if result.success else "error"
+            self.save_config(config)
+            return result
+        return None
+
+    async def discover_saved_runtime(self, runtime_id: str) -> DiscoveryResult | None:
+        config = self.get_config()
+        for runtime in config.runtimes:
+            if runtime.id != runtime_id:
+                continue
+            result = await self.run_discovery(runtime)
+            runtime.capabilities_count = result.passed
             self.save_config(config)
             return result
         return None
