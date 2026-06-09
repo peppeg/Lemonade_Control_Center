@@ -207,8 +207,8 @@ class LemonadeProvider(LLMProvider):
         data = resp.json()
         models = [
             RunningModelInfo(
-                name=m.get("name", "unknown"),
-                model=m.get("model"),
+                name=_canonical_model_name(m.get("name", "unknown")),
+                model=_canonical_model_name(m.get("model")) if m.get("model") else None,
                 size=_size_to_bytes(m.get("size")),
                 digest=m.get("digest"),
                 expires_at=m.get("expires_at"),
@@ -284,11 +284,19 @@ class LemonadeProvider(LLMProvider):
     async def unload_model(self, model_name: str | None = None) -> bool:
         body = {}
         if model_name:
-            body["model_name"] = model_name
+            body["model_name"] = _canonical_model_name(model_name)
 
         resp = await self._post("/api/v1/unload", body, timeout=30.0)
         if resp.status_code != 200:
             raise HTTPException(resp.status_code, f"Unload failed: {resp.text[:300]}")
+
+        try:
+            result = resp.json()
+        except ValueError:
+            result = {}
+        if result.get("status") == "error":
+            raise HTTPException(409, result.get("message", "Lemonade rejected the unload request."))
+
         return True
 
     async def delete_model(self, name: str) -> bool:

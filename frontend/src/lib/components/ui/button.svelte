@@ -30,8 +30,10 @@
 </script>
 
 <button
+  type="button"
   class={buttonVariants({ variant, size })}
   {...$$restProps}
+  on:click
 >
   <slot />
 </button>

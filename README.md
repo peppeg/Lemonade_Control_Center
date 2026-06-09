@@ -1,248 +1,166 @@
 # Lemonade Control Center
 
-**Lemonade Control Center** is an unofficial local control panel for [Lemonade](https://github.com/lemonade-sdk/lemonade), built for people who run large language models on their own machine and want a clearer way to operate the runtime.
+> A browser-based operator console for [Lemonade](https://github.com/lemonade-sdk/lemonade), built for Linux inference servers and workstations.
 
-It is not a chat interface. It is an operator console for the server behind the chat interface.
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+![Status](https://img.shields.io/badge/status-active%20development-yellow.svg)
+![Platform](https://img.shields.io/badge/platform-Linux-blue.svg)
 
-The goal is to replace repeated terminal commands, shell one-liners, manual log checks, and scattered runtime notes with a focused web dashboard for model loading, runtime visibility, hardware monitoring, diagnostics, and guarded configuration.
+Running local models is the enjoyable part. Operating the server behind them often is not.
+
+I started **Lemonade Control Center (LCC)** because my Lemonade server runs on a Linux AI workstation that I frequently access from another computer. I wanted one place to see what was loaded, understand the settings in use, monitor memory and GPU pressure, inspect failures, and perform routine operations without rebuilding the right terminal command every time.
+
+LCC is that place: a local web dashboard for operating a Lemonade server from a browser.
+
+It is **not a chat interface**. Use Open WebUI, the Lemonade app, or another compatible client to talk to your models. Use LCC to manage and understand the runtime behind them.
+
+## Why LCC?
+
+Lemonade provides a capable server, command-line client, tray application, and desktop app. On Linux, however, `lemond` is also well suited to running as a headless system service. When the inference machine has no display or is managed remotely, desktop tooling is no longer the most convenient operational surface.
+
+The alternative is usually a collection of terminal commands: check the service, inspect the journal, find the active `llama-server` process, monitor memory, load a model with the right options, and remember which settings worked last time.
+
+LCC brings those tasks together without hiding the technical details that matter. Context size, runtime arguments, memory pressure, backend selection, and service state remain visible because changing them can have real consequences. The goal is not to make local inference look simpler than it is, but to make it organized, understandable, and repeatable.
+
+By default, LCC remains local to the Linux host. It can be reached remotely through SSH port forwarding. Direct access from a trusted local network requires an explicit bind-address configuration and appropriate host security.
 
 ## Screenshots
 
-Screenshots will be added as the interface stabilizes.
+Screenshots will be added here as the interface stabilizes.
 
-## What It Does
+## What You Can Do
 
-Lemonade Control Center is designed to sit next to tools such as Open WebUI or other chat frontends.
+### See the runtime at a glance
 
-- **Chat UI**: talk to the model.
-- **Lemonade Control Center**: understand, configure, monitor, and operate the local inference runtime.
+The Dashboard brings together Lemonade health, the active model, recent inference metrics, hardware pressure, and warnings. It answers the basic questions before you start changing anything: what is running, how is the machine behaving, and does something need attention?
 
-The application focuses on the operational layer:
+### Manage models
 
-- Is Lemonade reachable?
-- Which model is loaded?
-- Which models are installed locally?
-- Which models are available from the Lemonade catalog?
-- How much RAM, GPU, and system headroom is available?
-- What was the last task?
-- Which logs and warnings matter?
-- Which runtime options are safe to expose?
-- Which actions require explicit confirmation or an admin key?
-
-## Main Surfaces
-
-### Dashboard
-
-The dashboard gives a compact overview of the local runtime:
-
-- Lemonade connection state
-- active model
-- recent task metrics
-- RAM and GPU usage
-- runtime health
-- important warnings
-
-### Models
-
-The Models page is the main place to manage local and downloadable models:
+The Models workspace provides:
 
 - local model inventory
-- remote Lemonade catalog refresh
-- model load and unload
-- active model details
-- per-model profile awareness
-- safer controls for common load options
-- guarded extra arguments for advanced users
+- access to the remote Lemonade catalog
+- model download, load, and unload controls
+- active model and process details
+- saved Lemonade options
+- per-model LCC profiles
+- guarded controls for common load options
+- an advanced argument field with validation for experienced users
 
-The intent is not to hide technical detail. Local inference is technical, and some options can have serious memory or stability implications. Lemonade Control Center keeps those options visible, but organizes them so users can understand what they are about to do.
+LCC distinguishes between model names exposed through compatibility APIs and the canonical names expected by Lemonade, so routine operations do not depend on users knowing those implementation details.
 
-### Configuration
+### Build repeatable configurations
 
-The Configuration page focuses on runtime and request defaults:
+The Configuration workspace separates two different kinds of state:
 
-- profile-oriented settings
-- context size and slot planning
-- request defaults
-- safe Lemonade / llama.cpp argument handling
-- warnings for risky or unsupported combinations
+- **Runtime configuration**, owned by Lemonade and applied when models are loaded.
+- **Request defaults**, stored locally by LCC and used as operator preferences.
 
-The application avoids guessing when an option is runtime-owned by Lemonade. Where Lemonade already manages a flag internally, Lemonade Control Center should expose the state clearly rather than encouraging duplicate manual arguments.
+Built-in profiles provide practical starting points such as Safe, Coding, Long Context, Stress, and Executor Strict. Risky settings remain explicit, and Lemonade-managed arguments are not silently duplicated.
 
-### Logs and Stats
+### Read logs as operational information
 
-The Logs and Stats page turns runtime noise into readable operational signals:
+Logs & Stats turns server output into useful signals:
 
-- parsed recent logs
-- last task information
-- input and output token metrics where available
-- runtime warnings
-- task history
-- live backend-derived updates
+- input and output tokens
+- time to first token
+- prompt-processing and generation throughput
+- total task duration
+- finish reason
+- parsed Lemonade logs and warnings
+- recent task history
 
-### Hardware
+### Monitor the host
 
-The Hardware page is built for local AI workstations where memory pressure and GPU load matter:
+LCC monitors the Linux machine that actually runs the models:
 
-- system RAM usage
-- swap visibility
-- GPU load
-- GPU temperature where available
-- CPU load where useful
-- host-level sensor support on Linux
+- system RAM and swap
+- CPU load
+- AMD GPU load and temperature when exposed through Linux `sysfs`
+- other available thermal sensors through `psutil` or `lm-sensors`
+- root-disk usage
+- `llama-server` PID, memory use, CPU use, uptime, and command line
+- processes with the highest RAM consumption
+- `lemond.service` and journal state when systemd is available
 
-### System
+On unified-memory systems such as AMD Strix Halo, system RAM is the primary capacity signal. LCC does not currently present a separate VRAM-usage figure.
 
-The System page focuses on the host process and service layer:
+### Diagnose problems
 
-- Lemonade service status
-- detected `llama-server` process
-- process command line visibility
-- systemd and journal integration when available
-- guarded restart actions
+Diagnostics combines runtime, service, hardware, and configuration checks into one report. It includes warning classification, dismissible findings, diagnostic history, and a downloadable support bundle.
 
-### Diagnostics
+### Configure the connection
 
-The Diagnostics page provides structured checks and support data:
-
-- runtime discovery checks
-- hardware and service probes
-- warning and error classification
-- diagnostic history
-- downloadable diagnostic bundle
-
-This is meant to make troubleshooting easier without requiring every user to know which command to run first.
-
-### Settings
-
-The Settings page manages local application configuration:
-
-- configured runtimes
-- active Lemonade connection
-- runtime discovery
-- optional Lemonade admin API key
-- local preferences
-- project and system information
+Settings manages the Lemonade runtime URL, discovery checks, optional admin API key, local preferences, and project information. Secrets are stored by the backend and redacted from Settings responses.
 
 ## Safety Model
 
-Lemonade Control Center is intentionally conservative.
+LCC is intentionally conservative about privileged and destructive operations.
 
-- The backend binds to localhost by default.
-- Destructive actions are disabled unless explicitly enabled.
-- Service restart is disabled unless explicitly enabled.
-- Lemonade admin operations require the Lemonade admin API key.
-- Sensitive local configuration is stored outside the public repository.
-- The UI is capability-driven and should not show unsafe actions as normal controls.
+- The backend binds to `127.0.0.1` by default.
+- Model deletion is disabled unless `ENABLE_DELETE=true` is set explicitly.
+- Service restart is disabled unless `ENABLE_RESTART=true` is set explicitly.
+- Protected Lemonade operations require the Lemonade admin API key.
+- Sensitive runtime configuration is excluded from the public repository.
+- Destructive actions require confirmation.
+- The UI adapts to capabilities detected on the actual machine.
 
-This matters because the application is expected to operate local models that can consume tens of gigabytes of RAM and GPU memory. A control panel for that environment should be explicit, not casual.
-
-## Lemonade Admin API Key
-
-Some Lemonade operations are intentionally protected by an admin API key.
-
-If Lemonade is running as a systemd service, the key should be configured on the Lemonade service itself, for example through a systemd override:
-
-```bash
-sudo systemctl edit lemond.service
-```
-
-```ini
-[Service]
-Environment=LEMONADE_ADMIN_API_KEY=your-generated-secret
-```
-
-Then reload and restart the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart lemond.service
-```
-
-The same key can then be saved in Lemonade Control Center from the Settings page.
-
-Restarting `lemond.service` unloads the currently loaded model.
+Local inference workloads can consume tens of gigabytes of memory and can make a workstation temporarily unresponsive when configured badly. An operator console for that environment should explain consequences rather than turn every command into an inviting button.
 
 ## Architecture
 
-The project is split into two layers during development.
+LCC currently uses two development services:
 
-### Backend
-
-The backend is a FastAPI service responsible for:
-
-- Lemonade API integration
-- runtime discovery
-- model and catalog operations
-- profile storage
-- hardware inspection
-- process and service inspection
-- log parsing
-- metrics collection
-- diagnostic bundle generation
-
-Main local API groups include:
-
-- `/api/health`
-- `/api/lemonade/*`
-- `/api/system/*`
-- `/api/logs/*`
-- `/api/metrics/*`
-- `/api/profiles/*`
-- `/api/diagnostics/*`
-- `/api/settings/*`
-- `/api/setup/*`
-
-### Frontend
-
-The frontend is a SvelteKit application responsible for:
-
-- application shell
-- dashboard and navigation
-- operator workflows
-- model management UI
-- configuration forms
-- settings and discovery views
-- live feedback
-
-The development setup uses Vite for the frontend and FastAPI for the backend. The intended packaged experience is a single local application service that can serve both the API and the built dashboard.
-
-## Repository Layout
+- a **FastAPI backend** for Lemonade integration, host inspection, metrics, profiles, and diagnostics
+- a **SvelteKit frontend** for the browser interface and operator workflows
 
 ```text
-.
-├── backend/          FastAPI backend
-│   ├── app/
-│   │   ├── routers/  API route groups
-│   │   ├── providers/
-│   │   ├── services/
-│   │   └── models/
-│   └── requirements.txt
-├── frontend/         SvelteKit frontend
-│   ├── src/
-│   └── package.json
-├── capabilities/     Probe tooling and captured capability results
-├── .env.example      Example local configuration
-└── LICENSE
+Browser
+   │
+   ▼
+SvelteKit / Vite
+   │  /api
+   ▼
+FastAPI
+   ├── Lemonade HTTP API
+   ├── systemd / journal
+   ├── Linux processes and sysfs
+   └── local LCC configuration
 ```
+
+The application is designed to be distributed as one local service serving both the API and the built dashboard. Development keeps the two layers separate for faster iteration.
+
+### Backend responsibilities
+
+- Lemonade API integration
+- model and catalog operations
+- runtime discovery
+- profile storage
+- hardware and process inspection
+- log parsing and metrics collection
+- diagnostics and support bundles
+
+### Frontend responsibilities
+
+- application navigation
+- runtime and hardware status
+- model-management workflows
+- configuration and profile editing
+- logs, diagnostics, and settings
+- confirmations, warnings, and live feedback
 
 ## Requirements
 
 - Linux
-- Python 3.11+
-- Node.js 20+
+- Python 3.11 or newer
+- Node.js 20 or newer
 - a running Lemonade server
 
-Host-level inspection works best on Linux systems with standard tools such as:
-
-- `systemctl`
-- `journalctl`
-- `/proc`
-- `psutil`
-- system sensor files where available
+Host inspection works best when standard Linux facilities are available, including `systemctl`, `journalctl`, `/proc`, `/sys`, and hardware sensor support.
 
 ## Development Setup
 
-### Backend
+Clone the repository and start the backend:
 
 ```bash
 cd backend
@@ -253,13 +171,7 @@ cp ../.env.example .env
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Default backend URL:
-
-```text
-http://127.0.0.1:8000
-```
-
-### Frontend
+In another terminal, start the frontend:
 
 ```bash
 cd frontend
@@ -267,19 +179,17 @@ npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-Default frontend URL:
+Open:
 
 ```text
 http://127.0.0.1:5173
 ```
 
-During development, the frontend proxies `/api` requests to the local FastAPI backend.
+During development, Vite proxies `/api` requests to FastAPI at `127.0.0.1:8000`.
 
 ## Configuration
 
-The backend reads configuration from environment variables or from `backend/.env`.
-
-Example:
+The backend reads environment variables and `backend/.env`.
 
 ```env
 LEMONADE_URL=http://localhost:13305
@@ -288,16 +198,42 @@ ENABLE_DELETE=false
 ENABLE_RESTART=false
 ```
 
-Key options:
+| Variable | Description |
+|---|---|
+| `LEMONADE_URL` | URL of the Lemonade server |
+| `LEMONADE_ADMIN_API_KEY` | Optional key for protected Lemonade operations |
+| `ENABLE_DELETE` | Enables guarded model deletion when set to `true` |
+| `ENABLE_RESTART` | Enables guarded service restart when set to `true` |
 
-- `LEMONADE_URL`: Lemonade server URL.
-- `LEMONADE_ADMIN_API_KEY`: optional key for protected Lemonade admin operations.
-- `ENABLE_DELETE`: enables guarded model deletion when set to `true`.
-- `ENABLE_RESTART`: enables guarded service restart when set to `true`.
+### Lemonade admin API key
+
+Most LCC features do not require an admin key. Lemonade uses it to protect internal administrative endpoints.
+
+When Lemonade runs as a systemd service, configure the key through a service override:
+
+```bash
+sudo systemctl edit lemond.service
+```
+
+```ini
+[Service]
+Environment=LEMONADE_ADMIN_API_KEY=your-generated-secret
+```
+
+Then reload systemd and restart Lemonade:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart lemond.service
+```
+
+> Restarting `lemond.service` unloads the active model.
+
+Save the same key in LCC from **Settings → Connection**.
 
 ## Capability Probe
 
-The `capabilities/` directory contains a probe utility for capturing Lemonade and host capabilities.
+The optional probe utility captures the Lemonade endpoints and host facilities available on a particular installation:
 
 ```bash
 cd capabilities
@@ -305,34 +241,47 @@ pip install -r requirements.txt
 python probe.py
 ```
 
-With an admin key:
+When an admin key is configured:
 
 ```bash
 python probe.py --admin-key YOUR_ADMIN_KEY
 ```
 
-The probe writes structured results under `capabilities/results/` and generates a capability summary.
+Structured results are written under `capabilities/results/`.
+
+## Repository Layout
+
+```text
+.
+├── backend/          FastAPI backend
+│   └── app/
+│       ├── models/
+│       ├── providers/
+│       ├── routers/
+│       └── services/
+├── frontend/         SvelteKit frontend
+│   └── src/
+├── capabilities/     Capability probe and captured results
+├── .env.example      Example backend configuration
+└── LICENSE
+```
 
 ## Project Status
 
-Lemonade Control Center is under active development.
+Lemonade Control Center is under active development. The core application surfaces are operational, but behavior can vary with the installed Lemonade version, available Linux facilities, enabled safety flags, and local hardware.
 
-The repository already contains the main backend and frontend structure, with working local surfaces for runtime status, model management, configuration, logs, hardware, diagnostics, and settings. Some features depend on the installed Lemonade version, available host tools, enabled safety flags, and whether the Lemonade admin API key is configured.
+Feedback and carefully scoped contributions are welcome.
 
 ## Credits
 
-Created by Peppe / [peppeg](https://github.com/peppeg).
+Created by [Peppe / peppeg](https://github.com/peppeg), creator of [yourfuture.me](https://yourfuture.me).
 
 Project repository: [peppeg/Lemonade_Control_Center](https://github.com/peppeg/Lemonade_Control_Center)
 
-Personal site: [yourfuture.me](https://yourfuture.me)
-
-Built with FastAPI, SvelteKit, Tailwind CSS, Lucide, and the Lemonade local LLM ecosystem.
+Built with FastAPI, SvelteKit, Tailwind CSS, Lucide, and the Lemonade ecosystem.
 
 Development assistance included OpenAI Codex, Qwen3-Coder-Next-GGUF, and Google Stitch for UI exploration.
 
 ## License
 
-Licensed under the Apache License, Version 2.0.
-
-See [LICENSE](LICENSE).
+Licensed under the [Apache License, Version 2.0](LICENSE).
