@@ -249,7 +249,7 @@
             </div>
             <div class="border border-[#30342b] bg-[#111312] p-4">
               <p class="ops-label">Activation</p>
-              <p class="ops-value mt-1">Automatic first-run redirect will be enabled only after this flow is manually verified.</p>
+              <p class="ops-value mt-1">Incomplete installations are routed here automatically until setup is finished.</p>
             </div>
           </div>
         </div>
