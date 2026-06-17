@@ -202,11 +202,18 @@
 
         <label class="block space-y-2">
           <span class="ops-label">llamacpp_backend</span>
-          <select class="ops-select" bind:value={backend}>
+          <div class="ops-segmented">
             {#each backendOptions as option}
-              <option value={option.value}>{option.label}</option>
+              <button
+                class="ops-segment {backend === option.value ? 'ops-segment-active' : ''}"
+                type="button"
+                aria-pressed={backend === option.value}
+                on:click={() => backend = option.value}
+              >
+                {option.label}
+              </button>
             {/each}
-          </select>
+          </div>
         </label>
 
         <fieldset class="space-y-2">

@@ -676,12 +676,18 @@
             <Palette class="h-5 w-5 text-lemon" />
             <h2 class="ops-title">Appearance</h2>
           </div>
-          <span class="ops-badge">Stored</span>
+          <span class="ops-badge ops-badge-warn">Coming soon</span>
         </div>
         <div class="ops-card-body max-w-3xl space-y-5">
+          <div class="ops-banner ops-banner-muted">
+            <CircleAlert class="mt-0.5 h-5 w-5 shrink-0 text-status-warn" />
+            <p class="text-sm">
+              Theme and accent switching are parked for now. The current UI still uses a mix of design tokens and hardcoded colors, so visual themes will be enabled after the interface is fully token-based.
+            </p>
+          </div>
           <label class="block space-y-2">
             <span class="ops-label">theme</span>
-            <select class="ops-select" bind:value={appearanceForm.theme}>
+            <select class="ops-select" bind:value={appearanceForm.theme} disabled title="Coming soon">
               <option value="dark">dark</option>
               <option value="light">light</option>
               <option value="system">system</option>
@@ -689,7 +695,7 @@
           </label>
           <label class="block space-y-2">
             <span class="ops-label">accent color</span>
-            <select class="ops-select" bind:value={appearanceForm.accent_color}>
+            <select class="ops-select" bind:value={appearanceForm.accent_color} disabled title="Coming soon">
               <option value="lemon">lemon</option>
               <option value="purple">purple</option>
               <option value="blue">blue</option>
@@ -700,10 +706,6 @@
             <span class="ops-label">polling interval (seconds)</span>
             <input class="ops-input" type="number" min="2" max="60" bind:value={appearanceForm.polling_interval_s} />
           </label>
-          <div class="ops-banner ops-banner-muted">
-            <CircleAlert class="mt-0.5 h-5 w-5 shrink-0 text-status-warn" />
-            <p class="text-sm">Theme, accent, polling interval, and sidebar position are persisted now. Live application is deferred until the setup/settings flow is fully activated.</p>
-          </div>
           <button class="ops-button ops-button-primary" type="button" on:click={saveAppearance} disabled={savingAppearance}>
             {savingAppearance ? 'Saving' : 'Save Appearance'}
           </button>

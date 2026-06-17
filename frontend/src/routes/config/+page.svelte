@@ -8,6 +8,7 @@
 
   const presets: PresetName[] = ['Safe', 'Coding', 'Long Context', 'Stress', 'Executor Strict'];
   const tokenOptions = [256, 1024, 2048, 4096];
+  const backendOptions = ['auto', 'rocm', 'vulkan', 'cpu', 'cuda'];
 
   let activePreset: PresetName = 'Coding';
   let runtimeConfig: Record<string, unknown> = {};
@@ -229,13 +230,19 @@
 
           <label class="block space-y-2">
             <span class="ops-label">Primary Backend</span>
-            <select class="ops-select" bind:value={primaryBackend} disabled={!canWriteRuntime}>
-              <option value="auto">auto</option>
-              <option value="vulkan">vulkan</option>
-              <option value="rocm">rocm</option>
-              <option value="cpu">cpu</option>
-              <option value="cuda">cuda</option>
-            </select>
+            <div class="ops-segmented">
+              {#each backendOptions as option}
+                <button
+                  class="ops-segment {primaryBackend === option ? 'ops-segment-active' : ''}"
+                  type="button"
+                  aria-pressed={primaryBackend === option}
+                  disabled={!canWriteRuntime}
+                  on:click={() => primaryBackend = option}
+                >
+                  {option}
+                </button>
+              {/each}
+            </div>
           </label>
         </div>
 

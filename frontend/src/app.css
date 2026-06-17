@@ -303,6 +303,17 @@ code, pre, .font-mono {
   font-size: 13px;
 }
 
+.ops-input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.ops-input[type='number']::-webkit-outer-spin-button,
+.ops-input[type='number']::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 .ops-input-icon-left {
   padding-left: 36px;
 }
@@ -317,6 +328,51 @@ code, pre, .font-mono {
 .ops-textarea:disabled {
   color: #666b60;
   background: #131514;
+}
+
+.ops-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border: 1px solid #444936;
+  border-radius: 4px;
+  background: #111312;
+  padding: 4px;
+}
+
+.ops-segment {
+  display: inline-flex;
+  min-height: 30px;
+  flex: 1 1 70px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 0 10px;
+  color: var(--color-muted-foreground);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.ops-segment:hover:not(:disabled) {
+  border-color: #4f563d;
+  background: #202420;
+  color: var(--color-foreground);
+}
+
+.ops-segment-active,
+.ops-segment-active:hover:not(:disabled) {
+  border-color: var(--color-lemon);
+  background: var(--color-lemon);
+  color: #111310;
+}
+
+.ops-segment:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .ops-table {
