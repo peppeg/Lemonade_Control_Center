@@ -4,7 +4,6 @@
     dashboardData, dashboardLoading, lastRefresh,
     startDashboardPolling, stopDashboardPolling,
   } from '$lib/stores/dashboard';
-  import { capabilities } from '$lib/stores/capabilities';
   import { connectionStatus } from '$lib/stores/connection';
   import { AlertTriangle, Check, Clock3, Cpu, HardDrive, Info, RefreshCw, Server, TimerReset } from 'lucide-svelte';
   import DiagnosticsPanel from '$lib/components/diagnostics/DiagnosticsPanel.svelte';
@@ -82,13 +81,13 @@
     </div>
   </section>
 
-  {#if !$capabilities.internal_config || !$capabilities.internal_set}
+  {#if data.runtimeConfigAvailable === false}
     <section class="ops-banner ops-banner-danger">
       <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" />
       <div>
-        <p class="font-semibold">Runtime Config is read-only</p>
+        <p class="font-semibold">Runtime Config unavailable</p>
         <p class="mt-1 text-sm text-[#ffd9d6]">
-          Admin key is missing or server-side config writes are disabled. Runtime values can be inspected, but not saved to disk.
+          Admin key is missing or Lemonade did not expose server-side config for the active runtime.
         </p>
       </div>
     </section>

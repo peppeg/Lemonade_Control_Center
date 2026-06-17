@@ -211,6 +211,7 @@ export interface DashboardData {
   loadedModel: LoadedModelInfo | null;
   lastTask: LastTaskInfo | null;
   hardware: HardwareInfo | null;
+  runtimeConfigAvailable: boolean | null;
   alerts: SmartAlert[];
   timestamp: Date;
 }

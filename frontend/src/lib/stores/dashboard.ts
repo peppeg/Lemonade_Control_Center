@@ -5,9 +5,8 @@
  * Polls on a relaxed interval. Each card can show independently:
  * if one endpoint fails, the others still render.
  */
-import { writable, get } from 'svelte/store';
+import { writable } from 'svelte/store';
 import { api } from '$lib/api/client';
-import { capabilities } from '$lib/stores/capabilities';
 import type {
   DashboardData,
   ServerStatus,
@@ -26,6 +25,7 @@ export const dashboardData = writable<DashboardData>({
   loadedModel: null,
   lastTask: null,
   hardware: null,
+  runtimeConfigAvailable: null,
   alerts: [],
   timestamp: new Date(),
 });
@@ -44,10 +44,6 @@ export async function refreshDashboard(): Promise<void> {
   // Skeleton only on first load. Later refreshes keep the old data visible.
   dashboardLoading.set(hasLoadedOnce ? 'partial' : 'loading');
 
-  // Fetch only dashboard-specific data.
-  // Do not reload capabilities and do not interfere with global health polling.
-  const canReadConfig = get(capabilities).internal_config;
-
   // Fire all requests in parallel — each one independent
   const [
     healthResult,
@@ -62,9 +58,7 @@ export async function refreshDashboard(): Promise<void> {
     api.system.llamaServer(),
     api.logs.lastTask(),
     api.lemonade.running(),
-    canReadConfig
-      ? api.lemonade.getConfig()
-      : Promise.resolve({ ok: false, error: 'config unavailable' as const }),
+    api.lemonade.getConfig(),
   ]);
 
   // ── Parse Server Status ──
@@ -178,10 +172,12 @@ export async function refreshDashboard(): Promise<void> {
   // ── Parse Config (for alerts) ──
   let globalTimeout: number | null = serverStatus?.globalTimeout ?? null;
   let configMaxTokens: number | null = null;
+  let runtimeConfigAvailable = false;
   if (configResult.status === 'fulfilled' && configResult.value.ok) {
     // Type assertion needed: ApiResult<T> for getConfig returns { ok: true; data: { raw; available } }
     const cfg = configResult.value as { data: { raw: Record<string, unknown>; available: boolean } };
     if (cfg.data.available && cfg.data.raw) {
+      runtimeConfigAvailable = true;
       globalTimeout = (cfg.data.raw.global_timeout as number) ?? globalTimeout;
       configMaxTokens = (cfg.data.raw.max_tokens as number) ?? null;
     }
@@ -203,6 +199,7 @@ export async function refreshDashboard(): Promise<void> {
     loadedModel,
     lastTask,
     hardware,
+    runtimeConfigAvailable,
     alerts,
     timestamp: new Date(),
   });
