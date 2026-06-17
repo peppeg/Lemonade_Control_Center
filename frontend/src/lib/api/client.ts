@@ -1,7 +1,8 @@
 /**
  * Typed API client for the LCC backend.
  *
- * All calls go through the Vite proxy in dev (/api → localhost:8000/api).
+ * In dev, calls go through the Vite proxy (/api → localhost:8000/api).
+ * In unified runtime, FastAPI serves both this frontend and /api.
  * Handles errors gracefully — never throws uncaught, always returns
  * structured results that the UI can display.
  */

@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     require_auth: bool = False
 
     # ── Server ──
+    app_host: str = "127.0.0.1"
+    app_port: int = 17600
+    serve_frontend: bool = True
+    frontend_build_dir: str = str(Path(__file__).parent.parent.parent / "frontend" / "build")
+    lan_mode: bool = False
+
+    # Legacy backend-dev defaults retained for external scripts that may still
+    # read HOST/PORT. The product runtime uses APP_HOST/APP_PORT above.
     host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = False

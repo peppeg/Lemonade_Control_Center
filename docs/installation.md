@@ -1,11 +1,11 @@
 # Installation
 
-Lemonade Control Center is currently developed as two local services:
+Lemonade Control Center can run in two modes:
 
-- FastAPI backend on `127.0.0.1:8000`
-- SvelteKit frontend on `127.0.0.1:5173`
+- unified runtime: one FastAPI process serves both `/api/*` and the built dashboard
+- development mode: FastAPI and Vite run as two separate processes
 
-The intended production direction is a single local service that serves both the API and the built frontend. Until that packaging step is complete, use the development setup below.
+The unified runtime is the recommended mode for normal local use.
 
 ## Prerequisites
 
@@ -14,7 +14,36 @@ The intended production direction is a single local service that serves both the
 - Node.js 20 or newer
 - a running Lemonade server
 
-## Backend
+## Unified Runtime
+
+Build the frontend:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+Start LCC:
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp ../.env.example .env
+python -m app.run
+```
+
+Open:
+
+```text
+http://127.0.0.1:17600
+```
+
+The default runtime port is `17600`.
+
+## Development Backend
 
 ```bash
 cd backend
@@ -31,7 +60,7 @@ Backend health check:
 curl http://127.0.0.1:8000/api/health
 ```
 
-## Frontend
+## Development Frontend
 
 ```bash
 cd frontend
@@ -48,5 +77,12 @@ http://127.0.0.1:5173
 ## Local Network Access
 
 The safest default is localhost-only access. To use LCC from another machine on the same trusted LAN, configure the backend to bind to the LAN interface or `0.0.0.0`, set `LCC_API_KEY`, and keep host firewall rules explicit.
+
+Example:
+
+```bash
+cd backend
+APP_HOST=0.0.0.0 APP_PORT=4242 REQUIRE_AUTH=true LAN_MODE=true python -m app.run
+```
 
 Do not expose LCC directly to the public internet.

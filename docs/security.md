@@ -54,3 +54,11 @@ For LAN usage:
 4. Prefer a trusted private network.
 
 For remote usage across untrusted networks, prefer SSH port forwarding rather than exposing the service.
+
+Unified runtime LAN example:
+
+```bash
+APP_HOST=0.0.0.0 APP_PORT=4242 REQUIRE_AUTH=true LAN_MODE=true python -m app.run
+```
+
+`LAN_MODE=true` is intentionally strict: it requires a LAN-visible bind address and `REQUIRE_AUTH=true`.

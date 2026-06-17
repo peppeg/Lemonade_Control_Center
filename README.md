@@ -117,26 +117,26 @@ Local inference workloads can consume tens of gigabytes of memory and can make a
 
 ## Architecture
 
-LCC currently uses two development services:
+LCC uses two services during development and one service for the real local runtime:
 
-- a **FastAPI backend** for Lemonade integration, host inspection, metrics, profiles, and diagnostics
+- a **FastAPI backend** for Lemonade integration, host inspection, metrics, profiles, diagnostics, and static frontend serving
 - a **SvelteKit frontend** for the browser interface and operator workflows
 
 ```text
 Browser
    │
    ▼
-SvelteKit / Vite
-   │  /api
-   ▼
 FastAPI
+   ├── /api/*
+   ├── /ws/*
+   └── built SvelteKit frontend
    ├── Lemonade HTTP API
    ├── systemd / journal
    ├── Linux processes and sysfs
    └── local LCC configuration
 ```
 
-The application is designed to be distributed as one local service serving both the API and the built dashboard. Development keeps the two layers separate for faster iteration.
+Development keeps Vite and FastAPI separate for faster iteration. The unified runtime serves the built frontend and the API from the same FastAPI process.
 
 ### Backend responsibilities
 
@@ -165,6 +165,35 @@ The application is designed to be distributed as one local service serving both 
 - a running Lemonade server
 
 Host inspection works best when standard Linux facilities are available, including `systemctl`, `journalctl`, `/proc`, `/sys`, and hardware sensor support.
+
+## Runtime Setup
+
+Build the frontend once:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+Start the unified runtime:
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp ../.env.example .env
+python -m app.run
+```
+
+Open:
+
+```text
+http://127.0.0.1:17600
+```
+
+FastAPI serves both `/api/*` and the built dashboard. Vite is not needed for this mode.
 
 ## Development Setup
 
@@ -206,6 +235,11 @@ ENABLE_DELETE=false
 ENABLE_RESTART=false
 LCC_API_KEY=
 REQUIRE_AUTH=false
+APP_HOST=127.0.0.1
+APP_PORT=17600
+SERVE_FRONTEND=true
+FRONTEND_BUILD_DIR=../frontend/build
+LAN_MODE=false
 ```
 
 | Variable | Description |
@@ -216,6 +250,21 @@ REQUIRE_AUTH=false
 | `ENABLE_RESTART` | Enables guarded service restart when set to `true` |
 | `LCC_API_KEY` | Protects LAN and remote access to LCC |
 | `REQUIRE_AUTH` | Requires `LCC_API_KEY` for every client, including localhost, when set to `true` |
+| `APP_HOST` | Bind host for the unified runtime |
+| `APP_PORT` | Bind port for the unified runtime |
+| `SERVE_FRONTEND` | Serves the built frontend from FastAPI when `true` |
+| `FRONTEND_BUILD_DIR` | Path to the SvelteKit static build |
+| `LAN_MODE` | Requires explicit LAN bind and `REQUIRE_AUTH=true` when enabled |
+
+### LAN access
+
+For a trusted local network, LCC can run on a LAN-visible address:
+
+```bash
+APP_HOST=0.0.0.0 APP_PORT=4242 REQUIRE_AUTH=true LAN_MODE=true python -m app.run
+```
+
+Set `LCC_API_KEY` before using LAN mode. Do not expose LCC directly to the public internet.
 
 ### Lemonade admin API key
 
