@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
-  import { capabilities } from '$lib/stores/capabilities';
   import { notify } from '$lib/stores/notifications';
   import { AlertCircle, Lock, SlidersHorizontal } from 'lucide-svelte';
 
@@ -13,6 +12,7 @@
   let activePreset: PresetName = 'Coding';
   let runtimeConfig: Record<string, unknown> = {};
   let runtimeError: string | null = null;
+  let runtimeReadable = false;
   let runtimeLoading = true;
   let runtimeSaving = false;
 
@@ -27,7 +27,7 @@
   let newStopSequence = '';
   let localMessage: string | null = null;
 
-  $: canWriteRuntime = $capabilities.internal_set;
+  $: canWriteRuntime = runtimeReadable && !runtimeLoading && !runtimeError;
 
   onMount(() => {
     loadLocalDefaults();
@@ -43,8 +43,17 @@
       runtimeConfig = result.data.raw ?? {};
       contextSize = Number(runtimeConfig.ctx_size ?? runtimeConfig.context_size ?? contextSize);
       globalTimeoutSeconds = Number(runtimeConfig.global_timeout ?? globalTimeoutSeconds);
-      primaryBackend = String(runtimeConfig.llamacpp_backend ?? runtimeConfig.backend ?? primaryBackend);
+      const llamacppConfig = runtimeConfig.llamacpp as Record<string, unknown> | undefined;
+      primaryBackend = String(
+        llamacppConfig?.backend
+          ?? runtimeConfig['llamacpp.backend']
+          ?? runtimeConfig.llamacpp_backend
+          ?? runtimeConfig.backend
+          ?? primaryBackend
+      );
+      runtimeReadable = true;
     } else {
+      runtimeReadable = false;
       runtimeError = result.ok
         ? 'Runtime Config returned unavailable.'
         : result.error || 'LEMONADE_ADMIN_API_KEY is missing or /internal/config is unavailable.';
@@ -60,12 +69,18 @@
     const updates = {
       ctx_size: contextSize,
       global_timeout: globalTimeoutSeconds,
-      llamacpp_backend: primaryBackend,
+      'llamacpp.backend': primaryBackend,
     };
 
     const result = await api.lemonade.setConfig(updates);
     if (result.ok) {
-      runtimeConfig = { ...runtimeConfig, ...updates };
+      const currentLlamacpp = runtimeConfig.llamacpp as Record<string, unknown> | undefined;
+      runtimeConfig = {
+        ...runtimeConfig,
+        ctx_size: contextSize,
+        global_timeout: globalTimeoutSeconds,
+        llamacpp: { ...(currentLlamacpp ?? {}), backend: primaryBackend },
+      };
       notify.success('Runtime config saved', `ctx_size ${contextSize}, timeout ${globalTimeoutSeconds}s`);
     } else {
       runtimeError = result.error;

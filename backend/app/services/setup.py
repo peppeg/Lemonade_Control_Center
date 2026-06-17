@@ -248,12 +248,10 @@ class SetupService:
             ("System info", "/api/v1/system-info"),
             ("Stats", "/api/v1/stats"),
         ]
+        checks = await self._check_http_endpoints(runtime.url, endpoints, headers=headers)
         if runtime.admin_key:
-            endpoints.extend([
-                ("Internal config", "/internal/config"),
-                ("Internal set", "/internal/set"),
-            ])
-        return await self._check_http_endpoints(runtime.url, endpoints, headers=headers)
+            checks.extend(await self._check_lemonade_admin_endpoints(runtime.url, headers))
+        return checks
 
     async def _discover_ollama(self, runtime: RuntimeConfig) -> list[DiscoveryCheck]:
         return await self._check_http_endpoints(
@@ -292,6 +290,93 @@ class SetupService:
                 except Exception as exc:
                     checks.append(DiscoveryCheck(name=name, endpoint=path, status="error", detail=str(exc)))
         return checks
+
+    async def _check_lemonade_admin_endpoints(
+        self,
+        base_url: str,
+        headers: dict[str, str] | None,
+    ) -> list[DiscoveryCheck]:
+        checks: list[DiscoveryCheck] = []
+        url = base_url.rstrip("/")
+
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            try:
+                config_response = await client.get(f"{url}/internal/config", headers=headers)
+            except Exception as exc:
+                detail = str(exc)
+                checks.append(DiscoveryCheck(name="Internal config", endpoint="/internal/config", status="error", detail=detail))
+                checks.append(DiscoveryCheck(name="Internal set", endpoint="/internal/set", status="skip", detail="Skipped because config check failed."))
+                return checks
+
+            checks.append(
+                DiscoveryCheck(
+                    name="Internal config",
+                    endpoint="/internal/config",
+                    status="ok" if config_response.status_code == 200 else "warning",
+                    detail=f"HTTP {config_response.status_code}",
+                )
+            )
+
+            if config_response.status_code != 200:
+                checks.append(
+                    DiscoveryCheck(
+                        name="Internal set",
+                        endpoint="/internal/set",
+                        status="skip",
+                        detail=f"Skipped because /internal/config returned HTTP {config_response.status_code}.",
+                    )
+                )
+                return checks
+
+            try:
+                current_config = config_response.json()
+            except ValueError:
+                checks.append(
+                    DiscoveryCheck(
+                        name="Internal set",
+                        endpoint="/internal/set",
+                        status="skip",
+                        detail="Skipped because /internal/config did not return JSON.",
+                    )
+                )
+                return checks
+
+            noop_update = self._safe_lemonade_noop_update(current_config)
+            if not noop_update:
+                checks.append(
+                    DiscoveryCheck(
+                        name="Internal set",
+                        endpoint="/internal/set",
+                        status="skip",
+                        detail="No safe scalar config value found for a no-op write check.",
+                    )
+                )
+                return checks
+
+            try:
+                set_response = await client.post(f"{url}/internal/set", json=noop_update, headers=headers)
+                detail = f"HTTP {set_response.status_code}"
+                if set_response.status_code != 200 and set_response.text:
+                    detail = f"{detail}: {set_response.text[:160]}"
+                checks.append(
+                    DiscoveryCheck(
+                        name="Internal set",
+                        endpoint="/internal/set",
+                        status="ok" if set_response.status_code == 200 else "warning",
+                        detail=detail,
+                    )
+                )
+            except Exception as exc:
+                checks.append(DiscoveryCheck(name="Internal set", endpoint="/internal/set", status="error", detail=str(exc)))
+
+        return checks
+
+    def _safe_lemonade_noop_update(self, current_config: dict) -> dict:
+        for key in ("global_timeout", "ctx_size", "log_level"):
+            value = current_config.get(key)
+            if isinstance(value, (str, int, float)):
+                return {key: value}
+        return {}
 
     def _local_system_checks(self) -> list[DiscoveryCheck]:
         checks: list[DiscoveryCheck] = []

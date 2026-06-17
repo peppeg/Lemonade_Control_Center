@@ -312,11 +312,10 @@ class LemonadeProvider(LLMProvider):
         return True
 
     async def get_config(self) -> LemonadeConfigResponse:
-        self._require_capability("internal_config", "/internal/config")
         if not self.admin_headers:
             raise HTTPException(
                 403,
-                "Admin API key required. Set LEMONADE_ADMIN_API_KEY in .env."
+                "Admin API key required. Configure it in Settings for the active runtime."
             )
         resp = await self._get("/internal/config", headers=self.admin_headers)
         if resp.status_code != 200:
@@ -324,15 +323,18 @@ class LemonadeProvider(LLMProvider):
         return LemonadeConfigResponse(raw=resp.json())
 
     async def set_config(self, request: ConfigUpdateRequest) -> dict:
-        self._require_capability("internal_set", "/internal/set")
         if not self.admin_headers:
             raise HTTPException(
                 403,
-                "Admin API key required. Set LEMONADE_ADMIN_API_KEY in .env."
+                "Admin API key required. Configure it in Settings for the active runtime."
             )
-        resp = await self._post(
-            "/internal/set", request.updates, headers=self.admin_headers
-        )
+        updates = dict(request.updates)
+        if set(updates) == {"updates"} and isinstance(updates["updates"], dict):
+            updates = dict(updates["updates"])
+        if "llamacpp_backend" in updates and "llamacpp.backend" not in updates:
+            updates["llamacpp.backend"] = updates.pop("llamacpp_backend")
+
+        resp = await self._post("/internal/set", updates, headers=self.admin_headers)
         if resp.status_code != 200:
             raise HTTPException(resp.status_code, f"Config update failed: {resp.text[:300]}")
         return resp.json()
