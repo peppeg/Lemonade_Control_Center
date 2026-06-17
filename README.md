@@ -26,7 +26,15 @@ By default, LCC remains local to the Linux host. It can be reached remotely thro
 
 ## Screenshots
 
-Screenshots will be added here as the interface stabilizes.
+![Lemonade Control Center dashboard](screenshot/lemonadecc_001.jpg)
+
+| Setup Wizard | System |
+|---|---|
+| ![Setup wizard](screenshot/lemonadecc_005.jpg) | ![System monitoring](screenshot/lemonadecc_002.jpg) |
+
+| Diagnostics | Hardware Monitor |
+|---|---|
+| ![Diagnostics](screenshot/lemonadecc_003.jpg) | ![Hardware monitor](screenshot/lemonadecc_004.jpg) |
 
 ## What You Can Do
 

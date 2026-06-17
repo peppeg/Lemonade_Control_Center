@@ -34,6 +34,17 @@
     { id: 'complete', label: 'Complete' },
   ];
 
+  const runtimeChoices: {
+    type: Exclude<RuntimeType, 'custom'>;
+    label: string;
+    enabled: boolean;
+    badge?: string;
+  }[] = [
+    { type: 'lemonade', label: 'lemonade', enabled: true },
+    { type: 'ollama', label: 'ollama', enabled: false, badge: 'Later' },
+    { type: 'llamacpp', label: 'llama.cpp', enabled: false, badge: 'Later' },
+  ];
+
   let stepIndex = 0;
   let runtimeType: Exclude<RuntimeType, 'custom'> = 'lemonade';
   let runtimeName = 'Local Lemonade';
@@ -191,12 +202,12 @@
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
         <h2 class="ops-title">Setup Wizard</h2>
-        <p class="ops-subtitle">Configure the runtime connection and system capabilities for Lemonade Control Center.</p>
+        <p class="ops-subtitle">Configure runtime connection and system capabilities.</p>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex max-w-full flex-nowrap gap-2 overflow-x-auto pb-1 lg:overflow-visible lg:pb-0">
         {#each steps as step, index}
           <button
-            class="ops-button {stepIndex === index ? 'ops-button-primary' : ''}"
+            class="ops-button shrink-0 px-3 {stepIndex === index ? 'ops-button-primary' : ''}"
             type="button"
             on:click={() => stepIndex = index}
           >
@@ -259,16 +270,24 @@
             <div>
               <p class="ops-label">runtime type</p>
               <div class="mt-3 flex flex-wrap gap-2">
-                {#each ['lemonade', 'ollama', 'llamacpp'] as type}
+                {#each runtimeChoices as choice}
                   <button
-                    class="ops-button {runtimeType === type ? 'ops-button-primary' : ''}"
+                    class="ops-button {runtimeType === choice.type ? 'ops-button-primary' : ''}"
                     type="button"
-                    on:click={() => selectRuntime(type as Exclude<RuntimeType, 'custom'>)}
+                    on:click={() => choice.enabled && selectRuntime(choice.type)}
+                    disabled={!choice.enabled}
+                    title={choice.enabled ? 'Configure this runtime' : 'Prepared for future runtime support'}
                   >
-                    {type}
+                    {choice.label}
+                    {#if choice.badge}
+                      <span class="ops-badge ml-1 text-[10px]">{choice.badge}</span>
+                    {/if}
                   </button>
                 {/each}
               </div>
+              <p class="ops-muted mt-2 text-xs">
+                Initial setup configures Lemonade. Ollama and direct llama.cpp are prepared for future runtime support.
+              </p>
             </div>
 
             <label class="block space-y-2">
