@@ -166,6 +166,14 @@ Development keeps Vite and FastAPI separate for faster iteration. The unified ru
 
 Host inspection works best when standard Linux facilities are available, including `systemctl`, `journalctl`, `/proc`, `/sys`, and hardware sensor support.
 
+## Compatibility
+
+LCC is currently tested against Lemonade Server `10.5.1` and `10.7.0` on the primary development workstation. Lemonade `10.7.0` is the current active test target.
+
+Lemonade can change model metadata and server configuration behavior between releases. LCC normalizes the API responses it uses, but new Lemonade versions should still be smoke-tested before relying on them for regular operation.
+
+See [Tested Environment](docs/tested-environment.md) for the current hardware and software baseline.
+
 ## Runtime Setup
 
 After cloning the repository, run the installer:

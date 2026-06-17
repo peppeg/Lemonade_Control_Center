@@ -13,9 +13,31 @@ This is not a minimum requirement.
 | Kernel | 7.0.9-202.fc44.x86_64 |
 | Processor | AMD Ryzen AI Max+ 395 with Radeon 8060S |
 | Memory | 128 GB unified memory |
-| Lemonade Server | 10.5.1 |
+| Lemonade Server | 10.7.0 |
 | Runtime backend used most often | Lemonade llama.cpp backend |
 | Main development workflow | LCC unified FastAPI runtime on localhost, browser from local machine or SSH tunnel |
+
+## Lemonade Compatibility
+
+| Lemonade Server | Status | Notes |
+|---|---|---|
+| 10.5.1 | tested | Original development baseline |
+| 10.6.x | not yet tested | No public compatibility claim yet |
+| 10.7.0 | tested | Current active test target |
+
+Manual smoke tests on Lemonade `10.7.0` passed for:
+
+- Dashboard runtime health and version display
+- Models downloaded inventory
+- Models remote catalog refresh
+- Settings active runtime test
+- Settings runtime discovery
+
+Observed `10.7.0` API notes:
+
+- `/api/v1/models` uses `components` where the older probe output used `composite_models`
+- `/api/v1/models` still exposes model `size` as a float in GiB
+- `/api/tags` still exposes model `size` as integer bytes
 
 ## Notes
 
