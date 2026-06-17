@@ -16,6 +16,41 @@ The unified runtime is the recommended mode for normal local use.
 
 ## Unified Runtime
 
+After cloning the repository, run:
+
+```bash
+./install.sh
+```
+
+The installer:
+
+- checks Python, Node.js, and npm
+- creates `backend/.venv` when missing
+- installs backend requirements
+- installs frontend dependencies
+- builds the static frontend
+- creates `backend/.env` from `.env.example` when missing
+
+It does not configure systemd, firewall rules, LAN mode, or Lemonade itself.
+
+Start LCC:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m app.run
+```
+
+Open:
+
+```text
+http://127.0.0.1:17600
+```
+
+The default runtime port is `17600`.
+
+## Manual Unified Runtime Setup
+
 Build the frontend:
 
 ```bash
@@ -40,8 +75,6 @@ Open:
 ```text
 http://127.0.0.1:17600
 ```
-
-The default runtime port is `17600`.
 
 ## Development Backend
 

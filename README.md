@@ -168,6 +168,32 @@ Host inspection works best when standard Linux facilities are available, includi
 
 ## Runtime Setup
 
+After cloning the repository, run the installer:
+
+```bash
+./install.sh
+```
+
+It creates the backend virtual environment, installs backend and frontend dependencies, builds the static frontend, and creates `backend/.env` from `.env.example` when missing.
+
+Start the unified runtime:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m app.run
+```
+
+Open:
+
+```text
+http://127.0.0.1:17600
+```
+
+FastAPI serves both `/api/*` and the built dashboard. Vite is not needed for this mode.
+
+Manual setup is also possible.
+
 Build the frontend once:
 
 ```bash
@@ -186,14 +212,6 @@ pip install -r requirements.txt
 cp ../.env.example .env
 python -m app.run
 ```
-
-Open:
-
-```text
-http://127.0.0.1:17600
-```
-
-FastAPI serves both `/api/*` and the built dashboard. Vite is not needed for this mode.
 
 ## Development Setup
 
