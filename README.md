@@ -204,6 +204,8 @@ LEMONADE_URL=http://localhost:13305
 LEMONADE_ADMIN_API_KEY=
 ENABLE_DELETE=false
 ENABLE_RESTART=false
+LCC_API_KEY=
+REQUIRE_AUTH=false
 ```
 
 | Variable | Description |
@@ -212,6 +214,8 @@ ENABLE_RESTART=false
 | `LEMONADE_ADMIN_API_KEY` | Optional key for protected Lemonade operations |
 | `ENABLE_DELETE` | Enables guarded model deletion when set to `true` |
 | `ENABLE_RESTART` | Enables guarded service restart when set to `true` |
+| `LCC_API_KEY` | Protects LAN and remote access to LCC |
+| `REQUIRE_AUTH` | Requires `LCC_API_KEY` for every client, including localhost, when set to `true` |
 
 ### Lemonade admin API key
 
@@ -257,6 +261,14 @@ python probe.py --admin-key YOUR_ADMIN_KEY
 
 Structured results are written under `capabilities/results/`.
 
+## Documentation
+
+- [Installation](docs/installation.md)
+- [Development](docs/development.md)
+- [Security Model](docs/security.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
 ## Repository Layout
 
 ```text
@@ -269,6 +281,7 @@ Structured results are written under `capabilities/results/`.
 │       └── services/
 ├── frontend/         SvelteKit frontend
 │   └── src/
+├── docs/             Public project documentation
 ├── capabilities/     Capability probe and captured results
 ├── .env.example      Example backend configuration
 └── LICENSE
