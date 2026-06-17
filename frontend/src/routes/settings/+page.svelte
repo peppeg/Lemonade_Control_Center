@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { notify } from '$lib/stores/notifications';
+  import { clearLccKey, loadSecurityStatus, securityStatus } from '$lib/stores/security';
   import type {
     AccessMode,
     AppearanceConfig,
@@ -29,11 +30,12 @@
     X,
   } from 'lucide-svelte';
 
-  type Tab = 'connection' | 'system' | 'appearance' | 'about';
+  type Tab = 'connection' | 'system' | 'security' | 'appearance' | 'about';
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'connection', label: 'Connection' },
     { id: 'system', label: 'System' },
+    { id: 'security', label: 'Security' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'about', label: 'About' },
   ];
@@ -75,6 +77,7 @@
 
   onMount(() => {
     loadSettings();
+    loadSecurityStatus();
   });
 
   async function loadSettings() {
@@ -619,6 +622,51 @@
           <button class="ops-button ops-button-primary" type="button" on:click={saveSystem} disabled={savingSystem}>
             {savingSystem ? 'Saving' : 'Save System Settings'}
           </button>
+        </div>
+      </section>
+    {:else if activeTab === 'security'}
+      <section class="ops-panel">
+        <div class="ops-card-header">
+          <div class="flex items-center gap-3">
+            <Shield class="h-5 w-5 text-lemon" />
+            <h2 class="ops-title">Access Control</h2>
+          </div>
+          <span class="ops-badge {$securityStatus ? ($securityStatus.auth_required ? 'ops-badge-warn' : 'ops-badge-ok') : ''}">
+            {$securityStatus ? ($securityStatus.auth_required ? 'Key required' : 'Local trusted') : 'Unknown'}
+          </span>
+        </div>
+        <div class="ops-card-body space-y-4">
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div class="border border-[#30342b] bg-[#111312] p-4">
+              <p class="ops-label">mode</p>
+              <p class="ops-value mt-1">{$securityStatus?.mode ?? 'unknown'}</p>
+            </div>
+            <div class="border border-[#30342b] bg-[#111312] p-4">
+              <p class="ops-label">client</p>
+              <p class="ops-value mt-1 break-all">{$securityStatus?.client_host ?? 'unknown'}</p>
+            </div>
+            <div class="border border-[#30342b] bg-[#111312] p-4">
+              <p class="ops-label">backend key</p>
+              <p class="ops-value mt-1">{$securityStatus ? ($securityStatus.key_configured ? 'configured' : 'not set') : 'unknown'}</p>
+            </div>
+            <div class="border border-[#30342b] bg-[#111312] p-4">
+              <p class="ops-label">browser</p>
+              <p class="ops-value mt-1">{$securityStatus ? ($securityStatus.authenticated ? 'authenticated' : 'not authenticated') : 'unknown'}</p>
+            </div>
+          </div>
+
+          <div class="ops-banner {$securityStatus?.blocked ? 'ops-banner-danger' : 'ops-banner-muted'}">
+            <CircleAlert class="mt-0.5 h-5 w-5 shrink-0 text-status-warn" />
+            <p class="text-sm">
+              Localhost can use LCC without login. LAN or remote API clients require <code class="ops-mono">LCC_API_KEY</code>.
+              {$securityStatus?.blocked ? ' Remote access is currently blocked because the backend key is not configured.' : ''}
+            </p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <button class="ops-button" type="button" on:click={loadSecurityStatus}>Refresh Security Status</button>
+            <button class="ops-button" type="button" on:click={clearLccKey}>Clear Browser Key</button>
+          </div>
         </div>
       </section>
     {:else if activeTab === 'appearance'}

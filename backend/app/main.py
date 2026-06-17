@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.capabilities import capabilities
-from app.routers import health, lemonade, system, logs, diagnostic, diagnostics, metrics, profiles, setup, settings as settings_router
+from app.middleware.access_control import LccAccessControlMiddleware
+from app.routers import health, lemonade, system, logs, diagnostic, diagnostics, metrics, profiles, security, setup, settings as settings_router
 from app.services.metrics.collector import start_collector, stop_collector
 
 
@@ -19,6 +20,8 @@ async def lifespan(app: FastAPI):
     print(f"   Delete:       {'ENABLED ⚠' if settings.enable_delete else 'disabled'}")
     print(f"   Restart:      {'ENABLED ⚠' if settings.enable_restart else 'disabled'}")
     print(f"   Bench Lab:    {'ENABLED' if settings.enable_bench_lab else 'disabled'}")
+    print(f"   LCC auth:     {'required' if settings.require_auth else 'localhost trusted'}")
+    print(f"   LCC key:      {'configured' if settings.lcc_api_key else 'not set'}")
     print(f"   Capabilities: {capabilities.probe_timestamp or 'no probe results'}")
     print(f"   Lemonade ver: {capabilities.lemonade_version or 'unknown'}")
     start_collector(interval_seconds=10)
@@ -45,6 +48,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(LccAccessControlMiddleware)
 
 # ── Routers ──
 app.include_router(health.router)
@@ -56,6 +60,7 @@ app.include_router(profiles.router)
 app.include_router(diagnostics.router)
 app.include_router(metrics.router)
 app.include_router(metrics.ws_router)
+app.include_router(security.router)
 app.include_router(setup.router)
 app.include_router(settings_router.router)
 

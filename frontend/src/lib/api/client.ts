@@ -5,6 +5,7 @@
  * Handles errors gracefully — never throws uncaught, always returns
  * structured results that the UI can display.
  */
+import { browser } from '$app/environment';
 import type {
   HealthResponse,
   Capabilities,
@@ -17,6 +18,7 @@ import type {
   HardwareInfo,
   RuntimeConfigPublic,
   RuntimeConfigRequest,
+  SecurityStatus,
   SetupConnectionRequest,
   SetupStatusResponse,
   SystemConfig,
@@ -35,6 +37,29 @@ import type {
 } from '$lib/types';
 
 const BASE = '/api';
+const LCC_KEY_STORAGE = 'lcc_api_key';
+
+export function getLccApiKey(): string {
+  if (!browser) return '';
+  return localStorage.getItem(LCC_KEY_STORAGE) ?? '';
+}
+
+export function setLccApiKey(value: string): void {
+  if (!browser) return;
+  const trimmed = value.trim();
+  if (trimmed) {
+    localStorage.setItem(LCC_KEY_STORAGE, trimmed);
+  } else {
+    localStorage.removeItem(LCC_KEY_STORAGE);
+  }
+}
+
+export function withLccKey(path: string): string {
+  const key = getLccApiKey();
+  if (!key) return path;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}lcc_key=${encodeURIComponent(key)}`;
+}
 
 /** Wrapper for API results — avoids try/catch in every component */
 export type ApiResult<T> =
@@ -43,9 +68,13 @@ export type ApiResult<T> =
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<ApiResult<T>> {
   try {
+    const key = getLccApiKey();
     const opts: RequestInit = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(key ? { 'X-LCC-API-Key': key } : {}),
+      },
     };
     if (body) opts.body = JSON.stringify(body);
 
@@ -88,6 +117,11 @@ export const api = {
   // ── Health & Capabilities (M1) ──
   health: () => get<HealthResponse>('/health'),
   capabilities: () => get<Capabilities>('/capabilities'),
+
+  // ── LCC Access Control (M15) ──
+  security: {
+    status: () => get<SecurityStatus>('/security/status'),
+  },
 
   // ── Setup & Settings (M14) ──
   setup: {
@@ -200,7 +234,7 @@ export const api = {
     latest: () => get<{ point: MetricPoint | null }>('/metrics/latest'),
     tasks: (n = 20) => get<{ tasks: TaskRecord[] }>(`/metrics/tasks?n=${n}`),
     clear: () => post<{ cleared: boolean }>('/metrics/clear'),
-    tasksCsvUrl: () => `${BASE}/metrics/tasks/csv`,
+    tasksCsvUrl: () => `${BASE}${withLccKey('/metrics/tasks/csv')}`,
   },
 
   // ── Bench Lab (M13, backend-gated) ──
@@ -218,5 +252,5 @@ export const api = {
   },
 
   // ── Diagnostic (M2, used from M9) ──
-  diagnosticBundleUrl: () => `${BASE}/diagnostic-bundle`,
+  diagnosticBundleUrl: () => `${BASE}${withLccKey('/diagnostic-bundle')}`,
 };

@@ -11,6 +11,7 @@
   import StatusBar from '$lib/components/layout/StatusBar.svelte';
   import MobileNav from '$lib/components/layout/MobileNav.svelte';
   import ToastContainer from '$lib/components/notifications/ToastContainer.svelte';
+  import SecurityGate from '$lib/components/security/SecurityGate.svelte';
   import { onMount } from 'svelte';
   import { loadCapabilities } from '$lib/stores/capabilities';
   import { startHealthPolling, stopHealthPolling } from '$lib/stores/connection';
@@ -53,4 +54,5 @@
   </div>
 
   <ToastContainer />
+  <SecurityGate />
 </div>

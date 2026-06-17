@@ -6,6 +6,7 @@ from fastapi.responses import PlainTextResponse
 
 from app.services.metrics.collector import buffer, collect_once, subscribe, unsubscribe
 from app.services.metrics.task_history import TaskHistory
+from app.services.security import auth_required_for_host, key_configured, key_from_websocket, verify_key
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 ws_router = APIRouter()
@@ -49,6 +50,12 @@ async def clear_metrics():
 
 @ws_router.websocket("/ws/metrics")
 async def ws_metrics(websocket: WebSocket):
+    host = websocket.client.host if websocket.client else None
+    if auth_required_for_host(host):
+        if not key_configured() or not verify_key(key_from_websocket(websocket)):
+            await websocket.close(code=1008)
+            return
+
     await websocket.accept()
     queue = subscribe()
     try:

@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     enable_restart: bool = False
     enable_bench_lab: bool = False
 
+    # ── LCC Access Control ──
+    # Localhost remains trusted by default. Non-loopback API access requires
+    # this key, and REQUIRE_AUTH can force the same behavior on localhost.
+    lcc_api_key: str | None = None
+    require_auth: bool = False
+
     # ── Server ──
     host: str = "127.0.0.1"
     port: int = 8000

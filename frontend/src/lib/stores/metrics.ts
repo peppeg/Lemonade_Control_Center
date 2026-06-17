@@ -1,5 +1,5 @@
 import { get, writable } from 'svelte/store';
-import { api } from '$lib/api/client';
+import { api, withLccKey } from '$lib/api/client';
 import { notify } from '$lib/stores/notifications';
 import type { MetricPoint, TaskRecord, TimeRange } from '$lib/types';
 
@@ -33,7 +33,7 @@ export async function loadMetrics(): Promise<void> {
 export function connectMetricsWs(): void {
   disconnectMetricsWs();
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${protocol}//${window.location.host}/ws/metrics`);
+  ws = new WebSocket(`${protocol}//${window.location.host}${withLccKey('/ws/metrics')}`);
   ws.onopen = () => metricsWsConnected.set(true);
   ws.onclose = () => {
     metricsWsConnected.set(false);

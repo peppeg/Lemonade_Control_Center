@@ -141,6 +141,16 @@ export interface SetupStatusResponse {
   active_runtime_id: string | null;
 }
 
+export interface SecurityStatus {
+  auth_required: boolean;
+  authenticated: boolean;
+  key_configured: boolean;
+  lan_client: boolean;
+  client_host: string | null;
+  blocked: boolean;
+  mode: 'localhost' | 'lan';
+}
+
 export interface SetupConnectionRequest {
   type: Exclude<RuntimeType, 'custom'>;
   url: string;
