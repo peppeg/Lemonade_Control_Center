@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { notify } from '$lib/stores/notifications';
-  import { AlertCircle, Lock, SlidersHorizontal } from 'lucide-svelte';
+  import { AlertCircle, ServerCog, SlidersHorizontal } from 'lucide-svelte';
 
   type PresetName = 'Safe' | 'Coding' | 'Long Context' | 'Stress' | 'Executor Strict';
 
@@ -197,10 +197,10 @@
     <article class="ops-panel min-h-[620px]">
       <div class="ops-card-header">
         <div class="flex items-center gap-3">
-          <Lock class="h-5 w-5 text-danger" />
+          <ServerCog class="h-5 w-5 {canWriteRuntime ? 'text-lemon' : 'text-muted-foreground'}" />
           <h2 class="ops-title">Runtime Config</h2>
         </div>
-        <span class="ops-badge">Server-side</span>
+        <span class="ops-badge">{canWriteRuntime ? 'Server-side writable' : 'Server-side'}</span>
       </div>
 
       <div class="ops-card-body space-y-6">
