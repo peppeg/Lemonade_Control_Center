@@ -2,15 +2,15 @@
 """
 Lemonade Control Center — Capabilities Probe
 
-Testa tutti gli endpoint Lemonade e i comandi di sistema disponibili.
-Salva i risultati in capabilities/results/ e genera CAPABILITIES.md.
+Tests available Lemonade endpoints and host system commands.
+Writes local results to capabilities/results/ and generates CAPABILITIES.md.
 
-Uso:
+Usage:
   cd capabilities
-  python probe.py                          # probe base
-  python probe.py --admin-key YOUR_KEY     # probe con admin API
-  python probe.py --lemonade-url HOST:PORT # URL custom
-  python probe.py --output-dir ./results   # directory output custom
+  python probe.py                          # basic probe
+  python probe.py --admin-key YOUR_KEY     # probe with admin API
+  python probe.py --lemonade-url HOST:PORT # custom URL
+  python probe.py --output-dir ./results   # custom output directory
 """
 
 import argparse
@@ -25,7 +25,7 @@ from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 
-# Unica dipendenza esterna (httpx deve essere installato separatamente)
+# Only external dependency; install httpx separately or via requirements.txt.
 try:
     import httpx
 except ImportError:
@@ -474,7 +474,7 @@ async def run_probe(config: ProbeConfig) -> ProbeSummary:
 
 
 def generate_capabilities_md(summary: ProbeSummary) -> str:
-    """Genera CAPABILITIES.md dal probe summary."""
+    """Generate CAPABILITIES.md from the probe summary."""
 
     lines = [
         f"# 🍋 Lemonade Capabilities — Probe Results",
@@ -655,18 +655,18 @@ def main():
     print(f"   Output: {config.output_dir}")
     print()
 
-    # Esegui probe
+    # Run probe
     summary = asyncio.run(run_probe(config))
 
-    # Salva probe_summary.json
+    # Save probe_summary.json
     save_json(config.output_dir / "probe_summary.json", asdict(summary))
 
-    # Genera CAPABILITIES.md
+    # Generate CAPABILITIES.md
     md = generate_capabilities_md(summary)
     with open("CAPABILITIES.md", "w") as f:
         f.write(md)
 
-    # Stampa riepilogo a console
+    # Print console summary
     print_summary(summary)
 
 

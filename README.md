@@ -326,13 +326,16 @@ When an admin key is configured:
 python probe.py --admin-key YOUR_ADMIN_KEY
 ```
 
-Structured results are written under `capabilities/results/`.
+Structured results are written under `capabilities/results/`. These files are local machine artifacts and are ignored by git.
+
+For a generic example, see [capabilities/CAPABILITIES.example.md](capabilities/CAPABILITIES.example.md).
 
 ## Documentation
 
 - [Installation](docs/installation.md)
 - [Development](docs/development.md)
 - [Security Model](docs/security.md)
+- [Tested Environment](docs/tested-environment.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 
@@ -349,7 +352,7 @@ Structured results are written under `capabilities/results/`.
 ├── frontend/         SvelteKit frontend
 │   └── src/
 ├── docs/             Public project documentation
-├── capabilities/     Capability probe and captured results
+├── capabilities/     Capability probe tooling and sanitized example
 ├── .env.example      Example backend configuration
 └── LICENSE
 ```

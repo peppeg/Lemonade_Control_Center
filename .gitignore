@@ -29,8 +29,9 @@ build/
 .DS_Store
 Thumbs.db
 
-# Probe results (opzionale: potremmo volerli committare)
-# capabilities/results/
+# Probe results
+capabilities/results/
+capabilities/CAPABILITIES.md
 
 # Backend
 backend/.venv/
