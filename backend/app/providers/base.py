@@ -5,7 +5,6 @@ Each provider (Lemonade, Ollama, llama.cpp direct...) implements this interface.
 The router layer calls provider methods without knowing which runtime is behind it.
 """
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
 
 from app.capabilities import Capabilities
 from app.models.schemas import (

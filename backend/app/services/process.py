@@ -4,10 +4,8 @@ Process monitoring service — finds and parses the llama-server process.
 Reads /proc/PID/cmdline to extract runtime parameters like ctx_size,
 backend, ngl, mmap, MTP, reasoning format, etc.
 """
-import re
 import subprocess
 from datetime import datetime, timezone
-from pathlib import Path
 
 import psutil
 

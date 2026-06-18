@@ -3,7 +3,6 @@ Hardware monitoring service using psutil and system commands.
 
 Provides: RAM, CPU, disk, temperatures, top processes.
 """
-import platform
 import subprocess
 from pathlib import Path
 
@@ -27,7 +26,6 @@ def get_hardware_info(model_cache_path: str | None = None) -> HardwareInfo:
     gpu_info = get_gpu_info()
 
     disk_info = {}
-    disk_path = model_cache_path
     for path_candidate in [
         model_cache_path,
         "/opt/var/lib/lemonade",

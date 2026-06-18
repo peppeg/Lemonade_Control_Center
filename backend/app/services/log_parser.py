@@ -11,7 +11,6 @@ Extracts structured information from raw log lines:
 """
 import re
 import subprocess
-from datetime import datetime
 
 from app.models.schemas import (
     LogEntry,
@@ -131,7 +130,6 @@ def parse_last_task(
 
         m = RE_GENERATION.search(line)
         if m and stats.output_tokens is None:
-            gen_time_ms = float(m.group(1))
             stats.output_tokens = int(m.group(2))
             stats.generation_tps = float(m.group(3))
 

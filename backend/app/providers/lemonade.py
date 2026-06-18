@@ -12,7 +12,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.config import settings
-from app.capabilities import capabilities, Capabilities
+from app.capabilities import capabilities
 from app.providers.base import LLMProvider
 from app.models.schemas import (
     LemonadeHealthResponse,
