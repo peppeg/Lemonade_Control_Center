@@ -55,6 +55,14 @@ For LAN usage:
 
 For remote usage across untrusted networks, prefer SSH port forwarding rather than exposing the service.
 
+Example from the client computer:
+
+```bash
+ssh -N -L 17600:127.0.0.1:17600 USER@SERVER_IP
+```
+
+This keeps LCC bound to localhost on the server. Open `http://127.0.0.1:17600` in the client browser while the SSH session remains active.
+
 Unified runtime LAN example:
 
 ```bash

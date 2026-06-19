@@ -49,6 +49,16 @@ http://127.0.0.1:17600
 
 The default runtime port is `17600`.
 
+## Access Through an SSH Tunnel
+
+To use LCC from Windows or another client computer while keeping the service bound to localhost, run:
+
+```bash
+ssh -N -L 17600:127.0.0.1:17600 USER@SERVER_IP
+```
+
+Keep the SSH session open and visit `http://127.0.0.1:17600` on the client computer. Replace `USER` and `SERVER_IP` with the Linux account and address of the LCC host.
+
 ## Manual Unified Runtime Setup
 
 Build the frontend:

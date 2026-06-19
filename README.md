@@ -202,6 +202,22 @@ http://127.0.0.1:17600
 
 FastAPI serves both `/api/*` and the built dashboard. Vite is not needed for this mode.
 
+### Access from another computer with SSH
+
+When LCC remains bound to its safe localhost default, forward the application port from the client computer:
+
+```bash
+ssh -N -L 17600:127.0.0.1:17600 USER@SERVER_IP
+```
+
+Run this command from Windows PowerShell, Windows Terminal, or another computer with an OpenSSH client. Keep the SSH session open, then browse to:
+
+```text
+http://127.0.0.1:17600
+```
+
+Replace `USER` and `SERVER_IP` with the Linux account and address of the machine running LCC. The server remains bound to localhost and does not need to expose port `17600` directly to the network.
+
 Manual setup is also possible.
 
 Build the frontend once:
