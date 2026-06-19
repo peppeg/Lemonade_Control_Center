@@ -761,7 +761,7 @@
               </div>
               <div>
                 <p class="ops-value">Development workstation</p>
-                <p class="ops-muted mt-1">Corsaier AI Workstation 300 · Fedora Linux 44 Workstation · Kernel 7.0.9-202.fc44.x86_64 · AMD Strix Halo · 128 GB RAM</p>
+                <p class="ops-muted mt-1">Corsair AI Workstation 300 · Fedora Linux 44 Workstation · Kernel 7.0.9-202.fc44.x86_64 · AMD Strix Halo · 128 GB RAM</p>
               </div>
               <div>
                 <p class="ops-value">Project repository</p>

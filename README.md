@@ -6,6 +6,8 @@
 ![Status](https://img.shields.io/badge/status-active%20development-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux-blue.svg)
 
+Lemonade Control Center is an independent, unofficial project. It is not affiliated with, endorsed by, or maintained by the Lemonade project or AMD.
+
 Running local models is the enjoyable part. Operating the server behind them often is not.
 
 I started **Lemonade Control Center (LCC)** because my Lemonade server runs on a Linux AI workstation that I frequently access from another computer. I wanted one place to see what was loaded, understand the settings in use, monitor memory and GPU pressure, inspect failures, and perform routine operations without rebuilding the right terminal command every time.

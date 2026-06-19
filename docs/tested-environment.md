@@ -8,7 +8,7 @@ This is not a minimum requirement.
 
 | Item | Value |
 |---|---|
-| Workstation | Corsaier AI Workstation 300 |
+| Workstation | Corsair AI Workstation 300 |
 | Operating system | Fedora Linux 44 Workstation |
 | Kernel | 7.0.9-202.fc44.x86_64 |
 | Processor | AMD Ryzen AI Max+ 395 with Radeon 8060S |

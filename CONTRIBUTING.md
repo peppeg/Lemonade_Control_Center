@@ -37,11 +37,20 @@ Open `http://127.0.0.1:5173`.
 
 ## Checks Before Submitting
 
-Run the backend syntax check:
+Install the backend development dependencies:
 
 ```bash
 cd backend
-python -m compileall -q app
+python -m pip install -e ".[dev]"
+```
+
+Run the backend lint, tests, and syntax checks:
+
+```bash
+cd backend
+ruff check app tests ../capabilities
+pytest
+python -m compileall -q app tests ../capabilities
 ```
 
 Run the frontend checks:
