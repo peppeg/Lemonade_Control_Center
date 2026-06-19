@@ -302,13 +302,23 @@ LAN_MODE=false
 
 ### LAN access
 
-For a trusted local network, LCC can run on a LAN-visible address:
+For a trusted local network, LAN mode is an alternative to the SSH tunnel. It makes LCC directly reachable from another computer, so the SSH session does not need to remain open.
+
+Set a long random `LCC_API_KEY` in `backend/.env`, then start LCC on a LAN-visible address:
 
 ```bash
 APP_HOST=0.0.0.0 APP_PORT=4242 REQUIRE_AUTH=true LAN_MODE=true python -m app.run
 ```
 
-Set `LCC_API_KEY` before using LAN mode. Do not expose LCC directly to the public internet.
+From Windows or another computer on the same network, open:
+
+```text
+http://SERVER_IP:4242
+```
+
+Replace `SERVER_IP` with the private LAN address of the Linux host. Enter the configured `LCC_API_KEY` when prompted. The host firewall must allow TCP port `4242`.
+
+SSH tunnel mode and LAN mode are alternatives: use the tunnel for the safest default, or LAN mode for direct access on a trusted private network. Do not expose LCC directly to the public internet.
 
 ### Lemonade admin API key
 

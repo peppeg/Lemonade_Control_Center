@@ -69,4 +69,6 @@ Unified runtime LAN example:
 APP_HOST=0.0.0.0 APP_PORT=4242 REQUIRE_AUTH=true LAN_MODE=true python -m app.run
 ```
 
-`LAN_MODE=true` is intentionally strict: it requires a LAN-visible bind address and `REQUIRE_AUTH=true`.
+With LAN mode active, the client connects directly to `http://SERVER_IP:4242`; no SSH tunnel needs to remain open. The browser must provide the `LCC_API_KEY`, and the host firewall must allow TCP port `4242`.
+
+SSH tunnel mode and LAN mode are alternatives. `LAN_MODE=true` is intentionally strict: it requires a LAN-visible bind address and `REQUIRE_AUTH=true`.

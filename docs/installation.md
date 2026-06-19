@@ -119,7 +119,9 @@ http://127.0.0.1:5173
 
 ## Local Network Access
 
-The safest default is localhost-only access. To use LCC from another machine on the same trusted LAN, configure the backend to bind to the LAN interface or `0.0.0.0`, set `LCC_API_KEY`, and keep host firewall rules explicit.
+The safest default is localhost-only access through the SSH tunnel described above. LAN mode is an alternative for direct access from another computer on the same trusted network; it does not require an active SSH session.
+
+Set a long random `LCC_API_KEY` in `backend/.env`, configure the backend to bind to the LAN interface or `0.0.0.0`, and keep host firewall rules explicit.
 
 Example:
 
@@ -127,5 +129,7 @@ Example:
 cd backend
 APP_HOST=0.0.0.0 APP_PORT=4242 REQUIRE_AUTH=true LAN_MODE=true python -m app.run
 ```
+
+Open `http://SERVER_IP:4242` on the client computer and enter the configured `LCC_API_KEY` when prompted. Replace `SERVER_IP` with the private LAN address of the Linux host. The host firewall must allow TCP port `4242`.
 
 Do not expose LCC directly to the public internet.
