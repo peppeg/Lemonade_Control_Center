@@ -162,10 +162,10 @@
                 <td class="text-muted-foreground">{devicesLabel(item.devices)}</td>
                 <td class="max-w-[460px]">
                   {#if item.action}
-                    <div class="flex items-start gap-2">
-                      <code class="ops-mono whitespace-normal break-words">{item.action}</code>
+                    <div class="grid grid-cols-[minmax(0,1fr)_32px] items-start gap-3">
+                      <code class="ops-mono min-w-0 whitespace-normal break-words">{item.action}</code>
                       <button
-                        class="rounded border border-[#34382d] p-1 text-muted-foreground hover:text-foreground"
+                        class="ml-auto inline-flex h-8 w-8 items-center justify-center rounded border border-[#34382d] text-muted-foreground hover:text-foreground"
                         type="button"
                         title="Copy action"
                         on:click={() => copyAction(item.action)}
