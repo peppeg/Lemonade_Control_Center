@@ -81,14 +81,14 @@ Target scope:
 - Show profile/load consequences before action. V0 operator preflight is implemented in the load dialog.
 - Keep advanced args available but validated. Frontend and backend block Lemonade-managed llama.cpp args.
 - Use Lemonade 10.9 compatibility notes for reserved args and context defaults.
-- Show backend requested vs backend observed after load when possible. V0 post-load notification includes observed backend/context/PID when process evidence is available.
+- Show backend requested vs backend observed after load when possible. V0 post-load notification and load dialog result panel include observed backend/context/PID when process evidence is available.
 - Show RAM/swap risk before and after load. V0 estimates planning headroom and context risk from hardware/process/model size data.
 - Offer a small smoke test, not a chat UI. V0 is implemented from the active model panel.
 - Save first evidence hooks for future Run Evidence. V0 stores smoke-test and load-attempt evidence locally.
 
 Next:
 
-- Surface observed command line/backend details directly in the load result panel instead of only in notification/system view.
+- Surface full observed command line details directly in the load result panel.
 
 ### Diagnostics Bundle V1
 

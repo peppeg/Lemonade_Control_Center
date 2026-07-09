@@ -9,6 +9,7 @@ import type {
   ModelEntry,
   LoadedModelDetail,
   LoadModelOptions,
+  RunEvidenceSeed,
   ActionState,
 } from '$lib/types';
 import { formatGB } from '$lib/utils/format';
@@ -149,7 +150,14 @@ export async function refreshModels(includeCatalog = false): Promise<void> {
 
 // ── Actions ──
 
-export async function loadModel(opts: LoadModelOptions): Promise<boolean> {
+export interface LoadModelActionResult {
+  success: boolean;
+  message: string;
+  evidence: RunEvidenceSeed | null;
+  observed: LoadedModelDetail | null;
+}
+
+export async function loadModelDetailed(opts: LoadModelOptions): Promise<LoadModelActionResult> {
   loadAction.set({ loading: true, error: null });
   const result = await api.lemonade.loadModel({
     model_name: opts.modelName,
@@ -177,13 +185,27 @@ export async function loadModel(opts: LoadModelOptions): Promise<boolean> {
       ].filter(Boolean).join(' · '),
       { href: '/models' },
     );
-    return true;
+    return {
+      success: true,
+      message: result.data.message,
+      evidence: result.data.evidence ?? null,
+      observed,
+    };
   } else {
     const msg = result.ok ? result.data.message : result.error;
     loadAction.set({ loading: false, error: msg });
     notify.error('Model load failed', msg || opts.modelName, { href: '/models' });
-    return false;
+    return {
+      success: false,
+      message: msg || opts.modelName,
+      evidence: result.ok ? result.data.evidence ?? null : null,
+      observed: get(loadedModel),
+    };
   }
+}
+
+export async function loadModel(opts: LoadModelOptions): Promise<boolean> {
+  return (await loadModelDetailed(opts)).success;
 }
 
 export async function pullModel(name: string): Promise<boolean> {

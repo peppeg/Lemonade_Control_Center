@@ -5,8 +5,8 @@
 <script lang="ts">
   import ModalFrame from './ModalFrame.svelte';
   import { api } from '$lib/api/client';
-  import { loadModel, loadAction } from '$lib/stores/models';
-  import { AlertTriangle, Cpu, Database, Loader2, RefreshCw, Save, SlidersHorizontal, Terminal } from 'lucide-svelte';
+  import { loadModelDetailed, loadAction, type LoadModelActionResult } from '$lib/stores/models';
+  import { AlertTriangle, CheckCircle2, Cpu, Database, Loader2, RefreshCw, Save, SlidersHorizontal, Terminal } from 'lucide-svelte';
   import type { HardwareInfo, LemonadeSavedOptions } from '$lib/types';
 
   export let modelName: string;
@@ -30,6 +30,7 @@
   let activeProcess: Record<string, unknown> | null = null;
   let savedOptions: LemonadeSavedOptions | null = null;
   let preflightError: string | null = null;
+  let loadResult: LoadModelActionResult | null = null;
 
   const ctxPresets = [
     { label: 'Default', value: 'default', size: null, note: 'Lemonade' },
@@ -101,7 +102,8 @@
   async function handleLoad() {
     if (!canLoad) return;
 
-    const success = await loadModel({
+    loadResult = null;
+    loadResult = await loadModelDetailed({
       modelName,
       ctxSize: effectiveCtx,
       llamacppBackend: backend === 'auto' ? null : backend,
@@ -109,11 +111,6 @@
       mergeArgs,
       saveOptions,
     });
-
-    if (success) {
-      open = false;
-      resetForm();
-    }
   }
 
   function buildArgs(): string {
@@ -186,6 +183,7 @@
 
   function closeDialog() {
     open = false;
+    loadResult = null;
     resetForm();
   }
 
@@ -237,6 +235,19 @@
   function formatCtx(value: number | null): string {
     if (!value) return 'unknown';
     return value >= 1024 ? `${Math.round(value / 1024)}K` : String(value);
+  }
+
+  function formatSeconds(value: number | null | undefined): string {
+    return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}s` : 'unknown';
+  }
+
+  function formatPid(value: number | null | undefined): string {
+    return typeof value === 'number' && value > 0 ? String(value) : 'unknown';
+  }
+
+  function ramDelta(before: number | null | undefined, after: number | null | undefined): string {
+    if (typeof before !== 'number' || typeof after !== 'number') return 'unknown';
+    return `${(after - before).toFixed(1)} GB`;
   }
 </script>
 
@@ -496,14 +507,82 @@
       </div>
     {/if}
 
+    {#if loadResult}
+      <section class="space-y-3 border border-[#30342b] bg-[#101211] p-4">
+        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div class="flex items-start gap-3">
+            {#if loadResult.success}
+              <CheckCircle2 class="mt-0.5 h-5 w-5 text-status-ok" />
+            {:else}
+              <AlertTriangle class="mt-0.5 h-5 w-5 text-status-error" />
+            {/if}
+            <div>
+              <h3 class="ops-label">Load Result</h3>
+              <p class="ops-muted mt-1 text-sm">{loadResult.message}</p>
+            </div>
+          </div>
+          <span class="ops-badge {loadResult.success ? 'ops-badge-ok' : 'ops-badge-danger'}">
+            {loadResult.success ? 'loaded' : 'failed'}
+          </span>
+        </div>
+
+        <dl class="grid grid-cols-2 gap-3 text-sm md:grid-cols-4 xl:grid-cols-8">
+          <div>
+            <dt class="ops-label">requested</dt>
+            <dd class="ops-value mt-1">
+              {loadResult.evidence?.requested_backend ?? 'auto'} / {formatCtx(loadResult.evidence?.requested_ctx_size ?? null)}
+            </dd>
+          </div>
+          <div>
+            <dt class="ops-label">observed</dt>
+            <dd class="ops-value mt-1">
+              {loadResult.observed?.params?.backend ?? loadResult.evidence?.observed_backend ?? 'unknown'} / {formatCtx(loadResult.observed?.params?.ctxSize ?? loadResult.evidence?.observed_ctx_size ?? null)}
+            </dd>
+          </div>
+          <div>
+            <dt class="ops-label">PID</dt>
+            <dd class="ops-value mt-1">{formatPid(loadResult.observed?.process?.pid ?? loadResult.evidence?.observed_pid)}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">RSS</dt>
+            <dd class="ops-value mt-1">{formatGb(loadResult.observed?.process?.rssGb ?? loadResult.evidence?.process_rss_gb ?? null)}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">RAM delta</dt>
+            <dd class="ops-value mt-1">{ramDelta(loadResult.evidence?.ram_used_before_gb, loadResult.evidence?.ram_used_after_gb)}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">duration</dt>
+            <dd class="ops-value mt-1">{formatSeconds(loadResult.evidence?.total_seconds)}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">merge</dt>
+            <dd class="ops-value mt-1">{loadResult.evidence?.merge_args === false ? 'replace' : 'merge'}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">evidence</dt>
+            <dd class="ops-value mt-1">{loadResult.evidence?.id ? loadResult.evidence.id.slice(0, 8) : 'none'}</dd>
+          </div>
+        </dl>
+
+        {#if loadResult.evidence?.warnings.length}
+          <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {#each loadResult.evidence.warnings as warning}
+              <div class="border border-[#4b4f39] bg-[#171a18] p-3 text-sm text-status-warn">{warning}</div>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {/if}
+
     <div class="flex flex-col-reverse gap-2 border-t border-[#30342b] pt-4 sm:flex-row sm:justify-end">
-      <button class="ops-button" type="button" on:click={closeDialog}>Cancel</button>
+      <button class="ops-button" type="button" on:click={closeDialog}>{loadResult?.success ? 'Close' : 'Cancel'}</button>
       <button class="ops-button ops-button-primary" type="button" on:click={handleLoad} disabled={$loadAction.loading || !canLoad}>
         {#if $loadAction.loading}
           <Loader2 class="h-4 w-4 animate-spin" />
           Loading
         {:else}
-          Load Model
+          {loadResult?.success ? 'Load Again' : 'Load Model'}
         {/if}
       </button>
     </div>
