@@ -4,10 +4,18 @@
     dashboardData, dashboardLoading, lastRefresh,
     startDashboardPolling, stopDashboardPolling,
   } from '$lib/stores/dashboard';
+  import { api } from '$lib/api/client';
   import { connectionStatus } from '$lib/stores/connection';
-  import { AlertTriangle, Check, Clock3, Cpu, HardDrive, Info, RefreshCw, Server, TimerReset } from 'lucide-svelte';
+  import { AlertTriangle, Check, Clock3, Cpu, HardDrive, Info, PackageCheck, RefreshCw, Server, TimerReset } from 'lucide-svelte';
   import DiagnosticsPanel from '$lib/components/diagnostics/DiagnosticsPanel.svelte';
   import type { HardwareInfo, LastTaskInfo, LoadedModelInfo, ServerStatus } from '$lib/types';
+  import {
+    backendReadinessCounts,
+    backendStateBadgeClass,
+    backendStateLabel,
+    extractBackendReadiness,
+    type BackendReadinessItem,
+  } from '$lib/utils/backendReadiness';
   import { formatDuration, formatNumber, formatPercent, formatTPS } from '$lib/utils/format';
 
   $: data = $dashboardData;
@@ -17,9 +25,16 @@
   $: lastTask = data.lastTask;
   $: isLoading = $dashboardLoading === 'loading';
   $: readiness = $connectionStatus === 'connected' ? 'Connected' : $connectionStatus === 'degraded' ? 'Degraded' : $connectionStatus === 'checking' ? 'Checking' : 'Offline';
+  let backendItems: BackendReadinessItem[] = [];
+  let backendReadinessError: string | null = null;
+  $: backendCounts = backendReadinessCounts(backendItems);
+  $: backendHighlights = backendItems
+    .filter((item) => item.state === 'update_required' || item.state === 'installed')
+    .slice(0, 4);
 
   onMount(() => {
     startDashboardPolling(30_000);
+    refreshBackendReadiness();
   });
 
   onDestroy(() => {
@@ -53,6 +68,17 @@
   function percentWidth(value: number | null | undefined): string {
     if (typeof value !== 'number') return '0%';
     return `${Math.max(0, Math.min(100, value))}%`;
+  }
+
+  async function refreshBackendReadiness() {
+    backendReadinessError = null;
+    const result = await api.lemonade.systemInfo();
+    if (result.ok) {
+      backendItems = extractBackendReadiness(result.data);
+    } else {
+      backendReadinessError = result.error;
+      backendItems = [];
+    }
   }
 </script>
 
@@ -210,6 +236,45 @@
         </div>
       {/if}
     </article>
+  </section>
+
+  <section class="ops-panel">
+    <div class="ops-card-header">
+      <div class="flex items-center gap-3">
+        <PackageCheck class="h-5 w-5 text-lemon" />
+        <div>
+          <h2 class="ops-title">Backend Readiness</h2>
+          <p class="ops-subtitle">
+            {backendReadinessError
+              ? 'Backend readiness unavailable'
+              : `${backendCounts.installed} installed, ${backendCounts.updateRequired} update required, ${backendCounts.installable} installable`}
+          </p>
+        </div>
+      </div>
+      <a class="text-sm text-lemon hover:text-lemon-light" href="/system">View details</a>
+    </div>
+    <div class="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
+      {#if backendReadinessError}
+        <p class="text-sm text-status-warn">{backendReadinessError}</p>
+      {:else if backendHighlights.length === 0}
+        <p class="text-sm text-muted-foreground">No backend readiness data available.</p>
+      {:else}
+        {#each backendHighlights as item}
+          <div class="rounded border border-[#34382d] bg-[#111312] p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="truncate font-semibold">{item.recipeName}</p>
+                <p class="mt-1 text-xs text-muted-foreground">{item.backendKey}{item.version ? ` · ${item.version}` : ''}</p>
+              </div>
+              <span class="ops-badge {backendStateBadgeClass(item.state)}">{backendStateLabel(item.state)}</span>
+            </div>
+            {#if item.message}
+              <p class="mt-3 line-clamp-2 text-xs text-muted-foreground">{item.message}</p>
+            {/if}
+          </div>
+        {/each}
+      {/if}
+    </div>
   </section>
 
   <DiagnosticsPanel />

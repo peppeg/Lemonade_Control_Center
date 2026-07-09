@@ -5,8 +5,6 @@
     Activity,
     Download,
     Gauge,
-    PackageCheck,
-    Puzzle,
     RefreshCw,
     Search,
     Timer,
@@ -72,11 +70,6 @@
     return matchesLevel && matchesSearch;
   });
 
-  $: operationalEvents = logs
-    .filter((entry) => entry.level === 'update' || entry.level === 'backend')
-    .slice(-8)
-    .reverse();
-
   async function refreshLogs() {
     loading = true;
     error = null;
@@ -135,6 +128,11 @@
     return '';
   }
 
+  function levelLabel(level: string | undefined): string {
+    if (level === 'performance') return 'PERF';
+    return (level ?? 'info').toUpperCase();
+  }
+
   function exportLogs() {
     const text = filteredLogs.map((entry) => entry.raw || entry.message || '').join('\n');
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -180,38 +178,6 @@
   {#if error}
     <section class="ops-banner ops-banner-danger">{error}</section>
   {/if}
-
-  <section class="ops-panel">
-    <div class="ops-card-header justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <PackageCheck class="h-5 w-5 text-[#ffcf7a]" />
-        <h2 class="text-lg font-bold">Backend & Update Events</h2>
-      </div>
-      <span class="text-sm text-muted-foreground">{operationalEvents.length} recent</span>
-    </div>
-    <div class="p-4">
-      {#if loading}
-        <p class="text-sm text-muted-foreground">Scanning Lemonade logs...</p>
-      {:else if operationalEvents.length === 0}
-        <p class="text-sm text-muted-foreground">No backend install, backend readiness, or update events found in the current log window.</p>
-      {:else}
-        <div class="space-y-2">
-          {#each operationalEvents as entry}
-            <div class="grid gap-2 rounded border border-[#34382d] bg-[#111312] p-3 text-sm md:grid-cols-[150px_96px_1fr]">
-              <span class="text-muted-foreground">{entry.timestamp ?? '--:--:--'}</span>
-              <span class={levelClass(entry.level)}>
-                {#if entry.level === 'backend'}
-                  <Puzzle class="mr-1 inline h-4 w-4" />
-                {/if}
-                [{(entry.level ?? 'info').toUpperCase()}]
-              </span>
-              <span class="break-words">{entry.message ?? entry.raw}</span>
-            </div>
-          {/each}
-        </div>
-      {/if}
-    </div>
-  </section>
 
   {#if activePanel === 'stats'}
     <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -328,7 +294,7 @@
           {#each filteredLogs as entry}
             <div class="grid grid-cols-[120px_86px_1fr] gap-3 rounded px-2 py-0.5 {rowClass(entry.level)}">
               <span class="text-muted-foreground">{entry.timestamp ?? '--:--:--'}</span>
-              <span class={levelClass(entry.level)}>[{(entry.level ?? 'info').toUpperCase()}]</span>
+              <span class={levelClass(entry.level)}>[{levelLabel(entry.level)}]</span>
               <span class="break-words">{entry.message ?? entry.raw}</span>
             </div>
           {/each}
