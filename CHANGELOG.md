@@ -17,7 +17,7 @@ The project is under active development, so entries currently describe the evolv
 - Load dialog result panel showing requested versus observed backend/context, PID, RSS, RAM delta, duration, evidence id, and load warnings.
 - P0 closeout documentation with official Lemonade docs audit notes and P1/P2 deferrals.
 - Backend and update event surfacing in Logs & Stats for Lemonade backend installs, llama-server upgrades, and model update notices.
-- Dedicated Backends page with Lemonade system-info readiness summary, state filters, backend versions, devices, and operator actions.
+- Backend Readiness summary on the Dashboard plus a dedicated Backends page with state filters, backend versions, devices, and operator actions.
 
 ### Changed
 
