@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from app.models.schemas import SmokeTestRequest
+from app.models.schemas import LoadModelRequest, LoadModelResponse, SmokeTestRequest
 from app.services.bench.models import BenchResult
-from app.services.run_evidence import RunEvidenceStorage, SmokeTestRunner
+from app.services.run_evidence import LoadEvidenceRecorder, RunEvidenceStorage, SmokeTestRunner
 
 
 def test_run_evidence_storage_filters_and_keeps_newest(tmp_path):
@@ -71,6 +71,54 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
     assert response.evidence.ram_used_before_gb == 40.0
     assert response.evidence.ram_used_after_gb == 41.5
     assert storage.get_all()[0].id == response.evidence.id
+
+
+def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_path, monkeypatch):
+    storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
+    recorder = LoadEvidenceRecorder(storage=storage)
+
+    monkeypatch.setattr(
+        "app.services.run_evidence._safe_hardware_snapshot",
+        FakeHardwareSnapshots(
+            [
+                {"ram_used_gb": 50.0, "swap_used_gb": 0.0},
+                {"ram_used_gb": 72.0, "swap_used_gb": 0.0},
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.run_evidence._safe_process_snapshot",
+        lambda: {"pid": 4321, "rss_gb": 60.0, "backend": "vulkan", "ctx_size": 32768},
+    )
+
+    started = recorder.start()
+    evidence = recorder.record_response(
+        LoadModelRequest(
+            model_name="qwen-coder",
+            ctx_size=65536,
+            llamacpp_backend="rocm",
+            llamacpp_args="--flash-attn on",
+            merge_args=True,
+            save_options=True,
+        ),
+        LoadModelResponse(success=True, message="loaded"),
+        started,
+    )
+
+    assert evidence.kind == "load_attempt"
+    assert evidence.success is True
+    assert evidence.load_message == "loaded"
+    assert evidence.requested_backend == "rocm"
+    assert evidence.requested_ctx_size == 65536
+    assert evidence.requested_llamacpp_args == "--flash-attn on"
+    assert evidence.observed_pid == 4321
+    assert evidence.observed_backend == "vulkan"
+    assert evidence.observed_ctx_size == 32768
+    assert evidence.ram_used_before_gb == 50.0
+    assert evidence.ram_used_after_gb == 72.0
+    assert "Requested backend rocm, observed vulkan." in evidence.warnings
+    assert "Requested ctx 65536, observed 32768." in evidence.warnings
+    assert storage.get_all()[0].id == evidence.id
 
 
 class FakeBenchRunner:

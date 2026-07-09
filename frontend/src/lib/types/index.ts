@@ -372,12 +372,18 @@ export interface LoadModelOptions {
 
 export interface RunEvidenceSeed {
   id: string;
-  kind: 'smoke_test';
+  kind: 'smoke_test' | 'load_attempt';
   model_name: string;
   prompt: string;
   response_text: string;
   success: boolean;
   error: string | null;
+  load_message: string | null;
+  requested_backend: string | null;
+  requested_ctx_size: number | null;
+  requested_llamacpp_args: string | null;
+  merge_args: boolean | null;
+  save_options: boolean | null;
   input_tokens: number;
   output_tokens: number;
   prompt_eval_tps: number;

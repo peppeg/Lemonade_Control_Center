@@ -129,6 +129,7 @@ class LoadModelResponse(BaseModel):
     success: bool
     message: str
     raw: dict | None = None
+    evidence: RunEvidenceSeed | None = None
 
 
 class SmokeTestRequest(BaseModel):
@@ -142,12 +143,18 @@ class SmokeTestRequest(BaseModel):
 class RunEvidenceSeed(BaseModel):
     """Minimal evidence record for one operator-triggered request."""
     id: str
-    kind: Literal["smoke_test"] = "smoke_test"
+    kind: Literal["smoke_test", "load_attempt"] = "smoke_test"
     model_name: str
-    prompt: str
+    prompt: str = ""
     response_text: str = ""
     success: bool = False
     error: str | None = None
+    load_message: str | None = None
+    requested_backend: str | None = None
+    requested_ctx_size: int | None = None
+    requested_llamacpp_args: str | None = None
+    merge_args: bool | None = None
+    save_options: bool | None = None
     input_tokens: int = 0
     output_tokens: int = 0
     prompt_eval_tps: float = 0

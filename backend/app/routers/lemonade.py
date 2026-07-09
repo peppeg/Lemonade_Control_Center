@@ -27,7 +27,7 @@ from app.models.schemas import (
     ConfigUpdateRequest,
 )
 from app.services.lemonade_options import read_saved_options
-from app.services.run_evidence import RunEvidenceStorage, SmokeTestRunner
+from app.services.run_evidence import LoadEvidenceRecorder, RunEvidenceStorage, SmokeTestRunner
 
 router = APIRouter(prefix="/api/lemonade", tags=["lemonade"])
 
@@ -86,7 +86,15 @@ async def load_model(
     provider: LemonadeProvider = Depends(get_provider)
 ):
     """Load a model into memory with optional configuration."""
-    return await provider.load_model(request)
+    recorder = LoadEvidenceRecorder()
+    started = recorder.start()
+    try:
+        response = await provider.load_model(request)
+    except Exception as exc:
+        recorder.record_exception(request, exc, started)
+        raise
+    response.evidence = recorder.record_response(request, response, started)
+    return response
 
 
 @router.post("/smoke-test", response_model=SmokeTestResponse)
