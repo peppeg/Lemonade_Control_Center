@@ -15,11 +15,13 @@ The project is under active development, so entries currently describe the evolv
 - Diagnostic bundle download action on the Diagnostics page.
 - Load attempts now create Run Evidence records with requested options, observed process/backend/context, memory snapshots, duration, and mismatch warnings.
 - Load dialog result panel showing requested versus observed backend/context, PID, RSS, RAM delta, duration, evidence id, and load warnings.
+- P0 closeout documentation with official Lemonade docs audit notes and P1/P2 deferrals.
 
 ### Changed
 
 - Diagnostic bundles now redact common secrets, bearer tokens, Hugging Face tokens, private LAN IPs, hostnames, local usernames, and home paths before writing archive entries.
 - Lemonade provider HTTP calls no longer inherit proxy environment settings when contacting the configured Lemonade server.
+- Roadmap P0 statuses updated to reflect implemented scope and remaining maintenance tasks.
 
 ## 0.2.0 - 2026-07-09
 

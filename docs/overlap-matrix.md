@@ -4,6 +4,8 @@ Lemonade Control Center is an independent, unofficial companion for Lemonade. It
 
 The goal is not to replace official Lemonade tools. The goal is to make Lemonade easier to operate, verify, diagnose, and compare in local workstation workflows.
 
+P0 audit and closeout notes are summarized in [P0 Closeout](./p0-closeout.md).
+
 ## Public Position
 
 | Official surface | How LCC treats overlap |

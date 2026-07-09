@@ -12,6 +12,8 @@ Make Lemonade easier to operate, then make the runtime behavior easier to prove.
 
 P0 is about making the product direction concrete and removing ambiguity around overlap with official Lemonade tooling.
 
+P0 closeout details are tracked in [P0 Closeout](./p0-closeout.md).
+
 Recommended order:
 
 1. Positioning and overlap discipline.
@@ -22,7 +24,7 @@ Recommended order:
 
 ### Positioning
 
-Status: in progress
+Status: P0 implemented
 
 - Describe LCC as a guided operator console.
 - Keep the "not a chat interface" boundary.
@@ -31,7 +33,7 @@ Status: in progress
 
 ### Overlap Matrix
 
-Status: started
+Status: P0 implemented, keep updated as Lemonade evolves
 
 - Track Lemonade UI/CLI coverage.
 - Track LCC coverage.
@@ -40,7 +42,7 @@ Status: started
 
 ### Connection Doctor
 
-Status: V0 implemented, needs UI polish and deeper runtime evidence
+Status: P0 implemented, P1 can deepen trusted server workflows
 
 Goal:
 
@@ -58,15 +60,14 @@ Target scope:
 - URL normalization when a user pastes `/api/v1` or `/v1`. V0 is implemented.
 - Warnings when host telemetry cannot be trusted for a remote target. V0 is implemented.
 
-Next:
+P1 candidates:
 
-- Add a one-click smoke test after a healthy connection.
-- Show process command line and observed backend when a model is loaded.
 - Promote trusted/manual server selection from setup discovery into the settings workflow.
+- Add remote host collectors if API-only targets become common.
 
 ### Guided Load V2
 
-Status: in progress, first smoke-test and load-attempt evidence hooks implemented
+Status: P0 implemented
 
 Goal:
 
@@ -86,13 +87,14 @@ Target scope:
 - Offer a small smoke test, not a chat UI. V0 is implemented from the active model panel.
 - Save first evidence hooks for future Run Evidence. V0 stores smoke-test and load-attempt evidence locally.
 
-Next:
+P1 candidates:
 
-- Surface full observed command line details directly in the load result panel.
+- Attach load evidence to named workflow profiles.
+- Compare load evidence across repeated attempts.
 
 ### Diagnostics Bundle V1
 
-Status: V1 sanitization pass implemented, needs real-world bundle review
+Status: P0 implemented, keep reviewing real bundles before public sharing
 
 Goal:
 
@@ -115,7 +117,7 @@ Target scope:
 
 ### Privacy And Sanitization
 
-Status: V1 implemented, needs manual archive review before public sharing
+Status: P0 implemented, best-effort redaction plus user review requirement
 
 Goal:
 
@@ -133,7 +135,7 @@ Target scope:
 
 ### Official Web UI/App Audit
 
-Status: pending
+Status: P0 docs/API audit completed, manual screenshot-level audit remains a maintenance task
 
 Goal:
 
@@ -141,7 +143,7 @@ Goal:
 Verify what the official Web UI/App actually covers so LCC does not invest in weak duplication.
 ```
 
-Audit targets:
+Audit targets tracked:
 
 - pin/unpin UX
 - backend install/uninstall UX
@@ -154,7 +156,7 @@ Audit targets:
 
 ### Compatibility Discipline
 
-Status: started
+Status: P0 implemented as process documentation
 
 Goal:
 
