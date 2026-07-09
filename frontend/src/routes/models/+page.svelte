@@ -5,12 +5,13 @@
     pullAction, pullModel, unloadAction,
   } from '$lib/stores/models';
   import { capabilities } from '$lib/stores/capabilities';
-  import { Clipboard, Download, Info, RefreshCw, Search, TriangleAlert } from 'lucide-svelte';
+  import { api } from '$lib/api/client';
+  import { Activity, Clipboard, Download, Info, RefreshCw, Search, TriangleAlert } from 'lucide-svelte';
   import LoadModelDialog from '$lib/components/models/LoadModelDialog.svelte';
   import UnloadConfirmDialog from '$lib/components/models/UnloadConfirmDialog.svelte';
   import DeleteConfirmDialog from '$lib/components/models/DeleteConfirmDialog.svelte';
   import { notify } from '$lib/stores/notifications';
-  import type { ModelEntry } from '$lib/types';
+  import type { ModelEntry, RunEvidenceSeed } from '$lib/types';
   import { formatGB } from '$lib/utils/format';
 
   let isRefreshing = false;
@@ -23,6 +24,8 @@
   let unloadDialogOpen = false;
   let deleteDialogOpen = false;
   let catalogLoaded = false;
+  let smokeRunning = false;
+  let latestSmoke: RunEvidenceSeed | null = null;
 
   onMount(() => {
     refreshModels();
@@ -80,6 +83,27 @@
     await pullModel(model.name);
   }
 
+  async function runSmokeTest() {
+    const modelName = $loadedModel?.name;
+    if (!modelName) return;
+    smokeRunning = true;
+    try {
+      const result = await api.lemonade.smokeTest({ model_name: modelName });
+      if (result.ok) {
+        latestSmoke = result.data.evidence;
+        if (result.data.success) {
+          notify.success('Smoke test passed', `${formatTPS(result.data.evidence.generation_tps)} · ${result.data.evidence.total_seconds.toFixed(2)}s`);
+        } else {
+          notify.error('Smoke test failed', result.data.evidence.error ?? result.data.message);
+        }
+      } else {
+        notify.error('Smoke test failed', result.error);
+      }
+    } finally {
+      smokeRunning = false;
+    }
+  }
+
   $: if (!loadDialogOpen) {
     loadTarget = null;
     loadTargetSize = null;
@@ -100,6 +124,15 @@
     if (source === 'openai_models') return 'Lemonade catalog';
     if (source === 'ollama_tags') return 'local inventory';
     return 'no source';
+  }
+
+  function formatTPS(value: number): string {
+    return value > 0 ? `${value.toFixed(1)} tok/s` : 'unknown';
+  }
+
+  function formatEvidenceValue(value: number | null, unit = ''): string {
+    if (value === null || !Number.isFinite(value)) return 'unknown';
+    return `${value.toLocaleString()}${unit}`;
   }
 </script>
 
@@ -129,6 +162,10 @@
             <Info class="h-4 w-4" />
             Details
           </a>
+          <button class="ops-button ops-button-primary" type="button" on:click={runSmokeTest} disabled={smokeRunning}>
+            <Activity class="h-4 w-4 {smokeRunning ? 'animate-pulse' : ''}" />
+            {smokeRunning ? 'Testing' : 'Smoke Test'}
+          </button>
           <button
             class="ops-button ops-button-danger"
             type="button"
@@ -145,6 +182,68 @@
         </button>
       </div>
     </div>
+
+    {#if latestSmoke}
+      <div class="border-t border-[#30342b] p-5">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="ops-label">Latest Run Evidence Seed</h3>
+              <span class="ops-badge {latestSmoke.success ? 'ops-badge-ok' : 'ops-badge-danger'}">
+                {latestSmoke.success ? 'passed' : 'failed'}
+              </span>
+            </div>
+            <p class="ops-muted mt-2 break-all text-sm">{latestSmoke.response_text || latestSmoke.error || 'No response text captured.'}</p>
+          </div>
+          <span class="ops-muted text-xs">{new Date(latestSmoke.timestamp).toLocaleString()}</span>
+        </div>
+        <dl class="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4 xl:grid-cols-8">
+          <div>
+            <dt class="ops-label">TTFT</dt>
+            <dd class="ops-value mt-1">{latestSmoke.ttft_seconds.toFixed(3)}s</dd>
+          </div>
+          <div>
+            <dt class="ops-label">TPS</dt>
+            <dd class="ops-value mt-1">{formatTPS(latestSmoke.generation_tps)}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">tokens</dt>
+            <dd class="ops-value mt-1">{latestSmoke.input_tokens}/{latestSmoke.output_tokens}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">finish</dt>
+            <dd class="ops-value mt-1">{latestSmoke.finish_reason}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">backend</dt>
+            <dd class="ops-value mt-1">{latestSmoke.observed_backend ?? 'unknown'}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">ctx</dt>
+            <dd class="ops-value mt-1">{formatEvidenceValue(latestSmoke.observed_ctx_size)}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">PID</dt>
+            <dd class="ops-value mt-1">{latestSmoke.observed_pid ?? 'unknown'}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">RAM delta</dt>
+            <dd class="ops-value mt-1">
+              {latestSmoke.ram_used_before_gb !== null && latestSmoke.ram_used_after_gb !== null
+                ? `${(latestSmoke.ram_used_after_gb - latestSmoke.ram_used_before_gb).toFixed(1)} GB`
+                : 'unknown'}
+            </dd>
+          </div>
+        </dl>
+        {#if latestSmoke.warnings.length > 0}
+          <div class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+            {#each latestSmoke.warnings as warning}
+              <div class="border border-[#4b4f39] bg-[#171a18] p-3 text-sm text-status-warn">{warning}</div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="grid grid-cols-1 gap-8 p-5 lg:grid-cols-2">
       <div>

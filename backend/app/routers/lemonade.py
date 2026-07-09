@@ -16,14 +16,18 @@ from app.models.schemas import (
     ModelShowResponse,
     LoadModelRequest,
     LoadModelResponse,
+    RunEvidenceListResponse,
     PullModelRequest,
     PullModelResponse,
+    SmokeTestRequest,
+    SmokeTestResponse,
     UnloadModelRequest,
     LemonadeConfigResponse,
     LemonadeSavedOptionsResponse,
     ConfigUpdateRequest,
 )
 from app.services.lemonade_options import read_saved_options
+from app.services.run_evidence import RunEvidenceStorage, SmokeTestRunner
 
 router = APIRouter(prefix="/api/lemonade", tags=["lemonade"])
 
@@ -83,6 +87,18 @@ async def load_model(
 ):
     """Load a model into memory with optional configuration."""
     return await provider.load_model(request)
+
+
+@router.post("/smoke-test", response_model=SmokeTestResponse)
+async def smoke_test(request: SmokeTestRequest):
+    """Run a small post-load request and save a local run evidence seed."""
+    return await SmokeTestRunner().run(request)
+
+
+@router.get("/run-evidence", response_model=RunEvidenceListResponse)
+async def run_evidence(model_name: str | None = None):
+    """Return local run evidence seeds."""
+    return RunEvidenceListResponse(results=RunEvidenceStorage().get_all(model_name=model_name))
 
 
 @router.post("/pull", response_model=PullModelResponse)

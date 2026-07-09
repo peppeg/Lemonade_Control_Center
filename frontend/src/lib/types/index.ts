@@ -370,6 +370,40 @@ export interface LoadModelOptions {
   saveOptions: boolean;
 }
 
+export interface RunEvidenceSeed {
+  id: string;
+  kind: 'smoke_test';
+  model_name: string;
+  prompt: string;
+  response_text: string;
+  success: boolean;
+  error: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  prompt_eval_tps: number;
+  generation_tps: number;
+  ttft_seconds: number;
+  total_seconds: number;
+  finish_reason: string;
+  finish_confidence: string;
+  observed_pid: number | null;
+  observed_backend: string | null;
+  observed_ctx_size: number | null;
+  process_rss_gb: number | null;
+  ram_used_before_gb: number | null;
+  ram_used_after_gb: number | null;
+  swap_used_before_gb: number | null;
+  swap_used_after_gb: number | null;
+  warnings: string[];
+  timestamp: string;
+}
+
+export interface SmokeTestResponse {
+  success: boolean;
+  message: string;
+  evidence: RunEvidenceSeed;
+}
+
 export interface ActionState {
   loading: boolean;
   error: string | null;
