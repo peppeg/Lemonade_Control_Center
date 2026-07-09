@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Activity, RefreshCw } from 'lucide-svelte';
+  import { Activity, Download, RefreshCw } from 'lucide-svelte';
+  import { api } from '$lib/api/client';
   import AlertCard from '$lib/components/diagnostics/AlertCard.svelte';
   import {
     diagnosticHistory,
@@ -32,11 +33,21 @@
         Active alerts, rule results, and state transitions from the diagnostic engine.
       </p>
     </div>
-    <button class="ops-button ops-button-primary" type="button" on:click={() => runDiagnostics(true)} disabled={$diagnosticsLoading}>
-      <RefreshCw class="h-4 w-4 {$diagnosticsLoading ? 'animate-spin' : ''}" />
-      Re-run
-    </button>
+    <div class="flex flex-wrap gap-2">
+      <a class="ops-button" href={api.diagnosticBundleUrl()} download title="Download a sanitized troubleshooting archive">
+        <Download class="h-4 w-4" />
+        Bundle
+      </a>
+      <button class="ops-button ops-button-primary" type="button" on:click={() => runDiagnostics(true)} disabled={$diagnosticsLoading}>
+        <RefreshCw class="h-4 w-4 {$diagnosticsLoading ? 'animate-spin' : ''}" />
+        Re-run
+      </button>
+    </div>
   </div>
+
+  <section class="ops-banner ops-banner-muted">
+    Diagnostic bundles are sanitized before download, but review archives before posting them publicly.
+  </section>
 
   {#if $diagnosticsError}
     <section class="ops-banner ops-banner-danger">{$diagnosticsError}</section>

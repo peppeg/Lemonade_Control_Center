@@ -11,6 +11,13 @@ The project is under active development, so entries currently describe the evolv
 - Post-load smoke test action for the active model, using Lemonade's OpenAI-compatible chat endpoint.
 - First Run Evidence seed records with prompt, response, TTFT, token speed, token counts, finish reason, RAM/swap snapshots, and observed process/backend/context details.
 - Local rolling Run Evidence storage and API endpoints for smoke-test evidence retrieval.
+- Sanitized diagnostic bundle generation with manifest, README, local target snapshot, and recent Run Evidence summary.
+- Diagnostic bundle download action on the Diagnostics page.
+
+### Changed
+
+- Diagnostic bundles now redact common secrets, bearer tokens, Hugging Face tokens, private LAN IPs, hostnames, local usernames, and home paths before writing archive entries.
+- Lemonade provider HTTP calls no longer inherit proxy environment settings when contacting the configured Lemonade server.
 
 ## 0.2.0 - 2026-07-09
 

@@ -44,6 +44,12 @@ ENABLE_RESTART=false
 
 Service restart can unload the active model. Model deletion is irreversible from LCC.
 
+## Diagnostic Bundles
+
+Diagnostic bundles are sanitized before download. LCC redacts common secret keys, bearer tokens, Hugging Face tokens, private LAN IPs, hostnames, local usernames, and home paths on a best-effort basis.
+
+Bundles can still contain sensitive workflow context such as model names, command-line shape, logs, prompts summarized by metadata, and local runtime behavior. Review the archive before attaching it to a public GitHub issue.
+
 ## Local Network Mode
 
 For LAN usage:

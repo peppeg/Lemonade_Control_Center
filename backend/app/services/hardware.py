@@ -113,7 +113,7 @@ def _read_float(path: Path) -> float | None:
         return None
 
 
-def get_temperatures() -> TemperaturesResponse:
+def get_temperatures(timeout: float = 5) -> TemperaturesResponse:
     """Get temperature readings from sensors."""
     try:
         temps = psutil.sensors_temperatures()
@@ -134,7 +134,7 @@ def get_temperatures() -> TemperaturesResponse:
 
     try:
         result = subprocess.run(
-            ["sensors"], capture_output=True, text=True, timeout=5
+            ["sensors"], capture_output=True, text=True, timeout=timeout
         )
         if result.returncode == 0:
             readings = _parse_sensors_output(result.stdout)

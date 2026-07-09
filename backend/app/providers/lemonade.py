@@ -69,7 +69,7 @@ class LemonadeProvider(LLMProvider):
                    timeout: float | None = None) -> httpx.Response:
         """GET request to Lemonade with error handling."""
         try:
-            async with httpx.AsyncClient(timeout=timeout or self.timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout or self.timeout, trust_env=False) as client:
                 return await client.get(
                     f"{self.base_url}{path}",
                     headers=headers
@@ -84,7 +84,7 @@ class LemonadeProvider(LLMProvider):
                     timeout: float | None = None) -> httpx.Response:
         """POST request to Lemonade with error handling."""
         try:
-            async with httpx.AsyncClient(timeout=timeout or self.timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout or self.timeout, trust_env=False) as client:
                 return await client.post(
                     f"{self.base_url}{path}",
                     json=body or {},
