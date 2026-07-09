@@ -66,7 +66,7 @@ Next:
 
 ### Guided Load V2
 
-Status: in progress
+Status: in progress, first smoke-test evidence hook implemented
 
 Goal:
 
@@ -83,12 +83,11 @@ Target scope:
 - Use Lemonade 10.9 compatibility notes for reserved args and context defaults.
 - Show backend requested vs backend observed after load when possible. V0 post-load notification includes observed backend/context/PID when process evidence is available.
 - Show RAM/swap risk before and after load. V0 estimates planning headroom and context risk from hardware/process/model size data.
-- Offer a small smoke test, not a chat UI.
-- Save first evidence hooks for future Run Evidence.
+- Offer a small smoke test, not a chat UI. V0 is implemented from the active model panel.
+- Save first evidence hooks for future Run Evidence. V0 stores smoke-test evidence locally.
 
 Next:
 
-- Add a one-click post-load smoke test.
 - Store the load attempt summary as a first Run Evidence seed.
 - Surface observed command line/backend details directly in the load result panel instead of only in notification/system view.
 
@@ -212,6 +211,8 @@ LCC should add:
 
 ### Run Evidence V0
 
+Status: seed implemented for post-load smoke tests
+
 Goal:
 
 ```text
@@ -221,10 +222,10 @@ For one request window, save what was run and what the machine did.
 Initial evidence:
 
 - server, model, profile, backend/context/options
-- prompt and full output
-- TTFT, tokens/sec, token counts
-- finish reason and truncation confidence
-- RAM/swap/process snapshot
+- prompt and full output. V0 stores this for smoke tests.
+- TTFT, tokens/sec, token counts. V0 stores this for smoke tests.
+- finish reason and truncation confidence. V0 stores this for smoke tests.
+- RAM/swap/process snapshot. V0 stores this for smoke tests when available.
 - relevant logs in the run window
 - JSON/Markdown export
 

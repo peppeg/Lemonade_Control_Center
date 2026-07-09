@@ -131,6 +131,55 @@ class LoadModelResponse(BaseModel):
     raw: dict | None = None
 
 
+class SmokeTestRequest(BaseModel):
+    """Small post-load request used to verify a loaded model."""
+    model_name: str
+    prompt: str = "Reply with exactly: LCC_SMOKE_OK"
+    max_tokens: int = Field(default=32, ge=1, le=256)
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+
+
+class RunEvidenceSeed(BaseModel):
+    """Minimal evidence record for one operator-triggered request."""
+    id: str
+    kind: Literal["smoke_test"] = "smoke_test"
+    model_name: str
+    prompt: str
+    response_text: str = ""
+    success: bool = False
+    error: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    prompt_eval_tps: float = 0
+    generation_tps: float = 0
+    ttft_seconds: float = 0
+    total_seconds: float = 0
+    finish_reason: str = "unknown"
+    finish_confidence: str = "unknown"
+    observed_pid: int | None = None
+    observed_backend: str | None = None
+    observed_ctx_size: int | None = None
+    process_rss_gb: float | None = None
+    ram_used_before_gb: float | None = None
+    ram_used_after_gb: float | None = None
+    swap_used_before_gb: float | None = None
+    swap_used_after_gb: float | None = None
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SmokeTestResponse(BaseModel):
+    """Smoke test response and stored evidence seed."""
+    success: bool
+    message: str
+    evidence: RunEvidenceSeed
+
+
+class RunEvidenceListResponse(BaseModel):
+    """Stored local run evidence seeds."""
+    results: list[RunEvidenceSeed] = Field(default_factory=list)
+
+
 class PullModelRequest(BaseModel):
     """Request to download/install a registered Lemonade model."""
     model_name: str

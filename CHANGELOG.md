@@ -6,7 +6,11 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
-No unreleased changes yet.
+### Added
+
+- Post-load smoke test action for the active model, using Lemonade's OpenAI-compatible chat endpoint.
+- First Run Evidence seed records with prompt, response, TTFT, token speed, token counts, finish reason, RAM/swap snapshots, and observed process/backend/context details.
+- Local rolling Run Evidence storage and API endpoints for smoke-test evidence retrieval.
 
 ## 0.2.0 - 2026-07-09
 

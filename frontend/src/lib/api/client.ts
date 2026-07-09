@@ -35,6 +35,8 @@ import type {
   Profile,
   ProfileConfig,
   SmartRecommendation,
+  RunEvidenceSeed,
+  SmokeTestResponse,
   TaskRecord,
   SuiteResult,
 } from '$lib/types';
@@ -163,16 +165,18 @@ export const api = {
     savedOptions: (modelName?: string) =>
       get<LemonadeSavedOptions>(`/lemonade/saved-options${modelName ? `?model_name=${enc(modelName)}` : ''}`),
     showModel: (name: string) => get<Record<string, unknown>>(`/lemonade/models/${encodeURIComponent(name)}`),
-    loadModel: (
-    body: {
+    loadModel: (body: {
       model_name: string;
       ctx_size?: number;
       llamacpp_backend?: string;
       llamacpp_args?: string;
       merge_args?: boolean;
       save_options?: boolean;
-    }
-  ) => post<{ success: boolean; message: string }>('/lemonade/load', body),
+    }) => post<{ success: boolean; message: string }>('/lemonade/load', body),
+    smokeTest: (body: { model_name: string; prompt?: string; max_tokens?: number; temperature?: number }) =>
+      post<SmokeTestResponse>('/lemonade/smoke-test', body),
+    runEvidence: (modelName?: string) =>
+      get<{ results: RunEvidenceSeed[] }>(`/lemonade/run-evidence${modelName ? `?model_name=${enc(modelName)}` : ''}`),
     pullModel: (modelName: string) =>
       post<{ success: boolean; message: string; raw?: Record<string, unknown> }>('/lemonade/pull', { model_name: modelName }),
     unloadModel: (name?: string) =>
