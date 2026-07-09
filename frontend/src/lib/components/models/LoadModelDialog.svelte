@@ -572,6 +572,18 @@
             {/each}
           </div>
         {/if}
+
+        {#if loadResult.observed?.params?.rawCmdline}
+          <div class="border border-[#30342b] bg-[#111312] p-3">
+            <div class="mb-2 flex items-center gap-2">
+              <Terminal class="h-4 w-4 text-lemon" />
+              <span class="ops-label">observed command line</span>
+            </div>
+            <p class="ops-mono max-h-28 overflow-auto break-all text-xs text-muted-foreground">
+              {loadResult.observed.params.rawCmdline}
+            </p>
+          </div>
+        {/if}
       </section>
     {/if}
 
