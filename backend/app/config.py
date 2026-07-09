@@ -54,7 +54,7 @@ class Settings(BaseSettings):
 
     # ── App Info ──
     app_name: str = "Lemonade Control Center"
-    app_version: str = "0.1.0"
+    app_version: str = "0.2.0"
 
 
 # Singleton

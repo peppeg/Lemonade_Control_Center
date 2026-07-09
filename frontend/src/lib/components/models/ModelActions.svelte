@@ -56,7 +56,7 @@
   <CopyMenu modelName={model.name} />
 </div>
 
-<LoadModelDialog modelName={model.name} bind:open={showLoadDialog} />
+<LoadModelDialog modelName={model.name} modelSizeBytes={model.size} bind:open={showLoadDialog} />
 <UnloadConfirmDialog modelName={model.name} bind:open={showUnloadDialog} />
 {#if deleteEnabled}
   <DeleteConfirmDialog modelName={model.name} bind:open={showDeleteDialog} />

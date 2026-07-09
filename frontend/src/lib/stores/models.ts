@@ -163,7 +163,17 @@ export async function loadModel(opts: LoadModelOptions): Promise<boolean> {
   if (result.ok && result.data.success) {
     loadAction.set({ loading: false, error: null });
     await refreshModels();
-    notify.success('Model loaded', opts.modelName, { href: '/models' });
+    const observed = get(loadedModel);
+    const observedBits = [
+      observed?.params?.backend ? `backend ${observed.params.backend}` : null,
+      observed?.params?.ctxSize ? `ctx ${observed.params.ctxSize.toLocaleString()}` : null,
+      observed?.process?.pid ? `PID ${observed.process.pid}` : null,
+    ].filter(Boolean);
+    notify.success(
+      'Model loaded',
+      observedBits.length > 0 ? `${opts.modelName} · observed ${observedBits.join(' · ')}` : opts.modelName,
+      { href: '/models' },
+    );
     return true;
   } else {
     const msg = result.ok ? result.data.message : result.error;

@@ -16,6 +16,7 @@
   let isRefreshing = false;
   let filter = '';
   let loadTarget: string | null = null;
+  let loadTargetSize: number | null = null;
   let unloadTarget: string | null = null;
   let deleteTarget: string | null = null;
   let loadDialogOpen = false;
@@ -54,8 +55,9 @@
     notify.info('CLI copied', command, { toastOnly: true, toastDuration: 2200 });
   }
 
-  function openLoad(name: string) {
-    loadTarget = name;
+  function openLoad(model: ModelEntry) {
+    loadTarget = model.name;
+    loadTargetSize = model.size;
     loadDialogOpen = true;
   }
 
@@ -78,7 +80,10 @@
     await pullModel(model.name);
   }
 
-  $: if (!loadDialogOpen) loadTarget = null;
+  $: if (!loadDialogOpen) {
+    loadTarget = null;
+    loadTargetSize = null;
+  }
   $: if (!unloadDialogOpen) unloadTarget = null;
   $: if (!deleteDialogOpen) deleteTarget = null;
 
@@ -283,7 +288,7 @@
                       {#if model.isLoaded}
                         <button class="ops-button" type="button" disabled>In Use</button>
                       {:else}
-                        <button class="ops-button ops-button-primary" type="button" on:click={() => openLoad(model.name)}>
+                        <button class="ops-button ops-button-primary" type="button" on:click={() => openLoad(model)}>
                           Load
                         </button>
                       {/if}
@@ -305,7 +310,7 @@
 </div>
 
 {#if loadTarget}
-  <LoadModelDialog modelName={loadTarget} bind:open={loadDialogOpen} />
+  <LoadModelDialog modelName={loadTarget} modelSizeBytes={loadTargetSize} bind:open={loadDialogOpen} />
 {/if}
 
 {#if unloadTarget}

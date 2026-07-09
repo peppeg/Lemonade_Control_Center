@@ -179,6 +179,50 @@ export interface DiscoveryResult {
   capabilities_json: Record<string, boolean>;
 }
 
+export interface LemonadeDiscoveryCandidate {
+  name: string;
+  url: string;
+  source: 'udp_beacon' | 'http_fallback' | 'manual';
+  reachable: boolean;
+  hostname: string | null;
+  version: string | null;
+  status: string | null;
+  model_loaded: string | null;
+  latency_ms: number | null;
+  detail: string | null;
+}
+
+export interface LemonadeDiscoveryResponse {
+  candidates: LemonadeDiscoveryCandidate[];
+  total: number;
+  udp_listen_ms: number;
+}
+
+export interface ConnectionDoctorCheck {
+  name: string;
+  status: DiscoveryStatus;
+  detail: string;
+}
+
+export interface ConnectionDoctorResponse {
+  runtime_id: string;
+  target_url: string;
+  normalized_url: string;
+  reachable: boolean;
+  version: string | null;
+  status: string | null;
+  loaded_model: string | null;
+  local_target: boolean;
+  api_available: boolean;
+  host_telemetry_available: boolean;
+  process_evidence: 'found' | 'not_running' | 'unavailable';
+  admin_config_available: boolean;
+  telemetry_enabled: boolean | null;
+  checks: ConnectionDoctorCheck[];
+  warnings: string[];
+  recommended_next_action: string;
+}
+
 // ── Hardware ──
 
 export interface HardwareInfo {

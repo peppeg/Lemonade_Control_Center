@@ -23,7 +23,9 @@ This is not a minimum requirement.
 |---|---|---|
 | 10.5.1 | tested | Original development baseline |
 | 10.6.x | not yet tested | No public compatibility claim yet |
-| 10.7.0 | tested | Current active test target |
+| 10.7.0 | tested | Previous active test target |
+| 10.8.x | not yet tested | Release notes reviewed; requires smoke testing before compatibility claim |
+| 10.9.0 | tested with caveats | Current active test target; probe, backend tests, frontend check/build, and basic LCC runtime smoke passed |
 
 Manual smoke tests on Lemonade `10.7.0` passed for:
 
@@ -38,6 +40,24 @@ Observed `10.7.0` API notes:
 - `/api/v1/models` uses `components` where the older probe output used `composite_models`
 - `/api/v1/models` still exposes model `size` as a float in GiB
 - `/api/tags` still exposes model `size` as integer bytes
+
+Lemonade `10.9.0` upgrade checks passed on 2026-07-09 for:
+
+- Lemonade health and version display
+- LCC capability probe
+- Backend unit tests
+- Frontend type check
+- Frontend production build
+- Unified LCC runtime health endpoint
+- LCC Lemonade health proxy
+- LCC downloaded model inventory via `/api/lemonade/models`
+
+Observed `10.9.0` API notes:
+
+- `/api/v1/health` adds `pinned_models`, `telemetry`, and `update_check_done`.
+- `/api/v1/health` still exposes `all_models_loaded`, `model_loaded`, `max_models`, `status`, `version`, and `websocket_port`.
+- Startup logs report Hugging Face model update availability when detected.
+- Full load/unload and Bench Lab smoke tests are still pending after the upgrade.
 
 ## Notes
 

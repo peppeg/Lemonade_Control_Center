@@ -1,6 +1,6 @@
 # Lemonade Control Center
 
-> A browser-based operator console for [Lemonade](https://github.com/lemonade-sdk/lemonade), built for Linux inference servers and workstations.
+> A guided graphical operator console for [Lemonade](https://github.com/lemonade-sdk/lemonade), built for Linux inference servers, workstations, and local AI workflows.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 ![Status](https://img.shields.io/badge/status-active%20development-yellow.svg)
@@ -8,21 +8,35 @@
 
 Lemonade Control Center is an independent, unofficial project. It is not affiliated with, endorsed by, or maintained by the Lemonade project or AMD.
 
+LCC is an unofficial guided operator console for Lemonade. It is not a replacement for the official Lemonade Web UI, not a chat client, and not a model marketplace.
+
 Running local models is the enjoyable part. Operating the server behind them often is not.
 
 I started **Lemonade Control Center (LCC)** because my Lemonade server runs on a Linux AI workstation that I frequently access from another computer. I wanted one place to see what was loaded, understand the settings in use, monitor memory and GPU pressure, inspect failures, and perform routine operations without rebuilding the right terminal command every time.
 
-LCC is that place: a local web dashboard for operating a Lemonade server from a browser.
+LCC is that place: a local graphical operator console for Lemonade.
 
 It is **not a chat interface**. Use Open WebUI, the Lemonade app, or another compatible client to talk to your models. Use LCC to manage and understand the runtime behind them.
 
 ## Why LCC?
 
-Lemonade provides a capable server, command-line client, tray application, and desktop app. On Linux, however, `lemond` is also well suited to running as a headless system service. When the inference machine has no display or is managed remotely, desktop tooling is no longer the most convenient operational surface.
+Lemonade provides a capable server, command-line client, tray application, desktop app, and official web UI. LCC is not meant to replace those official tools. It treats them as the baseline.
+
+LCC exists for a different workflow: operating Lemonade as the backend for local AI tools, coding agents, and Linux inference machines where the important question is not only "which model can I chat with?" but "what is this box doing while my tools hit the server?"
+
+Lemonade runs the models. LCC helps you operate, verify, diagnose, and compare them.
+
+On Linux, `lemond` is also well suited to running as a headless system service. When the inference machine has no display or is managed remotely, desktop tooling is no longer the most convenient operational surface.
 
 The alternative is usually a collection of terminal commands: check the service, inspect the journal, find the active `llama-server` process, monitor memory, load a model with the right options, and remember which settings worked last time.
 
-LCC brings those tasks together without hiding the technical details that matter. Context size, runtime arguments, memory pressure, backend selection, and service state remain visible because changing them can have real consequences. The goal is not to make local inference look simpler than it is, but to make it organized, understandable, and repeatable.
+LCC brings those tasks together without hiding the technical details that matter. Context size, runtime arguments, memory pressure, backend selection, service state, and process behavior remain visible because changing them can have real consequences.
+
+The goal is a low-floor, high-ceiling interface:
+
+- easy enough for a new user to avoid memorizing CLI commands and fragile flags
+- explicit enough for an operator to inspect processes, logs, memory pressure, profiles, and diagnostics
+- structured enough to make good configurations repeatable
 
 By default, LCC remains local to the Linux host. It can be reached remotely through SSH port forwarding. Direct access from a trusted local network requires an explicit bind-address configuration and appropriate host security.
 
@@ -39,6 +53,12 @@ By default, LCC remains local to the Linux host. It can be reached remotely thro
 | ![Diagnostics](screenshot/lemonadecc_003.jpg) | ![Hardware monitor](screenshot/lemonadecc_004.jpg) |
 
 ## What You Can Do
+
+### Use guided Lemonade workflows
+
+LCC turns routine Lemonade operations into visible, guarded workflows. It can show the selected server, active model, downloaded inventory, load options, saved profiles, process state, and diagnostics in one place before the user changes runtime behavior.
+
+This does create intentional overlap with official Lemonade tooling. The differentiation is not that LCC owns the server better than Lemonade. The differentiation is that LCC organizes common operations, host state, and operator context into one graphical workflow.
 
 ### See the runtime at a glance
 
@@ -102,6 +122,18 @@ Diagnostics combines runtime, service, hardware, and configuration checks into o
 ### Configure the connection
 
 Settings manages the Lemonade runtime URL, discovery checks, optional admin API key, local preferences, and project information. Secrets are stored by the backend and redacted from Settings responses.
+
+## Product Direction
+
+LCC is guided by three product pillars:
+
+- **Guided GUI**: make Lemonade operations visible and safer without forcing users to remember CLI commands, ports, endpoints, and backend flags.
+- **Operator Evidence**: correlate Lemonade state with Linux host state, service logs, process data, memory pressure, and hardware signals when available.
+- **Workflow Memory**: keep profiles, saved options, benchmark results, notes, and diagnostics tied to the workflows they support.
+
+The current priority is P0: sharpen the public positioning, document overlap with official Lemonade tools, improve Connection Doctor/discovery, strengthen guided model operations, and keep compatibility testing disciplined as Lemonade evolves.
+
+See [Overlap Matrix](docs/overlap-matrix.md) and [Roadmap](docs/roadmap.md) for the working product plan.
 
 ## Safety Model
 
@@ -170,7 +202,7 @@ Host inspection works best when standard Linux facilities are available, includi
 
 ## Compatibility
 
-LCC is currently tested against Lemonade Server `10.5.1` and `10.7.0` on the primary development workstation. Lemonade `10.7.0` is the current active test target.
+LCC is currently tested against Lemonade Server `10.5.1`, `10.7.0`, and `10.9.0` on the primary development workstation. Lemonade `10.9.0` is the current active test target with caveats noted in the tested-environment document.
 
 Lemonade can change model metadata and server configuration behavior between releases. LCC normalizes the API responses it uses, but new Lemonade versions should still be smoke-tested before relying on them for regular operation.
 
@@ -372,6 +404,8 @@ For a generic example, see [capabilities/CAPABILITIES.example.md](capabilities/C
 - [Development](docs/development.md)
 - [Security Model](docs/security.md)
 - [Tested Environment](docs/tested-environment.md)
+- [Overlap Matrix](docs/overlap-matrix.md)
+- [Roadmap](docs/roadmap.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
 
