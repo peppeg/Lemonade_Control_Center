@@ -17,6 +17,7 @@ The project is under active development, so entries currently describe the evolv
 - Load dialog result panel showing requested versus observed backend/context, PID, RSS, RAM delta, duration, evidence id, and load warnings.
 - P0 closeout documentation with official Lemonade docs audit notes and P1/P2 deferrals.
 - Backend and update event surfacing in Logs & Stats for Lemonade backend installs, llama-server upgrades, and model update notices.
+- Backend Readiness summary on the Dashboard plus a dedicated Backends page with state filters, backend versions, devices, and operator actions.
 
 ### Changed
 
@@ -25,6 +26,7 @@ The project is under active development, so entries currently describe the evolv
 - Roadmap P0 statuses updated to reflect implemented scope and remaining maintenance tasks.
 - Diagnostic bundle sanitization preserves non-secret token counters and boolean configured flags.
 - Log parsing now treats expected AMD-machine NVIDIA detection failures and low-level `W:` lines as warnings instead of hard errors.
+- Logs & Stats now keeps backend/update events as filtered log entries instead of showing a duplicate summary panel, and abbreviates the performance level label to `PERF`.
 
 ## 0.2.0 - 2026-07-09
 
