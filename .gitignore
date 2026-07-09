@@ -33,6 +33,10 @@ Thumbs.db
 capabilities/results/
 capabilities/CAPABILITIES.md
 
+# Local diagnostic bundle extracts
+lcc-diagnostic/
+lcc-diagnostic-*/
+
 # Backend
 backend/.venv/
 backend/__pycache__/

@@ -32,6 +32,21 @@ def test_sanitizer_redacts_structured_secrets_and_host_details():
     assert redacted["nested"]["hf_token"] == "[redacted]"
 
 
+def test_sanitizer_keeps_non_secret_token_counts_and_configured_flags():
+    sanitizer = DiagnosticBundleSanitizer()
+
+    data = {
+        "input_tokens": 123,
+        "output_tokens": 456,
+        "admin_key_configured": True,
+        "redactions": {"secret_key": 2, "bearer_token": 1},
+    }
+
+    redacted = sanitizer.redact_data(data)
+
+    assert redacted == data
+
+
 def test_sanitizer_redacts_raw_log_tokens():
     sanitizer = DiagnosticBundleSanitizer()
     sanitizer.username = "alice"
