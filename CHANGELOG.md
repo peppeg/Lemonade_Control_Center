@@ -22,6 +22,7 @@ The project is under active development, so entries currently describe the evolv
 - Diagnostic bundles now redact common secrets, bearer tokens, Hugging Face tokens, private LAN IPs, hostnames, local usernames, and home paths before writing archive entries.
 - Lemonade provider HTTP calls no longer inherit proxy environment settings when contacting the configured Lemonade server.
 - Roadmap P0 statuses updated to reflect implemented scope and remaining maintenance tasks.
+- Diagnostic bundle sanitization preserves non-secret token counters and boolean configured flags.
 
 ## 0.2.0 - 2026-07-09
 

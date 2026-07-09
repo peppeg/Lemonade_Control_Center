@@ -51,7 +51,7 @@ class DiagnosticBundleSanitizer:
             redacted: dict[Any, Any] = {}
             for key, item in value.items():
                 key_text = str(key)
-                if SENSITIVE_KEY_RE.search(key_text):
+                if SENSITIVE_KEY_RE.search(key_text) and isinstance(item, str) and item:
                     self._mark("secret_key")
                     redacted[key] = "[redacted]"
                 else:
