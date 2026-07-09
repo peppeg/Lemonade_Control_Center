@@ -5,7 +5,7 @@
   import { page } from '$app/stores';
   import Sheet from '$lib/components/ui/sheet';
   import {
-    LayoutDashboard, Cpu, Settings, ScrollText, Monitor, OctagonX
+    LayoutDashboard, Cpu, Settings, ScrollText, Monitor, PackageCheck
   } from 'lucide-svelte';
 
   export let open = false;
@@ -16,6 +16,7 @@
     { href: '/config',    label: 'Configuration', icon: Settings },
     { href: '/logs',      label: 'Logs & Stats',  icon: ScrollText },
     { href: '/system',    label: 'System',    icon: Monitor },
+    { href: '/backends',  label: 'Backends',  icon: PackageCheck },
   ];
 
   $: currentPath = $page.url.pathname;

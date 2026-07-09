@@ -4,15 +4,8 @@
   import { capabilities } from '$lib/stores/capabilities';
   import { notify } from '$lib/stores/notifications';
   import { unloadModel, unloadAction } from '$lib/stores/models';
-  import { AlertTriangle, Bug, Cpu, Download, HardDrive, PackageCheck, RefreshCw, Server, Thermometer } from 'lucide-svelte';
+  import { AlertTriangle, Bug, Cpu, Download, HardDrive, RefreshCw, Server, Thermometer } from 'lucide-svelte';
   import type { HardwareInfo } from '$lib/types';
-  import {
-    backendReadinessCounts,
-    backendStateBadgeClass,
-    backendStateLabel,
-    extractBackendReadiness,
-    type BackendReadinessItem,
-  } from '$lib/utils/backendReadiness';
   import { formatDuration, formatGB, formatPercent } from '$lib/utils/format';
 
   interface TemperatureReading {
@@ -50,8 +43,6 @@
   let tempsAvailable = false;
   let llamaServer: LlamaServerInfo | null = null;
   let processes: TopProcess[] = [];
-  let backendItems: BackendReadinessItem[] = [];
-  let backendError: string | null = null;
   let serviceStatus = 'unknown';
   let loading = true;
   let error: string | null = null;
@@ -60,7 +51,6 @@
   let confirmStopUnload = false;
 
   $: canRestartService = $capabilities.cmd_systemctl && $capabilities.restart_enabled;
-  $: backendCounts = backendReadinessCounts(backendItems);
 
   onMount(() => {
     refreshSystem();
@@ -70,13 +60,12 @@
     loading = true;
     error = null;
 
-    const [hardwareResult, tempResult, llamaResult, processResult, serviceResult, backendResult] = await Promise.all([
+    const [hardwareResult, tempResult, llamaResult, processResult, serviceResult] = await Promise.all([
       api.system.hardware(),
       api.system.temperatures(),
       api.system.llamaServer(),
       api.system.processes(),
       api.system.service(),
-      api.lemonade.systemInfo(),
     ]);
 
     if (hardwareResult.ok) hardware = hardwareResult.data;
@@ -90,13 +79,6 @@
     if (llamaResult.ok) llamaServer = llamaResult.data as LlamaServerInfo;
     if (processResult.ok) processes = processResult.data.processes as TopProcess[];
     if (serviceResult.ok) serviceStatus = serviceResult.data.status;
-    if (backendResult.ok) {
-      backendItems = extractBackendReadiness(backendResult.data);
-      backendError = null;
-    } else {
-      backendItems = [];
-      backendError = backendResult.error;
-    }
 
     loading = false;
   }
@@ -139,10 +121,6 @@
   function commandLine(params: Record<string, unknown> | null | undefined): string {
     const raw = params?.raw_cmdline;
     return typeof raw === 'string' && raw.trim() ? raw : 'Command line unavailable.';
-  }
-
-  function devicesLabel(devices: string[]): string {
-    return devices.length > 0 ? devices.join(', ') : 'Unavailable';
   }
 </script>
 
@@ -190,71 +168,6 @@
         {hardware?.gpu_available && typeof hardware.gpu_temp_c === 'number' ? `${hardware.gpu_temp_c.toFixed(1)} C` : 'Temp unavailable'}
       </p>
     </article>
-  </section>
-
-  <section class="ops-panel">
-    <div class="ops-card-header">
-      <div class="flex items-center gap-3">
-        <PackageCheck class="h-5 w-5 text-lemon" />
-        <div>
-          <h2 class="text-lg font-bold">Backend Readiness</h2>
-          <p class="ops-subtitle">
-            {backendError
-              ? 'Lemonade backend readiness unavailable'
-              : `${backendCounts.installed} installed, ${backendCounts.updateRequired} update required, ${backendCounts.installable} installable, ${backendCounts.unsupported} unsupported`}
-          </p>
-        </div>
-      </div>
-      <button class="ops-button" type="button" on:click={refreshSystem} disabled={loading}>
-        <RefreshCw class="h-4 w-4 {loading ? 'animate-spin' : ''}" />
-        Refresh
-      </button>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="ops-table">
-        <thead>
-          <tr>
-            <th>Recipe</th>
-            <th>Backend</th>
-            <th>State</th>
-            <th>Version</th>
-            <th>Devices</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#if backendError}
-            <tr><td colspan="6" class="text-status-warn">{backendError}</td></tr>
-          {:else if backendItems.length === 0}
-            <tr><td colspan="6" class="text-muted-foreground">No backend readiness data available.</td></tr>
-          {:else}
-            {#each backendItems as item}
-              <tr>
-                <td>
-                  <span class="ops-value">{item.recipeName}</span>
-                  {#if item.experimental}
-                    <span class="ops-badge ml-2">Experimental</span>
-                  {/if}
-                </td>
-                <td class="ops-value">{item.backendKey}</td>
-                <td><span class="ops-badge {backendStateBadgeClass(item.state)}">{backendStateLabel(item.state)}</span></td>
-                <td class="ops-value">{item.version ?? 'Unavailable'}</td>
-                <td class="text-muted-foreground">{devicesLabel(item.devices)}</td>
-                <td class="max-w-[420px]">
-                  {#if item.action}
-                    <code class="ops-mono whitespace-normal break-words">{item.action}</code>
-                  {:else if item.message}
-                    <span class="text-muted-foreground">{item.message}</span>
-                  {:else}
-                    <span class="text-muted-foreground">None</span>
-                  {/if}
-                </td>
-              </tr>
-            {/each}
-          {/if}
-        </tbody>
-      </table>
-    </div>
   </section>
 
   <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_2fr]">
