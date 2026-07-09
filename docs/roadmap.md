@@ -93,7 +93,7 @@ Next:
 
 ### Diagnostics Bundle V1
 
-Status: existing, needs review
+Status: V1 sanitization pass implemented, needs real-world bundle review
 
 Goal:
 
@@ -109,11 +109,14 @@ Target scope:
 - systemd status and recent logs when available.
 - RAM/swap/disk/process snapshot.
 - Loaded model and load options when available.
-- Sanitized settings.
+- Sanitized settings. V1 redacts common secrets, tokens, private LAN IPs, hostnames, usernames, and home paths.
+- Bundle manifest and README. V1 is implemented.
+- Local target snapshot without live Lemonade API dependency. V1 is implemented.
+- Recent Run Evidence summary without prompt/response bodies. V1 is implemented.
 
 ### Privacy And Sanitization
 
-Status: needs review
+Status: V1 implemented, needs manual archive review before public sharing
 
 Goal:
 
@@ -126,7 +129,7 @@ Target scope:
 - Redact LCC and Lemonade API keys.
 - Redact environment secrets and tokens.
 - Avoid committing or exporting raw local probe results by default.
-- Review local usernames, paths, LAN IPs, hostnames, and model paths before public support artifacts.
+- Review local usernames, paths, LAN IPs, hostnames, and model paths before public support artifacts. V1 performs best-effort redaction and warns the user to review the archive.
 - Make the diagnostic bundle suitable for GitHub issues after review.
 
 ### Official Web UI/App Audit

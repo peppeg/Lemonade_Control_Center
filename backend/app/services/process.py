@@ -133,12 +133,12 @@ def parse_cmdline(cmdline: list[str]) -> LlamaServerParams:
     return params
 
 
-def get_service_status(service_name: str = "lemond.service") -> ServiceStatusResponse:
+def get_service_status(service_name: str = "lemond.service", timeout: float = 5) -> ServiceStatusResponse:
     """Get systemd service status."""
     try:
         result = subprocess.run(
             ["systemctl", "status", service_name, "--no-pager"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=timeout
         )
 
         output = result.stdout + result.stderr

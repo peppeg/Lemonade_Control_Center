@@ -312,7 +312,7 @@
         <h2 class="text-2xl font-bold">Diagnostics</h2>
       </div>
       <p class="mt-3 text-sm text-muted-foreground">
-        Generate a snapshot of current logs, process states, and configuration probes for support.
+        Generate a sanitized snapshot of current logs, process states, configuration probes, diagnostics, and recent run evidence for support.
       </p>
       <a class="ops-button mt-8 w-full" href={api.diagnosticBundleUrl()} download>
         <Download class="h-4 w-4" />

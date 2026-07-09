@@ -58,14 +58,15 @@ RE_LEMONADE_TIMESTAMP = re.compile(r"^(\d{4}-\d{2}-\d{2}\s+[\d:.]+)")
 
 def get_recent_logs(
     service: str = "lemond.service",
-    n_lines: int = 100
+    n_lines: int = 100,
+    timeout: float = 10,
 ) -> RecentLogsResponse:
     """Get recent log entries from journalctl, parsed into structured format."""
     try:
         result = subprocess.run(
             ["journalctl", "-u", service, "-n", str(n_lines),
              "-o", "cat", "--no-pager"],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=timeout
         )
         if result.returncode != 0:
             return RecentLogsResponse(entries=[], total_lines=0, source="error")
@@ -83,13 +84,14 @@ def parse_last_task(
     service: str = "lemond.service",
     n_lines: int = 200,
     configured_max_tokens: int | None = None,
+    timeout: float = 10,
 ) -> LastTaskStats:
     """Parse the most recent completed task from journalctl logs."""
     try:
         result = subprocess.run(
             ["journalctl", "-u", service, "-n", str(n_lines),
              "-o", "cat", "--no-pager"],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=timeout
         )
         if result.returncode != 0 or not result.stdout.strip():
             return LastTaskStats(available=False)
