@@ -1,7 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
-  import { Activity, Download, Gauge, RefreshCw, Search, Timer, TimerReset } from 'lucide-svelte';
+  import {
+    Activity,
+    Download,
+    Gauge,
+    PackageCheck,
+    Puzzle,
+    RefreshCw,
+    Search,
+    Timer,
+    TimerReset,
+  } from 'lucide-svelte';
   import { formatDuration, formatNumber, formatTPS } from '$lib/utils/format';
 
   interface FinishReason {
@@ -41,6 +51,8 @@
     { label: 'All', value: 'all' },
     { label: 'Error', value: 'error' },
     { label: 'Warning', value: 'warning' },
+    { label: 'Update', value: 'update' },
+    { label: 'Backend', value: 'backend' },
     { label: 'Perf', value: 'performance' },
     { label: 'Model', value: 'model' },
     { label: 'Gen', value: 'generation' },
@@ -59,6 +71,11 @@
     const matchesSearch = search.trim() === '' || body.includes(search.trim().toLowerCase());
     return matchesLevel && matchesSearch;
   });
+
+  $: operationalEvents = logs
+    .filter((entry) => entry.level === 'update' || entry.level === 'backend')
+    .slice(-8)
+    .reverse();
 
   async function refreshLogs() {
     loading = true;
@@ -103,10 +120,19 @@
   function levelClass(level: string | undefined): string {
     if (level === 'error') return 'text-danger';
     if (level === 'warning') return 'text-status-warn';
+    if (level === 'update') return 'text-[#ffcf7a]';
+    if (level === 'backend') return 'text-[#7fd7c4]';
     if (level === 'performance') return 'text-[#76a9ff]';
     if (level === 'generation') return 'text-[#c28cff]';
     if (level === 'model') return 'text-lemon';
     return 'text-status-ok';
+  }
+
+  function rowClass(level: string | undefined): string {
+    if (level === 'error') return 'bg-[#3a1d1b]';
+    if (level === 'update') return 'bg-[#332816]';
+    if (level === 'backend') return 'bg-[#14302b]';
+    return '';
   }
 
   function exportLogs() {
@@ -154,6 +180,38 @@
   {#if error}
     <section class="ops-banner ops-banner-danger">{error}</section>
   {/if}
+
+  <section class="ops-panel">
+    <div class="ops-card-header justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <PackageCheck class="h-5 w-5 text-[#ffcf7a]" />
+        <h2 class="text-lg font-bold">Backend & Update Events</h2>
+      </div>
+      <span class="text-sm text-muted-foreground">{operationalEvents.length} recent</span>
+    </div>
+    <div class="p-4">
+      {#if loading}
+        <p class="text-sm text-muted-foreground">Scanning Lemonade logs...</p>
+      {:else if operationalEvents.length === 0}
+        <p class="text-sm text-muted-foreground">No backend install, backend readiness, or update events found in the current log window.</p>
+      {:else}
+        <div class="space-y-2">
+          {#each operationalEvents as entry}
+            <div class="grid gap-2 rounded border border-[#34382d] bg-[#111312] p-3 text-sm md:grid-cols-[150px_96px_1fr]">
+              <span class="text-muted-foreground">{entry.timestamp ?? '--:--:--'}</span>
+              <span class={levelClass(entry.level)}>
+                {#if entry.level === 'backend'}
+                  <Puzzle class="mr-1 inline h-4 w-4" />
+                {/if}
+                [{(entry.level ?? 'info').toUpperCase()}]
+              </span>
+              <span class="break-words">{entry.message ?? entry.raw}</span>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  </section>
 
   {#if activePanel === 'stats'}
     <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -268,7 +326,7 @@
           <p class="text-muted-foreground">No logs matched the current filters.</p>
         {:else}
           {#each filteredLogs as entry}
-            <div class="grid grid-cols-[120px_86px_1fr] gap-3 rounded px-2 py-0.5 {entry.level === 'error' ? 'bg-[#3a1d1b]' : ''}">
+            <div class="grid grid-cols-[120px_86px_1fr] gap-3 rounded px-2 py-0.5 {rowClass(entry.level)}">
               <span class="text-muted-foreground">{entry.timestamp ?? '--:--:--'}</span>
               <span class={levelClass(entry.level)}>[{(entry.level ?? 'info').toUpperCase()}]</span>
               <span class="break-words">{entry.message ?? entry.raw}</span>
