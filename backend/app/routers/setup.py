@@ -7,6 +7,7 @@ from app.models.setup import (
     CompleteSetupRequest,
     ConnectionTestResult,
     DiscoveryResult,
+    LemonadeDiscoveryResponse,
     LccConfigPublic,
     RuntimeConfig,
     SetupConnectionRequest,
@@ -44,6 +45,14 @@ async def discover(
     service: SetupService = Depends(get_setup_service),
 ):
     return await service.run_discovery(runtime)
+
+
+@router.get("/discover-lemonade", response_model=LemonadeDiscoveryResponse)
+async def discover_lemonade(
+    listen_ms: int = 2500,
+    service: SetupService = Depends(get_setup_service),
+):
+    return await service.discover_lemonade_servers(listen_ms=listen_ms)
 
 
 @router.post("/complete", response_model=LccConfigPublic)

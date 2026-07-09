@@ -2,20 +2,29 @@
 from __future__ import annotations
 
 import json
+import asyncio
+import socket
 import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
+from urllib.parse import urlparse
 
 import httpx
 
+from app.capabilities import capabilities
 from app.config import settings
 from app.models.setup import (
     AppearanceConfig,
     CompleteSetupRequest,
+    ConnectionDoctorCheck,
+    ConnectionDoctorResponse,
     ConnectionTestResult,
     DiscoveryCheck,
     DiscoveryResult,
+    LemonadeDiscoveryCandidate,
+    LemonadeDiscoveryResponse,
     LccConfig,
     LccConfigPublic,
     RuntimeConfig,
@@ -23,8 +32,20 @@ from app.models.setup import (
     SetupConnectionRequest,
     SystemConfig,
 )
+from app.services.process import find_llama_server
 
 CONFIG_FILE = Path(__file__).parent.parent / "data" / "config.json"
+LEMONADE_BEACON_PORT = 13305
+LEMONADE_FALLBACK_URLS = [
+    "http://localhost:13305",
+    "http://127.0.0.1:13305",
+    "http://localhost:1234",
+    "http://127.0.0.1:1234",
+    "http://localhost:9000",
+    "http://127.0.0.1:9000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
 
 
 class SetupService:
@@ -123,6 +144,143 @@ class SetupService:
             passed=passed,
             capabilities_json=capabilities,
         )
+
+    async def discover_lemonade_servers(self, listen_ms: int = 2500) -> LemonadeDiscoveryResponse:
+        """Discover Lemonade servers through UDP beacons and conservative HTTP probes."""
+        listen_ms = max(250, min(listen_ms, 5000))
+        candidates: dict[str, LemonadeDiscoveryCandidate] = {}
+
+        for candidate in await self._listen_for_lemonade_beacons(listen_ms):
+            candidates[candidate.url] = candidate
+
+        fallback_results = await asyncio.gather(
+            *(self._probe_lemonade_candidate(url, source="http_fallback") for url in LEMONADE_FALLBACK_URLS),
+            return_exceptions=True,
+        )
+        for result in fallback_results:
+            if isinstance(result, LemonadeDiscoveryCandidate) and result.reachable:
+                candidates.setdefault(result.url, result)
+
+        ordered = sorted(
+            candidates.values(),
+            key=lambda item: (
+                0 if item.source == "udp_beacon" else 1,
+                0 if item.reachable else 1,
+                item.name.lower(),
+                item.url,
+            ),
+        )
+        return LemonadeDiscoveryResponse(candidates=ordered, total=len(ordered), udp_listen_ms=listen_ms)
+
+    async def connection_doctor(self, runtime: RuntimeConfig) -> ConnectionDoctorResponse:
+        """Run an operator-focused diagnosis for a configured runtime."""
+        normalized_url = _normalize_lemonade_url(runtime.url)
+        local_target = _is_local_url(normalized_url)
+        checks: list[ConnectionDoctorCheck] = []
+        warnings: list[str] = []
+
+        response = ConnectionDoctorResponse(
+            runtime_id=runtime.id,
+            target_url=runtime.url,
+            normalized_url=normalized_url,
+            local_target=local_target,
+        )
+
+        if runtime.type != "lemonade":
+            response.warnings.append("Only Lemonade runtimes are fully supported by Connection Doctor today.")
+            response.recommended_next_action = "Use the runtime-specific test action for this prepared runtime."
+            return response
+
+        if not normalized_url:
+            checks.append(ConnectionDoctorCheck(name="URL", status="error", detail="Runtime URL is empty."))
+            response.checks = checks
+            response.warnings.append("Set a Lemonade server URL before running diagnostics.")
+            response.recommended_next_action = "Enter a Lemonade URL such as http://localhost:13305."
+            return response
+
+        start = time.monotonic()
+        health_data: dict = {}
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+                health = await client.get(f"{normalized_url}/api/v1/health")
+                health.raise_for_status()
+                health_data = health.json()
+            response.reachable = True
+            response.api_available = True
+            response.version = str(health_data.get("version") or "unknown")
+            response.status = str(health_data.get("status") or "unknown")
+            response.loaded_model = _loaded_model_name(health_data)
+            telemetry = health_data.get("telemetry")
+            if isinstance(telemetry, dict) and isinstance(telemetry.get("enabled"), bool):
+                response.telemetry_enabled = telemetry["enabled"]
+            checks.append(
+                ConnectionDoctorCheck(
+                    name="Lemonade health",
+                    status="ok",
+                    detail=f"{response.status} · {response.version} · {self._latency_ms(start)}ms",
+                )
+            )
+        except httpx.ConnectError:
+            checks.append(ConnectionDoctorCheck(name="Lemonade health", status="error", detail="Connection refused."))
+            warnings.append("Lemonade is not reachable at the configured URL.")
+        except httpx.TimeoutException:
+            checks.append(ConnectionDoctorCheck(name="Lemonade health", status="error", detail="Health request timed out."))
+            warnings.append("The Lemonade server did not respond before timeout.")
+        except httpx.HTTPStatusError as exc:
+            checks.append(ConnectionDoctorCheck(name="Lemonade health", status="error", detail=f"HTTP {exc.response.status_code}"))
+            warnings.append("The configured URL responded, but not with a healthy Lemonade response.")
+        except Exception as exc:
+            checks.append(ConnectionDoctorCheck(name="Lemonade health", status="error", detail=str(exc)))
+            warnings.append("Unexpected error while checking Lemonade health.")
+
+        if response.reachable:
+            if response.loaded_model:
+                checks.append(ConnectionDoctorCheck(name="Loaded model", status="ok", detail=response.loaded_model))
+            else:
+                checks.append(ConnectionDoctorCheck(name="Loaded model", status="warning", detail="No model is currently loaded."))
+                warnings.append("No model is loaded. This is fine for setup, but clients cannot generate until a model is loaded.")
+
+        if local_target:
+            response.host_telemetry_available = True
+            checks.append(ConnectionDoctorCheck(name="Host telemetry", status="ok", detail="Target appears local; LCC host telemetry is applicable."))
+            llama = find_llama_server()
+            if llama.found:
+                response.process_evidence = "found"
+                checks.append(ConnectionDoctorCheck(name="Process evidence", status="ok", detail=f"llama-server PID {llama.process.pid if llama.process else 'unknown'} found."))
+            else:
+                response.process_evidence = "not_running"
+                checks.append(ConnectionDoctorCheck(name="Process evidence", status="warning", detail="No llama-server process found. This is expected when no model is loaded."))
+        else:
+            response.host_telemetry_available = False
+            response.process_evidence = "unavailable"
+            checks.append(ConnectionDoctorCheck(name="Host telemetry", status="warning", detail="Target is remote; local LCC process/RAM/systemd data may not describe that server."))
+            warnings.append("This target looks remote. API checks are valid, but host telemetry only describes the LCC host unless a collector is added.")
+
+        if runtime.admin_key:
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+                    config = await client.get(f"{normalized_url}/internal/config", headers=self._admin_headers(runtime.admin_key))
+                if config.status_code == 200:
+                    response.admin_config_available = True
+                    checks.append(ConnectionDoctorCheck(name="Admin config", status="ok", detail="Admin config endpoint reachable."))
+                else:
+                    checks.append(ConnectionDoctorCheck(name="Admin config", status="warning", detail=f"HTTP {config.status_code}"))
+                    warnings.append("Admin key is configured, but Lemonade did not accept it for internal config.")
+            except Exception as exc:
+                checks.append(ConnectionDoctorCheck(name="Admin config", status="warning", detail=str(exc)))
+                warnings.append("Admin config check failed.")
+        else:
+            checks.append(ConnectionDoctorCheck(name="Admin config", status="skip", detail="No Lemonade admin API key configured."))
+
+        if capabilities.cmd_systemctl and local_target:
+            checks.append(ConnectionDoctorCheck(name="systemd", status="ok", detail="systemctl is available for local service checks."))
+        elif local_target:
+            checks.append(ConnectionDoctorCheck(name="systemd", status="skip", detail="systemctl capability is not available."))
+
+        response.checks = checks
+        response.warnings = warnings
+        response.recommended_next_action = _connection_doctor_next_action(response)
+        return response
 
     def complete_setup(self, request: CompleteSetupRequest) -> LccConfigPublic:
         runtime = request.runtime
@@ -252,6 +410,83 @@ class SetupService:
         if runtime.admin_key:
             checks.extend(await self._check_lemonade_admin_endpoints(runtime.url, headers))
         return checks
+
+    async def _listen_for_lemonade_beacons(self, listen_ms: int) -> list[LemonadeDiscoveryCandidate]:
+        loop = asyncio.get_running_loop()
+        protocol = _LemonadeBeaconProtocol()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setblocking(False)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("0.0.0.0", LEMONADE_BEACON_PORT))
+            transport, _ = await loop.create_datagram_endpoint(lambda: protocol, sock=sock)
+        except OSError:
+            sock.close()
+            return []
+
+        try:
+            await asyncio.sleep(listen_ms / 1000)
+        finally:
+            transport.close()
+
+        candidates: list[LemonadeDiscoveryCandidate] = []
+        for payload, address in protocol.payloads:
+            candidate = self._candidate_from_beacon(payload, address)
+            if candidate:
+                enriched = await self._probe_lemonade_candidate(candidate.url, source="udp_beacon", hostname=candidate.hostname)
+                candidates.append(enriched if enriched else candidate)
+        return candidates
+
+    def _candidate_from_beacon(self, payload: dict, address: tuple[str, int]) -> LemonadeDiscoveryCandidate | None:
+        if payload.get("service") != "lemonade":
+            return None
+        url = _normalize_lemonade_url(str(payload.get("url") or ""))
+        if not url:
+            host = address[0]
+            url = f"http://{host}:13305"
+        hostname = str(payload.get("hostname") or address[0])
+        return LemonadeDiscoveryCandidate(
+            name=hostname,
+            url=url,
+            source="udp_beacon",
+            hostname=hostname,
+            detail="Lemonade UDP beacon",
+        )
+
+    async def _probe_lemonade_candidate(
+        self,
+        url: str,
+        *,
+        source: Literal["udp_beacon", "http_fallback", "manual"],
+        hostname: str | None = None,
+    ) -> LemonadeDiscoveryCandidate | None:
+        root_url = _normalize_lemonade_url(url)
+        if not root_url:
+            return None
+
+        start = time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(1.25)) as client:
+                health = await client.get(f"{root_url}/api/v1/health")
+                health.raise_for_status()
+                data = health.json()
+        except Exception:
+            return None
+
+        latency_ms = self._latency_ms(start)
+        detected_hostname = hostname or root_url.removeprefix("http://").removeprefix("https://").split(":", 1)[0]
+        return LemonadeDiscoveryCandidate(
+            name=detected_hostname,
+            url=root_url,
+            source=source,
+            reachable=True,
+            hostname=detected_hostname,
+            version=str(data.get("version") or "unknown"),
+            status=str(data.get("status") or "unknown"),
+            model_loaded=_loaded_model_name(data),
+            latency_ms=latency_ms,
+            detail="Health endpoint reachable",
+        )
 
     async def _discover_ollama(self, runtime: RuntimeConfig) -> list[DiscoveryCheck]:
         return await self._check_http_endpoints(
@@ -448,3 +683,69 @@ class SetupService:
 
     def _latency_ms(self, start: float) -> float:
         return round((time.monotonic() - start) * 1000, 1)
+
+
+class _LemonadeBeaconProtocol(asyncio.DatagramProtocol):
+    def __init__(self) -> None:
+        self.payloads: list[tuple[dict, tuple[str, int]]] = []
+
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
+        try:
+            payload = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return
+        if isinstance(payload, dict):
+            self.payloads.append((payload, addr))
+
+
+def _normalize_lemonade_url(value: str) -> str:
+    url = value.strip().rstrip("/")
+    if not url:
+        return ""
+    if not url.startswith(("http://", "https://")):
+        url = f"http://{url}"
+    for suffix in ("/api/v1", "/v1"):
+        if url.endswith(suffix):
+            url = url[: -len(suffix)]
+    return url.rstrip("/")
+
+
+def _is_local_url(value: str) -> bool:
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower()
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        local_names = {socket.gethostname().lower(), socket.getfqdn().lower()}
+    except OSError:
+        local_names = set()
+    return host in local_names
+
+
+def _loaded_model_name(data: dict) -> str | None:
+    model_loaded = data.get("model_loaded")
+    if isinstance(model_loaded, str) and model_loaded:
+        return model_loaded
+
+    loaded = data.get("all_models_loaded") or data.get("loaded_models") or data.get("models")
+    if isinstance(loaded, list) and loaded:
+        first = loaded[0]
+        if isinstance(first, str):
+            return first
+        if isinstance(first, dict):
+            value = first.get("name") or first.get("model") or first.get("id")
+            return str(value) if value else None
+    return None
+
+
+def _connection_doctor_next_action(response: ConnectionDoctorResponse) -> str:
+    if not response.reachable:
+        return "Fix the Lemonade URL or start Lemonade, then run Connection Doctor again."
+    if not response.local_target:
+        return "Use API health for this remote target; do not trust local host telemetry for the remote server."
+    if response.loaded_model:
+        return "Connection is usable. Inspect process evidence or run a smoke test if you need runtime proof."
+    return "Connection is healthy. Load a model when you are ready to serve clients."

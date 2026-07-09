@@ -32,6 +32,6 @@
     {#if $capabilities.probe_timestamp}
       <span class="hidden md:inline">Probe: {new Date($capabilities.probe_timestamp).toLocaleString()}</span>
     {/if}
-    <span>LCC v{$healthData?.app_version ?? '0.1.0'}</span>
+    <span>LCC v{$healthData?.app_version ?? '0.2.0'}</span>
   </div>
 </footer>

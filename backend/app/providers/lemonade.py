@@ -370,6 +370,11 @@ _FORBIDDEN_LLAMACPP_ARGS = {
     "--mmproj",
     "--embeddings",
     "--reranking",
+    "--flm-args",
+    "flm_args",
+    "--model-draft",
+    "-md",
+    "--spec-draft-model",
 }
 
 

@@ -8,6 +8,7 @@
     ConnectionTestResult,
     DiscoveryCheck,
     DiscoveryResult,
+    LemonadeDiscoveryCandidate,
     RuntimeConfigRequest,
     RuntimeType,
     SystemConfig,
@@ -54,6 +55,9 @@
 
   let connectionTesting = false;
   let connectionResult: ConnectionTestResult | null = null;
+  let serverDiscoveryRunning = false;
+  let serverDiscoveryResult: LemonadeDiscoveryCandidate[] = [];
+  let serverDiscoveryAttempted = false;
 
   let discoveryRunning = false;
   let discoveryResult: DiscoveryResult | null = null;
@@ -138,6 +142,33 @@
       notify.error('Runtime test failed', result.error);
     }
     connectionTesting = false;
+  }
+
+  async function findLemonadeServers() {
+    serverDiscoveryRunning = true;
+    serverDiscoveryAttempted = true;
+    serverDiscoveryResult = [];
+    const result = await api.setup.discoverLemonade(2500);
+    if (result.ok) {
+      serverDiscoveryResult = result.data.candidates;
+      if (result.data.total > 0) {
+        notify.success('Lemonade servers found', `${result.data.total} candidate${result.data.total === 1 ? '' : 's'}`);
+      } else {
+        notify.info('No Lemonade servers found', 'Try a manual URL or verify Lemonade is running.');
+      }
+    } else {
+      notify.error('Server discovery failed', result.error);
+    }
+    serverDiscoveryRunning = false;
+  }
+
+  function useDiscoveredServer(candidate: LemonadeDiscoveryCandidate) {
+    runtimeType = 'lemonade';
+    runtimeUrl = candidate.url;
+    runtimeName = candidate.hostname ? `${candidate.hostname} Lemonade` : candidate.name || 'Lemonade Server';
+    accessMode = candidate.url.includes('127.0.0.1') || candidate.url.includes('localhost') ? 'local' : 'remote';
+    connectionResult = null;
+    discoveryResult = null;
   }
 
   async function runDiscovery() {
@@ -299,6 +330,40 @@
               <span class="ops-label">runtime URL</span>
               <input class="ops-input" bind:value={runtimeUrl} />
             </label>
+
+            <div class="space-y-3 border border-[#30342b] bg-[#111312] p-4">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p class="ops-label">server discovery</p>
+                  <p class="ops-muted mt-1 text-xs">Listen for Lemonade beacons, then probe common local ports.</p>
+                </div>
+                <button class="ops-button" type="button" on:click={findLemonadeServers} disabled={serverDiscoveryRunning || runtimeType !== 'lemonade'}>
+                  {#if serverDiscoveryRunning}
+                    <Loader2 class="h-4 w-4 animate-spin" />
+                    Finding
+                  {:else}
+                    <Network class="h-4 w-4" />
+                    Find Servers
+                  {/if}
+                </button>
+              </div>
+
+              {#if serverDiscoveryResult.length > 0}
+                <div class="space-y-2">
+                  {#each serverDiscoveryResult as candidate}
+                    <button class="flex w-full items-center justify-between gap-3 border border-[#3f432d] bg-[#181b1a] px-3 py-2 text-left hover:bg-[#202421]" type="button" on:click={() => useDiscoveredServer(candidate)}>
+                      <span class="min-w-0">
+                        <span class="ops-value block truncate">{candidate.hostname ?? candidate.name}</span>
+                        <span class="ops-muted block truncate text-xs">{candidate.url} · {candidate.source} · {candidate.version ?? 'unknown'}</span>
+                      </span>
+                      <span class="ops-badge shrink-0">{candidate.status ?? 'ok'}</span>
+                    </button>
+                  {/each}
+                </div>
+              {:else if serverDiscoveryAttempted && !serverDiscoveryRunning}
+                <p class="ops-muted text-xs">No Lemonade servers found automatically. Keep using a manual URL if you know where the server is running.</p>
+              {/if}
+            </div>
 
             <label class="block space-y-2">
               <span class="ops-label">admin key</span>

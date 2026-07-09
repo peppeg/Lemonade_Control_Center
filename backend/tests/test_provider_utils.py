@@ -30,7 +30,19 @@ def test_safe_llamacpp_args_are_accepted():
     _validate_llamacpp_args("--flash-attn on --reasoning off")
 
 
-@pytest.mark.parametrize("value", ["--jinja", "-c 32768", "--model model.gguf"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "--jinja",
+        "-c 32768",
+        "--model model.gguf",
+        "--flm-args test",
+        "flm_args=test",
+        "--model-draft draft.gguf",
+        "-md draft.gguf",
+        "--spec-draft-model draft.gguf",
+    ],
+)
 def test_lemonade_managed_llamacpp_args_are_rejected(value):
     with pytest.raises(HTTPException) as exc_info:
         _validate_llamacpp_args(value)

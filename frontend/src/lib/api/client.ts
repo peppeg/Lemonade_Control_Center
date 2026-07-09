@@ -11,9 +11,11 @@ import type {
   HealthResponse,
   Capabilities,
   AppearanceConfig,
+  ConnectionDoctorResponse,
   ConnectionTestResult,
   DiscoveryResult,
   LccConfigPublic,
+  LemonadeDiscoveryResponse,
   LemonadeHealth,
   LemonadeSavedOptions,
   HardwareInfo,
@@ -129,6 +131,8 @@ export const api = {
     status: () => get<SetupStatusResponse>('/setup/status'),
     testConnection: (body: SetupConnectionRequest) =>
       post<ConnectionTestResult>('/setup/test-connection', body),
+    discoverLemonade: (listenMs = 2500) =>
+      get<LemonadeDiscoveryResponse>(`/setup/discover-lemonade?listen_ms=${listenMs}`),
     discover: (runtime: RuntimeConfigRequest) =>
       post<DiscoveryResult>('/setup/discover', runtime),
     complete: (body: { runtime: RuntimeConfigRequest; system: SystemConfig; appearance: AppearanceConfig }) =>
@@ -146,6 +150,7 @@ export const api = {
     activateRuntime: (id: string) => post<{ active: string }>(`/settings/runtimes/${enc(id)}/activate`),
     testRuntime: (id: string) => post<ConnectionTestResult>(`/settings/runtimes/${enc(id)}/test`),
     discoverRuntime: (id: string) => post<DiscoveryResult>(`/settings/runtimes/${enc(id)}/discover`),
+    connectionDoctor: (id: string) => post<ConnectionDoctorResponse>(`/settings/runtimes/${enc(id)}/doctor`),
   },
 
   // ── Lemonade API (M2, used from M4+) ──

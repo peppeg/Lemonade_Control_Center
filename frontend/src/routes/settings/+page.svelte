@@ -6,6 +6,7 @@
   import type {
     AccessMode,
     AppearanceConfig,
+    ConnectionDoctorResponse,
     DiscoveryCheck,
     DiscoveryResult,
     LccConfigPublic,
@@ -55,6 +56,9 @@
   let runtimeSecret = '';
   let discoveryRuntimeId: string | null = null;
   let discoveryResult: DiscoveryResult | null = null;
+  let doctorRuntimeId: string | null = null;
+  let doctorRunning = false;
+  let doctorResult: ConnectionDoctorResponse | null = null;
 
   let systemForm: SystemConfig = {
     os_type: 'linux_systemd',
@@ -96,6 +100,10 @@
     config = nextConfig;
     systemForm = { ...nextConfig.system };
     appearanceForm = { ...nextConfig.appearance };
+    if (doctorResult && doctorResult.runtime_id !== nextConfig.active_runtime_id) {
+      doctorRuntimeId = null;
+      doctorResult = null;
+    }
   }
 
   async function testRuntime(runtime: RuntimeConfigPublic) {
@@ -283,7 +291,25 @@
     discoveringRuntimeId = null;
   }
 
-  function checkClass(check: DiscoveryCheck): string {
+  async function runConnectionDoctor(runtime: RuntimeConfigPublic) {
+    doctorRunning = true;
+    doctorRuntimeId = runtime.id;
+    doctorResult = null;
+    const result = await api.settings.connectionDoctor(runtime.id);
+    if (result.ok) {
+      doctorResult = result.data;
+      if (result.data.reachable) {
+        notify.success('Connection Doctor complete', result.data.recommended_next_action);
+      } else {
+        notify.error('Connection Doctor found a problem', result.data.recommended_next_action);
+      }
+    } else {
+      notify.error('Connection Doctor failed', result.error);
+    }
+    doctorRunning = false;
+  }
+
+  function checkClass(check: DiscoveryCheck | { status: DiscoveryCheck['status'] }): string {
     if (check.status === 'ok') return 'text-status-ok';
     if (check.status === 'warning' || check.status === 'skip') return 'text-status-warn';
     return 'text-status-error';
@@ -370,6 +396,97 @@
           {/if}
         </section>
       {/if}
+
+      <section class="ops-panel">
+        <div class="ops-card-header">
+          <div class="flex items-center gap-3">
+            <Search class="h-5 w-5 text-lemon" />
+            <h2 class="ops-title">Connection Doctor</h2>
+          </div>
+          <span class="ops-badge {doctorResult?.reachable ? 'ops-badge-ok' : ''}">
+            {doctorResult ? (doctorResult.reachable ? 'Reachable' : 'Problem') : 'Not run'}
+          </span>
+        </div>
+        <div class="ops-card-body space-y-4">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p class="ops-subtitle">
+                Validate the active Lemonade target, then explain whether host telemetry and process evidence describe that same machine.
+              </p>
+              {#if activeRuntime}
+                <p class="ops-muted mt-2 break-all text-xs">{activeRuntime.name} · {activeRuntime.url}</p>
+              {:else}
+                <p class="ops-muted mt-2 text-xs">No active runtime configured.</p>
+              {/if}
+            </div>
+            <button class="ops-button ops-button-primary" type="button" on:click={() => activeRuntime && runConnectionDoctor(activeRuntime)} disabled={!activeRuntime || doctorRunning}>
+              <RefreshCw class="h-4 w-4 {doctorRunning ? 'animate-spin' : ''}" />
+              {doctorRunning ? 'Running' : 'Run Doctor'}
+            </button>
+          </div>
+
+          {#if doctorResult}
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div class="border border-[#30342b] bg-[#111312] p-4">
+                <p class="ops-label">target</p>
+                <p class="ops-value mt-1">{doctorResult.local_target ? 'local' : 'remote'}</p>
+              </div>
+              <div class="border border-[#30342b] bg-[#111312] p-4">
+                <p class="ops-label">version</p>
+                <p class="ops-value mt-1">{doctorResult.version ?? 'unknown'}</p>
+              </div>
+              <div class="border border-[#30342b] bg-[#111312] p-4">
+                <p class="ops-label">host telemetry</p>
+                <p class="ops-value mt-1">{doctorResult.host_telemetry_available ? 'available' : 'api only'}</p>
+              </div>
+              <div class="border border-[#30342b] bg-[#111312] p-4">
+                <p class="ops-label">process evidence</p>
+                <p class="ops-value mt-1">{doctorResult.process_evidence}</p>
+              </div>
+            </div>
+
+            <div class="ops-banner ops-banner-muted">
+              <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-lemon" />
+              <div>
+                <p class="font-semibold">Recommended next action</p>
+                <p class="mt-1 text-sm">{doctorResult.recommended_next_action}</p>
+              </div>
+            </div>
+
+            {#if doctorResult.warnings.length > 0}
+              <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {#each doctorResult.warnings as warning}
+                  <div class="border border-[#4b4f39] bg-[#171a18] p-3">
+                    <p class="ops-value text-sm text-status-warn">Warning</p>
+                    <p class="ops-muted mt-1 text-xs">{warning}</p>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            <div class="overflow-hidden border border-[#30342b]">
+              <table class="ops-table">
+                <thead>
+                  <tr>
+                    <th>Check</th>
+                    <th>Status</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each doctorResult.checks as check}
+                    <tr>
+                      <td class={checkClass(check)}>{check.name}</td>
+                      <td><span class="ops-badge">{check.status}</span></td>
+                      <td class="break-words text-sm text-muted-foreground">{check.detail}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      </section>
 
       <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr]">
         <article class="ops-panel">

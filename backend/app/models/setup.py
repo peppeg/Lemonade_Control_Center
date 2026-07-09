@@ -132,6 +132,58 @@ class DiscoveryResult(BaseModel):
     capabilities_json: dict[str, bool] = Field(default_factory=dict)
 
 
+class LemonadeDiscoveryCandidate(BaseModel):
+    """A Lemonade server candidate found by beacon or HTTP probing."""
+
+    name: str
+    url: str
+    source: Literal["udp_beacon", "http_fallback", "manual"]
+    reachable: bool = False
+    hostname: str | None = None
+    version: str | None = None
+    status: str | None = None
+    model_loaded: str | None = None
+    latency_ms: float | None = None
+    detail: str | None = None
+
+
+class LemonadeDiscoveryResponse(BaseModel):
+    """Candidate Lemonade servers discovered on this host/LAN."""
+
+    candidates: list[LemonadeDiscoveryCandidate] = Field(default_factory=list)
+    total: int = 0
+    udp_listen_ms: int = 2500
+
+
+class ConnectionDoctorCheck(BaseModel):
+    """Single Connection Doctor finding."""
+
+    name: str
+    status: DiscoveryStatus
+    detail: str
+
+
+class ConnectionDoctorResponse(BaseModel):
+    """Operator-focused connection diagnosis for a configured runtime."""
+
+    runtime_id: str
+    target_url: str
+    normalized_url: str
+    reachable: bool = False
+    version: str | None = None
+    status: str | None = None
+    loaded_model: str | None = None
+    local_target: bool = False
+    api_available: bool = False
+    host_telemetry_available: bool = False
+    process_evidence: Literal["found", "not_running", "unavailable"] = "unavailable"
+    admin_config_available: bool = False
+    telemetry_enabled: bool | None = None
+    checks: list[ConnectionDoctorCheck] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    recommended_next_action: str = "Review the connection checks."
+
+
 class CompleteSetupRequest(BaseModel):
     """Finalize setup wizard configuration."""
 
