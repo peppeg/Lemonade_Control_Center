@@ -51,6 +51,33 @@ RE_MODEL_LOADED = re.compile(r"model\s+loaded|all\s+slots\s+are\s+idle", re.IGNO
 
 RE_ERROR = re.compile(r"\b(?:error|exception|fail|fatal)\b", re.IGNORECASE)
 RE_WARNING = re.compile(r"\b(?:warn|warning|timeout|truncat)\b", re.IGNORECASE)
+RE_WARNING_MARKER = re.compile(r"(?:\bW:|\bW\s+[\w_]+:)", re.IGNORECASE)
+RE_EXPECTED_DETECTION_ERROR = re.compile(
+    r"NVIDIA GPU:\s+detection error:\s+No NVIDIA discrete GPU found",
+    re.IGNORECASE,
+)
+
+RE_BACKEND_EVENT = re.compile(
+    r"\b(?:"
+    r"Installing backend|"
+    r"Using LlamaCpp Backend|"
+    r"Backend availability|"
+    r"llama-server is ready|"
+    r"Started watchdog for llama-server|"
+    r"Process started successfully,\s*PID|"
+    r"server is listening on http://"
+    r")\b",
+    re.IGNORECASE,
+)
+RE_UPDATE_EVENT = re.compile(
+    r"\b(?:"
+    r"Update available for|"
+    r"Updates available for|"
+    r"Upgrading llama-server|"
+    r"Installing llama-server"
+    r")\b",
+    re.IGNORECASE,
+)
 
 RE_TIMESTAMP = re.compile(r"^(\d{4}-\d{2}-\d{2}T[\d:.]+[+-]\d{2}:\d{2}|\w{3}\s+\d+\s+[\d:]+)")
 RE_LEMONADE_TIMESTAMP = re.compile(r"^(\d{4}-\d{2}-\d{2}\s+[\d:.]+)")
@@ -196,6 +223,16 @@ def _parse_log_line(line: str) -> LogEntry:
         if m:
             timestamp = m.group(1)
 
+    warning_override = (
+        RE_WARNING_MARKER.search(line)
+        or RE_EXPECTED_DETECTION_ERROR.search(line)
+    )
+
+    if warning_override:
+        return LogEntry(
+            timestamp=timestamp, level=LogEntryLevel.WARNING,
+            message=line, raw=line, icon="⚠️"
+        )
     if RE_ERROR.search(line):
         return LogEntry(
             timestamp=timestamp, level=LogEntryLevel.ERROR,
@@ -205,6 +242,16 @@ def _parse_log_line(line: str) -> LogEntry:
         return LogEntry(
             timestamp=timestamp, level=LogEntryLevel.WARNING,
             message=line, raw=line, icon="⚠️"
+        )
+    if RE_UPDATE_EVENT.search(line):
+        return LogEntry(
+            timestamp=timestamp, level=LogEntryLevel.UPDATE,
+            message=line, raw=line, icon="⬆️"
+        )
+    if RE_BACKEND_EVENT.search(line):
+        return LogEntry(
+            timestamp=timestamp, level=LogEntryLevel.BACKEND,
+            message=line, raw=line, icon="🧩"
         )
     if (
         RE_PROMPT_EVAL.search(line)

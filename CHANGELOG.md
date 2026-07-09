@@ -16,6 +16,7 @@ The project is under active development, so entries currently describe the evolv
 - Load attempts now create Run Evidence records with requested options, observed process/backend/context, memory snapshots, duration, and mismatch warnings.
 - Load dialog result panel showing requested versus observed backend/context, PID, RSS, RAM delta, duration, evidence id, and load warnings.
 - P0 closeout documentation with official Lemonade docs audit notes and P1/P2 deferrals.
+- Backend and update event surfacing in Logs & Stats for Lemonade backend installs, llama-server upgrades, and model update notices.
 
 ### Changed
 
@@ -23,6 +24,7 @@ The project is under active development, so entries currently describe the evolv
 - Lemonade provider HTTP calls no longer inherit proxy environment settings when contacting the configured Lemonade server.
 - Roadmap P0 statuses updated to reflect implemented scope and remaining maintenance tasks.
 - Diagnostic bundle sanitization preserves non-secret token counters and boolean configured flags.
+- Log parsing now treats expected AMD-machine NVIDIA detection failures and low-level `W:` lines as warnings instead of hard errors.
 
 ## 0.2.0 - 2026-07-09
 

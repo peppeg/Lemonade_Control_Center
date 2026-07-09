@@ -368,6 +368,8 @@ class LogEntryLevel(str, Enum):
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
+    UPDATE = "update"
+    BACKEND = "backend"
     PERFORMANCE = "performance"
     MODEL = "model"
     GENERATION = "generation"
