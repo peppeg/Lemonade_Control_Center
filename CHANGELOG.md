@@ -14,6 +14,7 @@ The project is under active development, so entries currently describe the evolv
 - Sanitized diagnostic bundle generation with manifest, README, local target snapshot, and recent Run Evidence summary.
 - Diagnostic bundle download action on the Diagnostics page.
 - Load attempts now create Run Evidence records with requested options, observed process/backend/context, memory snapshots, duration, and mismatch warnings.
+- Load dialog result panel showing requested versus observed backend/context, PID, RSS, RAM delta, duration, evidence id, and load warnings.
 
 ### Changed
 
