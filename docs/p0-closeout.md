@@ -89,6 +89,13 @@ Confirmed official coverage from docs:
 - The API exposes model files, health, stats, system stats, system info, install/uninstall, model management, download/job surfaces, and pull variants.
 - The web app exists under Lemonade's `/app` flow and shares React code with the desktop app.
 
+Additional local check on Lemonade `10.9.0`:
+
+- `/v1/system-info` exposes backend readiness state under `recipes[*].backends[*]`, including `state`, `message`, `action`, `version`, `release_url`, `download_filename`, and `devices`.
+- This makes `/v1/system-info` the preferred source of truth for LCC backend readiness and update prompts.
+- Recent logs remain useful as timeline evidence, but should not be the only way LCC detects backend install/update state.
+- `/v1/install` and `/v1/uninstall` are documented mutating endpoints and should only be used behind explicit operator confirmation if LCC ever exposes them.
+
 P0 conclusion:
 
 LCC should avoid becoming a chat client, generic model marketplace, official config clone, or long-term telemetry platform. It should continue investing in guided operations, host/process context, diagnostics, workflow memory, and run evidence.
