@@ -13,6 +13,7 @@ The project is under active development, so entries currently describe the evolv
 - Local rolling Run Evidence storage and API endpoints for smoke-test evidence retrieval.
 - Sanitized diagnostic bundle generation with manifest, README, local target snapshot, and recent Run Evidence summary.
 - Diagnostic bundle download action on the Diagnostics page.
+- Load attempts now create Run Evidence records with requested options, observed process/backend/context, memory snapshots, duration, and mismatch warnings.
 
 ### Changed
 

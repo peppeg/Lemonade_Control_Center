@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from pathlib import Path
 
 from pydantic import ValidationError
 
-from app.models.schemas import RunEvidenceSeed, SmokeTestRequest, SmokeTestResponse
+from app.models.schemas import LoadModelRequest, LoadModelResponse, RunEvidenceSeed, SmokeTestRequest, SmokeTestResponse
 from app.services.bench.models import BenchPrompt
 from app.services.bench.runner import BenchRunner
 from app.services.hardware import get_hardware_info
@@ -125,6 +126,66 @@ class SmokeTestRunner:
         )
 
 
+class LoadEvidenceRecorder:
+    """Records a load attempt as local operator evidence."""
+
+    def __init__(self, storage: RunEvidenceStorage | None = None) -> None:
+        self.storage = storage or RunEvidenceStorage()
+
+    def start(self) -> dict:
+        return {
+            "started_at": time.monotonic(),
+            "hardware": _safe_hardware_snapshot(),
+            "process": _safe_process_snapshot(),
+        }
+
+    def record_response(
+        self,
+        request: LoadModelRequest,
+        response: LoadModelResponse,
+        started: dict,
+    ) -> RunEvidenceSeed:
+        after_hardware = _safe_hardware_snapshot()
+        after_process = _safe_process_snapshot()
+        process = after_process or started.get("process")
+        warnings = _load_warnings(request, response, process)
+
+        evidence = RunEvidenceSeed(
+            id=str(uuid.uuid4()),
+            kind="load_attempt",
+            model_name=request.model_name,
+            success=response.success,
+            error=None if response.success else response.message,
+            load_message=response.message,
+            requested_backend=request.llamacpp_backend,
+            requested_ctx_size=request.ctx_size,
+            requested_llamacpp_args=request.llamacpp_args,
+            merge_args=request.merge_args,
+            save_options=request.save_options,
+            total_seconds=round(time.monotonic() - started["started_at"], 2),
+            observed_pid=process["pid"] if process else None,
+            observed_backend=process["backend"] if process else None,
+            observed_ctx_size=process["ctx_size"] if process else None,
+            process_rss_gb=process["rss_gb"] if process else None,
+            ram_used_before_gb=started["hardware"]["ram_used_gb"] if started.get("hardware") else None,
+            ram_used_after_gb=after_hardware["ram_used_gb"] if after_hardware else None,
+            swap_used_before_gb=started["hardware"]["swap_used_gb"] if started.get("hardware") else None,
+            swap_used_after_gb=after_hardware["swap_used_gb"] if after_hardware else None,
+            warnings=warnings,
+        )
+        self.storage.add(evidence)
+        return evidence
+
+    def record_exception(
+        self,
+        request: LoadModelRequest,
+        exc: Exception,
+        started: dict,
+    ) -> RunEvidenceSeed:
+        response = LoadModelResponse(success=False, message=str(exc), raw=None)
+        return self.record_response(request, response, started)
+
+
 def _safe_hardware_snapshot() -> dict | None:
     try:
         hardware = get_hardware_info()
@@ -149,3 +210,22 @@ def _safe_process_snapshot() -> dict | None:
         "backend": info.params.backend if info.params else None,
         "ctx_size": info.params.ctx_size if info.params else None,
     }
+
+
+def _load_warnings(
+    request: LoadModelRequest,
+    response: LoadModelResponse,
+    process: dict | None,
+) -> list[str]:
+    warnings: list[str] = []
+    if not response.success:
+        warnings.append("Load request failed; check Lemonade health and recent logs.")
+        return warnings
+    if not process:
+        warnings.append("Model loaded but no llama-server process evidence was available.")
+        return warnings
+    if request.llamacpp_backend and process.get("backend") and request.llamacpp_backend != process["backend"]:
+        warnings.append(f"Requested backend {request.llamacpp_backend}, observed {process['backend']}.")
+    if request.ctx_size and process.get("ctx_size") and request.ctx_size != process["ctx_size"]:
+        warnings.append(f"Requested ctx {request.ctx_size}, observed {process['ctx_size']}.")
+    return warnings

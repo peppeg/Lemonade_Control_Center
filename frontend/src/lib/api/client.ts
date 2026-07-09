@@ -172,7 +172,7 @@ export const api = {
       llamacpp_args?: string;
       merge_args?: boolean;
       save_options?: boolean;
-    }) => post<{ success: boolean; message: string }>('/lemonade/load', body),
+    }) => post<{ success: boolean; message: string; evidence?: RunEvidenceSeed | null }>('/lemonade/load', body),
     smokeTest: (body: { model_name: string; prompt?: string; max_tokens?: number; temperature?: number }) =>
       post<SmokeTestResponse>('/lemonade/smoke-test', body),
     runEvidence: (modelName?: string) =>

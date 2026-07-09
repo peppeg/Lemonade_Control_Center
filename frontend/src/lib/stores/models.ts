@@ -171,7 +171,10 @@ export async function loadModel(opts: LoadModelOptions): Promise<boolean> {
     ].filter(Boolean);
     notify.success(
       'Model loaded',
-      observedBits.length > 0 ? `${opts.modelName} · observed ${observedBits.join(' · ')}` : opts.modelName,
+      [
+        observedBits.length > 0 ? `${opts.modelName} · observed ${observedBits.join(' · ')}` : opts.modelName,
+        result.data.evidence?.id ? 'load evidence saved' : null,
+      ].filter(Boolean).join(' · '),
       { href: '/models' },
     );
     return true;

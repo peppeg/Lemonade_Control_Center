@@ -208,6 +208,11 @@ def _run_evidence_summary() -> dict[str, Any]:
                 "model_name": item.model_name,
                 "success": item.success,
                 "error": item.error,
+                "load_message": item.load_message,
+                "requested_backend": item.requested_backend,
+                "requested_ctx_size": item.requested_ctx_size,
+                "merge_args": item.merge_args,
+                "save_options": item.save_options,
                 "input_tokens": item.input_tokens,
                 "output_tokens": item.output_tokens,
                 "generation_tps": item.generation_tps,
@@ -228,7 +233,7 @@ def _run_evidence_summary() -> dict[str, Any]:
             }
             for item in results[:10]
         ],
-        "omitted_fields": ["prompt", "response_text"],
+        "omitted_fields": ["prompt", "response_text", "requested_llamacpp_args"],
     }
 
 

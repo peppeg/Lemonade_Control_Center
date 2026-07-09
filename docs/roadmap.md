@@ -66,7 +66,7 @@ Next:
 
 ### Guided Load V2
 
-Status: in progress, first smoke-test evidence hook implemented
+Status: in progress, first smoke-test and load-attempt evidence hooks implemented
 
 Goal:
 
@@ -84,11 +84,10 @@ Target scope:
 - Show backend requested vs backend observed after load when possible. V0 post-load notification includes observed backend/context/PID when process evidence is available.
 - Show RAM/swap risk before and after load. V0 estimates planning headroom and context risk from hardware/process/model size data.
 - Offer a small smoke test, not a chat UI. V0 is implemented from the active model panel.
-- Save first evidence hooks for future Run Evidence. V0 stores smoke-test evidence locally.
+- Save first evidence hooks for future Run Evidence. V0 stores smoke-test and load-attempt evidence locally.
 
 Next:
 
-- Store the load attempt summary as a first Run Evidence seed.
 - Surface observed command line/backend details directly in the load result panel instead of only in notification/system view.
 
 ### Diagnostics Bundle V1
@@ -214,7 +213,7 @@ LCC should add:
 
 ### Run Evidence V0
 
-Status: seed implemented for post-load smoke tests
+Status: seed implemented for post-load smoke tests and load attempts
 
 Goal:
 
