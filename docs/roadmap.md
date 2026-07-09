@@ -233,6 +233,42 @@ Initial evidence:
 - relevant logs in the run window
 - JSON/Markdown export
 
+### Backend Readiness And Updates
+
+Goal:
+
+```text
+Show which Lemonade backends are installed, installable, unsupported, or need updates before the user tries to load a model.
+```
+
+Primary source of truth:
+
+- Lemonade `/v1/system-info`
+- `recipes[*].backends[*].state`
+- backend `message`, `action`, `version`, `release_url`, `download_filename`, and `devices`
+
+Observed on Lemonade `10.9.0`:
+
+- `llamacpp:vulkan` can report `installed` with a concrete llama.cpp build version.
+- `llamacpp:rocm` can report `update_required` with an operator action such as `lemonade backends install llamacpp:rocm`.
+- other recipe/backend pairs can report `installable` or `unsupported` with device and OS context.
+
+LCC should add:
+
+- a Backend Readiness panel that summarizes installed, update-required, installable, and unsupported backends;
+- alerts for update-required backends that are relevant to current hardware or selected profiles;
+- clear separation between authoritative readiness data from `/v1/system-info` and historical event evidence from logs;
+- optional links or copied commands from Lemonade's `action` field;
+- diagnostic bundle entries for backend readiness state.
+
+Out of initial scope:
+
+- automatic backend updates;
+- unattended backend install/uninstall;
+- replacing the official backend installer UI.
+
+Future mutating actions may use Lemonade `/v1/install` and `/v1/uninstall`, but they must be gated, explicit, and treated as operator actions.
+
 ### Telemetry Provider Abstraction
 
 Goal:
