@@ -44,6 +44,10 @@ class BenchResult(BaseModel):
     finish_confidence: str = "unknown"
     response_preview: str = ""
     response_full: str = ""
+    reasoning_text: str = ""
+    token_count_source: str = "unavailable"
+    completion_endpoint: str | None = None
+    warnings: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     error: str | None = None
 

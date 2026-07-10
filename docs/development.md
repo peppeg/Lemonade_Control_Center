@@ -90,6 +90,18 @@ After changing backend readiness collection or presentation, verify:
 - New smoke-test Run Evidence records contain the request settings used.
 - Bench Lab quick tests initialize token and temperature controls from the same defaults.
 
+## Completion Runner Checks
+
+Smoke Test and Bench Lab share the core completion transport, but Smoke Test must not depend on the optional Bench router or storage.
+
+- Metadata-only chunks and `delta.content: null` do not fail the stream.
+- Reasoning content is kept separate from final assistant text.
+- Primary endpoint failure falls back from `/api/v1/chat/completions` to `/v1/chat/completions`.
+- HTTP, connection, timeout, protocol, and empty-response failures are returned as structured error kinds.
+- Interrupted streams retain partial output and close the response.
+- Run Evidence reports the completion endpoint and whether token counts came from the API or an estimate.
+- The runner uses the active Lemonade runtime configured in Settings.
+
 ## Local Data
 
 Runtime data is stored under backend-managed data paths and is intentionally excluded from git. Do not commit secrets, local settings, diagnostic bundles, or private planning documents.

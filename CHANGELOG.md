@@ -21,6 +21,7 @@ The project is under active development, so entries currently describe the evolv
 - Typed Backend Readiness API derived from Lemonade system-info, with defensive normalization and state counts.
 - Backend readiness snapshots in diagnostic bundles, including an explicit unavailable state when Lemonade cannot be reached.
 - LCC Workflow Defaults with automatic migration from the previous browser storage key.
+- Core OpenAI-compatible CompletionRunner shared by Smoke Test and Bench Lab, with structured errors, active-runtime routing, reasoning separation, and defensive SSE parsing.
 
 ### Changed
 
@@ -34,6 +35,11 @@ The project is under active development, so entries currently describe the evolv
 - Removed the inert global polling control from Settings; health, dashboard, diagnostics, and hardware retain subsystem-specific refresh behavior.
 - Backend timestamps now use timezone-aware UTC values for current Python compatibility.
 - Renamed local Request Defaults to LCC Workflow Defaults and applied them to smoke-test requests and Bench Lab quick-test initialization.
+- Smoke Test now uses the core CompletionRunner directly; BenchRunner is limited to prompt adaptation, suite orchestration, aggregation, and storage.
+
+### Fixed
+
+- Completion streaming now closes every `httpx` response explicitly and accepts metadata/reasoning chunks where `delta.content` is null.
 
 ## 0.2.0 - 2026-07-09
 

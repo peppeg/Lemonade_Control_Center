@@ -236,6 +236,9 @@ def _run_evidence_summary() -> dict[str, Any]:
                 "total_seconds": item.total_seconds,
                 "finish_reason": item.finish_reason,
                 "finish_confidence": item.finish_confidence,
+                "completion_endpoint": item.completion_endpoint,
+                "completion_error_kind": item.completion_error_kind,
+                "token_count_source": item.token_count_source,
                 "observed_pid": item.observed_pid,
                 "observed_backend": item.observed_backend,
                 "observed_ctx_size": item.observed_ctx_size,
@@ -249,7 +252,7 @@ def _run_evidence_summary() -> dict[str, Any]:
             }
             for item in results[:10]
         ],
-        "omitted_fields": ["prompt", "response_text", "requested_llamacpp_args", "request_stop_sequences"],
+        "omitted_fields": ["prompt", "response_text", "reasoning_text", "requested_llamacpp_args", "request_stop_sequences"],
     }
 
 

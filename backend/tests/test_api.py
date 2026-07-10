@@ -1,6 +1,7 @@
 import pytest
 
 from app.models.schemas import ModelInfo, ModelsListResponse
+from app.dependencies import get_completion_runner
 from app.routers.lemonade import list_models
 from app.services.security import security_status
 
@@ -41,3 +42,12 @@ def test_security_status_for_remote_clients(monkeypatch):
         "blocked": True,
         "mode": "lan",
     }
+
+
+def test_completion_runner_uses_active_provider_url():
+    class Provider:
+        base_url = "http://active-runtime.test:13305"
+
+    runner = get_completion_runner(provider=Provider())
+
+    assert runner.base_url == "http://active-runtime.test:13305"

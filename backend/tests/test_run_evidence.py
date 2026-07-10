@@ -2,8 +2,8 @@ import json
 
 import pytest
 
+from app.models.completions import CompletionError, CompletionResult
 from app.models.schemas import LoadModelRequest, LoadModelResponse, SmokeTestRequest
-from app.services.bench.models import BenchResult
 from app.services.run_evidence import LoadEvidenceRecorder, RunEvidenceStorage, SmokeTestRunner
 
 
@@ -29,6 +29,7 @@ def test_run_evidence_storage_ignores_invalid_records(tmp_path):
         json.dumps(
             [
                 _evidence("valid", "model-a").model_dump(mode="json"),
+                {"id": "legacy", "model_name": "model-a"},
                 {"id": "missing-required-fields"},
                 "not-a-record",
             ]
@@ -38,14 +39,16 @@ def test_run_evidence_storage_ignores_invalid_records(tmp_path):
 
     results = RunEvidenceStorage(path=path).get_all()
 
-    assert [item.id for item in results] == ["valid"]
+    assert [item.id for item in results] == ["valid", "legacy"]
+    assert results[1].completion_endpoint is None
+    assert results[1].token_count_source == "unavailable"
 
 
 @pytest.mark.asyncio
 async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, monkeypatch):
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
-    bench_runner = FakeBenchRunner()
-    runner = SmokeTestRunner(bench_runner=bench_runner, storage=storage)
+    completion_runner = FakeCompletionRunner()
+    runner = SmokeTestRunner(completion_runner=completion_runner, storage=storage)
 
     monkeypatch.setattr(
         "app.services.run_evidence._safe_hardware_snapshot",
@@ -74,6 +77,9 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
     assert response.success is True
     assert response.evidence.model_name == "qwen-coder"
     assert response.evidence.response_text == "LCC_SMOKE_OK"
+    assert response.evidence.reasoning_text == "internal reasoning"
+    assert response.evidence.completion_endpoint == "/v1/chat/completions"
+    assert response.evidence.token_count_source == "api"
     assert response.evidence.observed_pid == 1234
     assert response.evidence.observed_backend == "vulkan"
     assert response.evidence.observed_ctx_size == 65536
@@ -83,11 +89,28 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
     assert response.evidence.request_temperature == 0.25
     assert response.evidence.request_timeout_seconds == 240
     assert response.evidence.request_stop_sequences == ["DONE"]
-    assert bench_runner.last_prompt.max_tokens == 128
-    assert bench_runner.last_prompt.temperature == 0.25
-    assert bench_runner.last_prompt.app_timeout_seconds == 240
-    assert bench_runner.last_prompt.stop_sequences == ["DONE"]
+    assert completion_runner.last_request.max_tokens == 128
+    assert completion_runner.last_request.temperature == 0.25
+    assert completion_runner.last_request.timeout_seconds == 240
+    assert completion_runner.last_request.stop_sequences == ["DONE"]
     assert storage.get_all()[0].id == response.evidence.id
+
+
+@pytest.mark.asyncio
+async def test_smoke_test_runner_stores_structured_completion_failure(tmp_path, monkeypatch):
+    storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
+    completion_runner = FailingCompletionRunner()
+    runner = SmokeTestRunner(completion_runner=completion_runner, storage=storage)
+    monkeypatch.setattr("app.services.run_evidence._safe_hardware_snapshot", lambda: None)
+    monkeypatch.setattr("app.services.run_evidence._safe_process_snapshot", lambda: None)
+
+    response = await runner.run(SmokeTestRequest(model_name="qwen-coder"))
+
+    assert response.success is False
+    assert response.evidence.error == "Completion request timed out."
+    assert response.evidence.completion_error_kind == "timeout"
+    assert response.evidence.response_text == "partial"
+    assert "Smoke request failed" in response.evidence.warnings[0]
 
 
 def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_path, monkeypatch):
@@ -138,26 +161,35 @@ def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_pat
     assert storage.get_all()[0].id == evidence.id
 
 
-class FakeBenchRunner:
+class FakeCompletionRunner:
     def __init__(self):
-        self.last_prompt = None
+        self.last_request = None
 
-    async def run_prompt(self, prompt, model):
-        self.last_prompt = prompt
-        return BenchResult(
-            prompt_id=prompt.id,
-            prompt_name=prompt.name,
-            model=model,
+    async def run(self, request):
+        self.last_request = request
+        return CompletionResult(
+            model=request.model,
+            reasoning_text="internal reasoning",
             input_tokens=6,
             output_tokens=3,
+            token_count_source="api",
             prompt_eval_tps=100.0,
             generation_tps=20.0,
             ttft_seconds=0.2,
             total_seconds=0.4,
             finish_reason="stop",
             finish_confidence="confirmed",
-            response_preview="LCC_SMOKE_OK",
-            response_full="LCC_SMOKE_OK",
+            response_text="LCC_SMOKE_OK",
+            endpoint="/v1/chat/completions",
+        )
+
+
+class FailingCompletionRunner:
+    async def run(self, request):
+        return CompletionResult(
+            model=request.model,
+            response_text="partial",
+            error=CompletionError(kind="timeout", message="Completion request timed out."),
         )
 
 

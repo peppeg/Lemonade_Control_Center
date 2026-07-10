@@ -407,6 +407,7 @@ export interface RunEvidenceSeed {
   model_name: string;
   prompt: string;
   response_text: string;
+  reasoning_text: string;
   success: boolean;
   error: string | null;
   load_message: string | null;
@@ -417,6 +418,9 @@ export interface RunEvidenceSeed {
   request_temperature: number | null;
   request_timeout_seconds: number | null;
   request_stop_sequences: string[];
+  completion_endpoint: string | null;
+  completion_error_kind: string | null;
+  token_count_source: string;
   merge_args: boolean | null;
   save_options: boolean | null;
   input_tokens: number;
@@ -616,6 +620,8 @@ export interface BenchPrompt {
   system_prompt: string;
   max_tokens: number;
   temperature: number;
+  app_timeout_seconds: number;
+  stop_sequences: string[];
   expected_format: string | null;
   tags: string[];
 }
@@ -645,6 +651,10 @@ export interface BenchResult {
   finish_confidence: string;
   response_preview: string;
   response_full: string;
+  reasoning_text: string;
+  token_count_source: string;
+  completion_endpoint: string | null;
+  warnings: string[];
   timestamp: string;
   error: string | null;
 }

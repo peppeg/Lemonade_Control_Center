@@ -149,6 +149,7 @@ class RunEvidenceSeed(BaseModel):
     model_name: str
     prompt: str = ""
     response_text: str = ""
+    reasoning_text: str = ""
     success: bool = False
     error: str | None = None
     load_message: str | None = None
@@ -159,6 +160,9 @@ class RunEvidenceSeed(BaseModel):
     request_temperature: float | None = None
     request_timeout_seconds: int | None = None
     request_stop_sequences: list[str] = Field(default_factory=list)
+    completion_endpoint: str | None = None
+    completion_error_kind: str | None = None
+    token_count_source: str = "unavailable"
     merge_args: bool | None = None
     save_options: bool | None = None
     input_tokens: int = 0
