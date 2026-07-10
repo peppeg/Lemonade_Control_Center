@@ -101,6 +101,15 @@
     const delta = after - before;
     return `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} GB`;
   }
+
+  function logLevelClass(level: string): string {
+    if (level === 'error') return 'text-danger';
+    if (level === 'warning') return 'text-status-warn';
+    if (level === 'performance') return 'text-[#76a9ff]';
+    if (level === 'backend') return 'text-[#7fd7c4]';
+    if (level === 'update') return 'text-[#ffcf7a]';
+    return 'text-status-ok';
+  }
 </script>
 
 <div class="space-y-6">
@@ -266,6 +275,35 @@
               <p class="mt-4 text-sm text-muted-foreground">{selected.load_message ?? selected.error ?? 'No load message recorded.'}</p>
             </section>
           {/if}
+
+          <section>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h4 class="ops-label">Correlated Logs</h4>
+              <span class="ops-badge {selected.log_source === 'journalctl' ? 'ops-badge-ok' : 'ops-badge-danger'}">
+                {selected.log_source}
+              </span>
+            </div>
+            {#if selected.log_window_started_at && selected.log_window_ended_at}
+              <p class="mb-3 text-xs text-muted-foreground">
+                {formatTimestamp(selected.log_window_started_at)} · {formatTimestamp(selected.log_window_ended_at)}
+              </p>
+            {/if}
+            {#if selected.log_entries.length > 0}
+              <div class="ops-terminal max-h-80 overflow-auto p-3 text-xs">
+                {#each selected.log_entries as entry}
+                  <div class="grid min-w-[620px] grid-cols-[210px_90px_1fr] gap-3 px-2 py-0.5">
+                    <span class="text-muted-foreground">{entry.timestamp ? formatTimestamp(entry.timestamp) : 'Unknown time'}</span>
+                    <span class={logLevelClass(entry.level)}>[{entry.level.toUpperCase()}]</span>
+                    <span class="break-words">{entry.message}</span>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <p class="border border-[#34382d] bg-[#111312] p-4 text-sm text-muted-foreground">
+                {selected.log_capture_error ?? 'No log entries were emitted during this run window.'}
+              </p>
+            {/if}
+          </section>
 
           {#if selected.warnings.length > 0}
             <section class="ops-banner text-status-warn">

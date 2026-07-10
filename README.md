@@ -183,7 +183,7 @@ Development keeps Vite and FastAPI separate for faster iteration. The unified ru
 - hardware and process inspection
 - log parsing and metrics collection
 - diagnostics and support bundles
-- local Run Evidence lookup and JSON/Markdown report generation
+- local Run Evidence lookup, operation-window log correlation, and JSON/Markdown report generation
 - shared OpenAI-compatible completion streaming for Smoke Test and optional Bench Lab workflows
 
 ### Frontend responsibilities

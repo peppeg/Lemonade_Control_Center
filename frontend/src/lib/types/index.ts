@@ -439,6 +439,17 @@ export interface RunEvidenceSeed {
   ram_used_after_gb: number | null;
   swap_used_before_gb: number | null;
   swap_used_after_gb: number | null;
+  log_window_started_at: string | null;
+  log_window_ended_at: string | null;
+  log_source: 'journalctl' | 'unavailable' | 'error';
+  log_entries: Array<{
+    timestamp: string | null;
+    level: string;
+    message: string;
+    raw: string;
+    icon: string;
+  }>;
+  log_capture_error: string | null;
   warnings: string[];
   timestamp: string;
 }

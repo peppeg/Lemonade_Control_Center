@@ -142,6 +142,27 @@ class SmokeTestRequest(BaseModel):
     stop_sequences: list[str] = Field(default_factory=list)
 
 
+class LogEntryLevel(str, Enum):
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    UPDATE = "update"
+    BACKEND = "backend"
+    PERFORMANCE = "performance"
+    MODEL = "model"
+    GENERATION = "generation"
+    SLOT = "slot"
+
+
+class LogEntry(BaseModel):
+    """A single parsed log entry."""
+    timestamp: str | None = None
+    level: LogEntryLevel = LogEntryLevel.INFO
+    message: str
+    raw: str
+    icon: str = "ℹ️"
+
+
 class RunEvidenceSeed(BaseModel):
     """Minimal evidence record for one operator-triggered request."""
     id: str
@@ -181,6 +202,11 @@ class RunEvidenceSeed(BaseModel):
     ram_used_after_gb: float | None = None
     swap_used_before_gb: float | None = None
     swap_used_after_gb: float | None = None
+    log_window_started_at: datetime | None = None
+    log_window_ended_at: datetime | None = None
+    log_source: Literal["journalctl", "unavailable", "error"] = "unavailable"
+    log_entries: list[LogEntry] = Field(default_factory=list)
+    log_capture_error: str | None = None
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -373,27 +399,6 @@ class LastTaskStats(BaseModel):
     finish_reason: FinishReason = Field(default_factory=FinishReason)
     truncated: bool | None = None
     raw_log_lines: list[str] = Field(default_factory=list)
-
-
-class LogEntryLevel(str, Enum):
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-    UPDATE = "update"
-    BACKEND = "backend"
-    PERFORMANCE = "performance"
-    MODEL = "model"
-    GENERATION = "generation"
-    SLOT = "slot"
-
-
-class LogEntry(BaseModel):
-    """A single parsed log entry."""
-    timestamp: str | None = None
-    level: LogEntryLevel = LogEntryLevel.INFO
-    message: str
-    raw: str
-    icon: str = "ℹ️"
 
 
 class RecentLogsResponse(BaseModel):

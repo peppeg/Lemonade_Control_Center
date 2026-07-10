@@ -215,7 +215,7 @@ LCC should add:
 
 ### Run Evidence V0
 
-Status: V0 viewer and export implemented; log-window correlation remains
+Status: V0 viewer, export, and log-window correlation implemented; server/profile linkage remains
 
 Goal:
 
@@ -233,7 +233,7 @@ Initial evidence:
 - LCC workflow defaults used for a smoke test. V0 records max tokens, temperature, timeout, and stop sequences; diagnostic summaries omit stop-sequence content.
 - shared completion evidence records endpoint, metric provenance, reasoning separately from final text, protocol warnings, and structured error kinds.
 - list/detail viewer with model, kind, outcome, runtime, request, response, reasoning, and warning inspection. V0 is implemented.
-- relevant logs in the run window. Not yet implemented.
+- relevant Lemonade journal logs in the run window, with explicit unavailable and capture-error states. V0 is implemented.
 - JSON/Markdown export. V0 is implemented per run.
 
 ### Backend Readiness And Updates

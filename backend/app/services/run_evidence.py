@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from app.models.completions import CompletionRequest
 from app.models.schemas import LoadModelRequest, LoadModelResponse, RunEvidenceSeed, SmokeTestRequest, SmokeTestResponse
 from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
+from app.services.log_parser import get_logs_for_window
 from app.services.process import find_llama_server
 
 EVIDENCE_FILE = Path(__file__).parent.parent / "data" / "run_evidence.json"
@@ -146,6 +148,27 @@ def render_evidence_markdown(evidence: RunEvidenceSeed) -> str:
 
     if evidence.error:
         lines.extend(["", "## Error", "", evidence.error])
+    lines.extend(
+        [
+            "",
+            "## Correlated Logs",
+            "",
+            f"- **Source:** {evidence.log_source}",
+            f"- **Window start:** {_format_datetime(evidence.log_window_started_at)}",
+            f"- **Window end:** {_format_datetime(evidence.log_window_ended_at)}",
+        ]
+    )
+    if evidence.log_capture_error:
+        lines.append(f"- **Capture error:** {evidence.log_capture_error}")
+    if evidence.log_entries:
+        lines.extend(["", "```text"])
+        lines.extend(
+            f"{entry.timestamp or 'unknown time'} [{entry.level.value.upper()}] {entry.message}"
+            for entry in evidence.log_entries
+        )
+        lines.append("```")
+    else:
+        lines.extend(["", "No log entries were captured for this run window."])
     if evidence.warnings:
         lines.extend(["", "## Warnings", "", *[f"- {warning}" for warning in evidence.warnings]])
     return "\n".join(lines) + "\n"
@@ -173,6 +196,10 @@ def _format_list(values: list[str]) -> str:
     return ", ".join(f"`{value}`" for value in values) if values else "none"
 
 
+def _format_datetime(value: datetime | None) -> str:
+    return value.isoformat() if value is not None else "unavailable"
+
+
 class SmokeTestRunner:
     """Runs a minimal post-load request and records operator evidence."""
 
@@ -181,11 +208,14 @@ class SmokeTestRunner:
         *,
         completion_runner: CompletionRunner,
         storage: RunEvidenceStorage | None = None,
+        log_collector=None,
     ) -> None:
         self.completion_runner = completion_runner
         self.storage = storage or RunEvidenceStorage()
+        self.log_collector = log_collector or _safe_log_snapshot
 
     async def run(self, request: SmokeTestRequest) -> SmokeTestResponse:
+        started_at = datetime.now(timezone.utc)
         before_hardware = _safe_hardware_snapshot()
         before_process = _safe_process_snapshot()
 
@@ -201,6 +231,8 @@ class SmokeTestRunner:
 
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
+        ended_at = datetime.now(timezone.utc)
+        log_capture = self.log_collector(started_at, ended_at)
         process = after_process or before_process
         warnings: list[str] = []
 
@@ -209,6 +241,8 @@ class SmokeTestRunner:
         warnings.extend(result.warnings)
         if not process:
             warnings.append("No llama-server process evidence was available for this run.")
+        if log_capture["error"]:
+            warnings.append(log_capture["error"])
 
         evidence = RunEvidenceSeed(
             id=str(uuid.uuid4()),
@@ -241,6 +275,11 @@ class SmokeTestRunner:
             ram_used_after_gb=after_hardware["ram_used_gb"] if after_hardware else None,
             swap_used_before_gb=before_hardware["swap_used_gb"] if before_hardware else None,
             swap_used_after_gb=after_hardware["swap_used_gb"] if after_hardware else None,
+            log_window_started_at=started_at,
+            log_window_ended_at=ended_at,
+            log_source=log_capture["source"],
+            log_entries=log_capture["entries"],
+            log_capture_error=log_capture["error"],
             warnings=warnings,
         )
         self.storage.add(evidence)
@@ -255,12 +294,14 @@ class SmokeTestRunner:
 class LoadEvidenceRecorder:
     """Records a load attempt as local operator evidence."""
 
-    def __init__(self, storage: RunEvidenceStorage | None = None) -> None:
+    def __init__(self, storage: RunEvidenceStorage | None = None, log_collector=None) -> None:
         self.storage = storage or RunEvidenceStorage()
+        self.log_collector = log_collector or _safe_log_snapshot
 
     def start(self) -> dict:
         return {
             "started_at": time.monotonic(),
+            "wall_started_at": datetime.now(timezone.utc),
             "hardware": _safe_hardware_snapshot(),
             "process": _safe_process_snapshot(),
         }
@@ -273,8 +314,12 @@ class LoadEvidenceRecorder:
     ) -> RunEvidenceSeed:
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
+        ended_at = datetime.now(timezone.utc)
+        log_capture = self.log_collector(started["wall_started_at"], ended_at)
         process = after_process or started.get("process")
         warnings = _load_warnings(request, response, process)
+        if log_capture["error"]:
+            warnings.append(log_capture["error"])
 
         evidence = RunEvidenceSeed(
             id=str(uuid.uuid4()),
@@ -297,6 +342,11 @@ class LoadEvidenceRecorder:
             ram_used_after_gb=after_hardware["ram_used_gb"] if after_hardware else None,
             swap_used_before_gb=started["hardware"]["swap_used_gb"] if started.get("hardware") else None,
             swap_used_after_gb=after_hardware["swap_used_gb"] if after_hardware else None,
+            log_window_started_at=started["wall_started_at"],
+            log_window_ended_at=ended_at,
+            log_source=log_capture["source"],
+            log_entries=log_capture["entries"],
+            log_capture_error=log_capture["error"],
             warnings=warnings,
         )
         self.storage.add(evidence)
@@ -335,6 +385,28 @@ def _safe_process_snapshot() -> dict | None:
         "rss_gb": info.process.rss_gb,
         "backend": info.params.backend if info.params else None,
         "ctx_size": info.params.ctx_size if info.params else None,
+    }
+
+
+def _safe_log_snapshot(started_at: datetime, ended_at: datetime) -> dict:
+    try:
+        response = get_logs_for_window(started_at, ended_at)
+    except Exception as exc:
+        return {
+            "source": "error",
+            "entries": [],
+            "error": f"Run log capture failed: {exc}",
+        }
+
+    error = None
+    if response.source == "unavailable":
+        error = "Run log capture unavailable; journalctl could not be queried."
+    elif response.source == "error":
+        error = "Run log capture failed; journalctl returned an error."
+    return {
+        "source": response.source,
+        "entries": response.entries,
+        "error": error,
     }
 
 

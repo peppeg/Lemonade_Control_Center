@@ -3,7 +3,7 @@ import json
 import pytest
 
 from app.models.completions import CompletionError, CompletionResult
-from app.models.schemas import LoadModelRequest, LoadModelResponse, SmokeTestRequest
+from app.models.schemas import LoadModelRequest, LoadModelResponse, LogEntry, SmokeTestRequest
 from app.services.run_evidence import (
     LoadEvidenceRecorder,
     RunEvidenceStorage,
@@ -51,6 +51,15 @@ def test_run_evidence_exports_complete_json_and_markdown():
     evidence.reasoning_text = "checked"
     evidence.observed_backend = "vulkan"
     evidence.generation_tps = 12.5
+    evidence.log_source = "journalctl"
+    evidence.log_entries = [
+        LogEntry(
+            timestamp="2026-07-10T12:00:00+00:00",
+            level="performance",
+            message="eval time = 12.5 tokens per second",
+            raw="eval time = 12.5 tokens per second",
+        )
+    ]
     evidence.warnings = ["Token count estimated."]
 
     exported_json = json.loads(render_evidence_json(evidence))
@@ -61,6 +70,8 @@ def test_run_evidence_exports_complete_json_and_markdown():
     assert "# LCC Run Evidence" in exported_markdown
     assert "**Backend:** vulkan" in exported_markdown
     assert "pong" in exported_markdown
+    assert "## Correlated Logs" in exported_markdown
+    assert "[PERFORMANCE] eval time" in exported_markdown
     assert "Token count estimated." in exported_markdown
 
 
@@ -89,7 +100,8 @@ def test_run_evidence_storage_ignores_invalid_records(tmp_path):
 async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, monkeypatch):
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
     completion_runner = FakeCompletionRunner()
-    runner = SmokeTestRunner(completion_runner=completion_runner, storage=storage)
+    logs = FakeLogCollector()
+    runner = SmokeTestRunner(completion_runner=completion_runner, storage=storage, log_collector=logs)
 
     monkeypatch.setattr(
         "app.services.run_evidence._safe_hardware_snapshot",
@@ -130,6 +142,10 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
     assert response.evidence.request_temperature == 0.25
     assert response.evidence.request_timeout_seconds == 240
     assert response.evidence.request_stop_sequences == ["DONE"]
+    assert response.evidence.log_source == "journalctl"
+    assert response.evidence.log_entries[0].message == "request completed"
+    assert response.evidence.log_window_started_at == logs.started_at
+    assert response.evidence.log_window_ended_at == logs.ended_at
     assert completion_runner.last_request.max_tokens == 128
     assert completion_runner.last_request.temperature == 0.25
     assert completion_runner.last_request.timeout_seconds == 240
@@ -141,7 +157,11 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
 async def test_smoke_test_runner_stores_structured_completion_failure(tmp_path, monkeypatch):
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
     completion_runner = FailingCompletionRunner()
-    runner = SmokeTestRunner(completion_runner=completion_runner, storage=storage)
+    runner = SmokeTestRunner(
+        completion_runner=completion_runner,
+        storage=storage,
+        log_collector=FakeLogCollector(source="unavailable"),
+    )
     monkeypatch.setattr("app.services.run_evidence._safe_hardware_snapshot", lambda: None)
     monkeypatch.setattr("app.services.run_evidence._safe_process_snapshot", lambda: None)
 
@@ -152,11 +172,12 @@ async def test_smoke_test_runner_stores_structured_completion_failure(tmp_path, 
     assert response.evidence.completion_error_kind == "timeout"
     assert response.evidence.response_text == "partial"
     assert "Smoke request failed" in response.evidence.warnings[0]
+    assert response.evidence.log_capture_error is not None
 
 
 def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_path, monkeypatch):
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
-    recorder = LoadEvidenceRecorder(storage=storage)
+    recorder = LoadEvidenceRecorder(storage=storage, log_collector=FakeLogCollector())
 
     monkeypatch.setattr(
         "app.services.run_evidence._safe_hardware_snapshot",
@@ -197,6 +218,8 @@ def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_pat
     assert evidence.observed_ctx_size == 32768
     assert evidence.ram_used_before_gb == 50.0
     assert evidence.ram_used_after_gb == 72.0
+    assert evidence.log_source == "journalctl"
+    assert evidence.log_entries[0].message == "request completed"
     assert "Requested backend rocm, observed vulkan." in evidence.warnings
     assert "Requested ctx 65536, observed 32768." in evidence.warnings
     assert storage.get_all()[0].id == evidence.id
@@ -240,6 +263,20 @@ class FakeHardwareSnapshots:
 
     def __call__(self):
         return self.snapshots.pop(0)
+
+
+class FakeLogCollector:
+    def __init__(self, source="journalctl"):
+        self.source = source
+        self.started_at = None
+        self.ended_at = None
+
+    def __call__(self, started_at, ended_at):
+        self.started_at = started_at
+        self.ended_at = ended_at
+        error = None if self.source == "journalctl" else "Run log capture unavailable."
+        entries = [LogEntry(message="request completed", raw="request completed")] if not error else []
+        return {"source": self.source, "entries": entries, "error": error}
 
 
 def _evidence(id_: str, model_name: str):
