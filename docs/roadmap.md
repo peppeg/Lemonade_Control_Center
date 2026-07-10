@@ -215,7 +215,7 @@ LCC should add:
 
 ### Run Evidence V0
 
-Status: seed implemented for post-load smoke tests and load attempts; core completion transport consolidated
+Status: V0 viewer and export implemented; log-window correlation remains
 
 Goal:
 
@@ -232,8 +232,9 @@ Initial evidence:
 - RAM/swap/process snapshot. V0 stores this for smoke tests when available.
 - LCC workflow defaults used for a smoke test. V0 records max tokens, temperature, timeout, and stop sequences; diagnostic summaries omit stop-sequence content.
 - shared completion evidence records endpoint, metric provenance, reasoning separately from final text, protocol warnings, and structured error kinds.
-- relevant logs in the run window
-- JSON/Markdown export
+- list/detail viewer with model, kind, outcome, runtime, request, response, reasoning, and warning inspection. V0 is implemented.
+- relevant logs in the run window. Not yet implemented.
+- JSON/Markdown export. V0 is implemented per run.
 
 ### Backend Readiness And Updates
 

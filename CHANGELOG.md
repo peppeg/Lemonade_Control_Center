@@ -22,6 +22,8 @@ The project is under active development, so entries currently describe the evolv
 - Backend readiness snapshots in diagnostic bundles, including an explicit unavailable state when Lemonade cannot be reached.
 - LCC Workflow Defaults with automatic migration from the previous browser storage key.
 - Core OpenAI-compatible CompletionRunner shared by Smoke Test and Bench Lab, with structured errors, active-runtime routing, reasoning separation, and defensive SSE parsing.
+- Run Evidence workspace with result filters, full record inspection, and per-run JSON or Markdown export.
+- Run Evidence detail and export API endpoints with backend-tested lookup, filtering, and attachment handling.
 
 ### Changed
 

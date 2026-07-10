@@ -183,6 +183,7 @@ Development keeps Vite and FastAPI separate for faster iteration. The unified ru
 - hardware and process inspection
 - log parsing and metrics collection
 - diagnostics and support bundles
+- local Run Evidence lookup and JSON/Markdown report generation
 - shared OpenAI-compatible completion streaming for Smoke Test and optional Bench Lab workflows
 
 ### Frontend responsibilities
@@ -192,6 +193,7 @@ Development keeps Vite and FastAPI separate for faster iteration. The unified ru
 - model-management workflows
 - configuration and profile editing
 - logs, diagnostics, and settings
+- Run Evidence filtering, detail inspection, and report download
 - confirmations, warnings, and live feedback
 
 ## Requirements

@@ -4,7 +4,13 @@ import pytest
 
 from app.models.completions import CompletionError, CompletionResult
 from app.models.schemas import LoadModelRequest, LoadModelResponse, SmokeTestRequest
-from app.services.run_evidence import LoadEvidenceRecorder, RunEvidenceStorage, SmokeTestRunner
+from app.services.run_evidence import (
+    LoadEvidenceRecorder,
+    RunEvidenceStorage,
+    SmokeTestRunner,
+    render_evidence_json,
+    render_evidence_markdown,
+)
 
 
 def test_run_evidence_storage_filters_and_keeps_newest(tmp_path):
@@ -21,6 +27,41 @@ def test_run_evidence_storage_filters_and_keeps_newest(tmp_path):
     all_results = storage.get_all()
     assert [item.id for item in all_results] == ["third", "second"]
     assert [item.id for item in storage.get_all(model_name="model-a")] == ["third"]
+
+
+def test_run_evidence_storage_filters_and_gets_by_id(tmp_path):
+    storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
+    passed_smoke = _evidence("smoke", "model-a")
+    passed_smoke.success = True
+    failed_load = _evidence("load", "model-a")
+    failed_load.kind = "load_attempt"
+    storage.add(passed_smoke)
+    storage.add(failed_load)
+
+    assert [item.id for item in storage.get_all(kind="smoke_test")] == ["smoke"]
+    assert [item.id for item in storage.get_all(success=False)] == ["load"]
+    assert storage.get("smoke") == passed_smoke
+    assert storage.get("missing") is None
+
+
+def test_run_evidence_exports_complete_json_and_markdown():
+    evidence = _evidence("evidence-1", "qwen-coder")
+    evidence.success = True
+    evidence.response_text = "pong"
+    evidence.reasoning_text = "checked"
+    evidence.observed_backend = "vulkan"
+    evidence.generation_tps = 12.5
+    evidence.warnings = ["Token count estimated."]
+
+    exported_json = json.loads(render_evidence_json(evidence))
+    exported_markdown = render_evidence_markdown(evidence)
+
+    assert exported_json["id"] == "evidence-1"
+    assert exported_json["response_text"] == "pong"
+    assert "# LCC Run Evidence" in exported_markdown
+    assert "**Backend:** vulkan" in exported_markdown
+    assert "pong" in exported_markdown
+    assert "Token count estimated." in exported_markdown
 
 
 def test_run_evidence_storage_ignores_invalid_records(tmp_path):

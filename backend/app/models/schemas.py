@@ -195,6 +195,7 @@ class SmokeTestResponse(BaseModel):
 class RunEvidenceListResponse(BaseModel):
     """Stored local run evidence seeds."""
     results: list[RunEvidenceSeed] = Field(default_factory=list)
+    total: int = 0
 
 
 class PullModelRequest(BaseModel):

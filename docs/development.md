@@ -102,6 +102,14 @@ Smoke Test and Bench Lab share the core completion transport, but Smoke Test mus
 - Run Evidence reports the completion endpoint and whether token counts came from the API or an estimate.
 - The runner uses the active Lemonade runtime configured in Settings.
 
+## Run Evidence Manual Check
+
+- Smoke tests and load attempts appear under Run Evidence with the newest record first.
+- Kind, result, and text filters keep the selected detail consistent with the visible list.
+- Smoke-test detail shows request settings, prompt, response, separate reasoning, metrics, and runtime evidence.
+- Load-attempt detail shows requested and observed load state without completion-only fields.
+- JSON and Markdown downloads contain the selected complete record and use a safe attachment filename.
+
 ## Local Data
 
 Runtime data is stored under backend-managed data paths and is intentionally excluded from git. Do not commit secrets, local settings, diagnostic bundles, or private planning documents.

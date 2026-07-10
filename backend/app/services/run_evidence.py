@@ -33,7 +33,12 @@ class RunEvidenceStorage:
             encoding="utf-8",
         )
 
-    def get_all(self, model_name: str | None = None) -> list[RunEvidenceSeed]:
+    def get_all(
+        self,
+        model_name: str | None = None,
+        kind: str | None = None,
+        success: bool | None = None,
+    ) -> list[RunEvidenceSeed]:
         if not self.path.exists():
             return []
         try:
@@ -52,7 +57,120 @@ class RunEvidenceStorage:
                 continue
         if model_name:
             results = [item for item in results if item.model_name == model_name]
+        if kind:
+            results = [item for item in results if item.kind == kind]
+        if success is not None:
+            results = [item for item in results if item.success is success]
         return results[: self.max_results]
+
+    def get(self, evidence_id: str) -> RunEvidenceSeed | None:
+        return next((item for item in self.get_all() if item.id == evidence_id), None)
+
+
+def render_evidence_json(evidence: RunEvidenceSeed) -> str:
+    """Render one complete evidence record for local export."""
+    return json.dumps(evidence.model_dump(mode="json"), indent=2)
+
+
+def render_evidence_markdown(evidence: RunEvidenceSeed) -> str:
+    """Render one evidence record as a readable operator report."""
+    outcome = "passed" if evidence.success else "failed"
+    lines = [
+        "# LCC Run Evidence",
+        "",
+        f"- **ID:** `{evidence.id}`",
+        f"- **Timestamp:** {evidence.timestamp.isoformat()}",
+        f"- **Kind:** {evidence.kind}",
+        f"- **Outcome:** {outcome}",
+        f"- **Model:** `{evidence.model_name}`",
+        "",
+        "## Runtime",
+        "",
+        f"- **Backend:** {evidence.observed_backend or 'unavailable'}",
+        f"- **Context:** {evidence.observed_ctx_size or 'unavailable'}",
+        f"- **PID:** {evidence.observed_pid or 'unavailable'}",
+        f"- **Process RSS:** {_format_gb(evidence.process_rss_gb)}",
+        f"- **RAM used:** {_format_gb(evidence.ram_used_before_gb)} before / {_format_gb(evidence.ram_used_after_gb)} after",
+        f"- **Swap used:** {_format_gb(evidence.swap_used_before_gb)} before / {_format_gb(evidence.swap_used_after_gb)} after",
+        f"- **Duration:** {evidence.total_seconds:.3f} s",
+    ]
+
+    if evidence.kind == "smoke_test":
+        lines.extend(
+            [
+                "",
+                "## Completion",
+                "",
+                f"- **Endpoint:** {evidence.completion_endpoint or 'unavailable'}",
+                f"- **TTFT:** {evidence.ttft_seconds:.3f} s",
+                f"- **Prompt evaluation:** {evidence.prompt_eval_tps:.2f} tok/s",
+                f"- **Generation:** {evidence.generation_tps:.2f} tok/s",
+                f"- **Tokens:** {evidence.input_tokens} input / {evidence.output_tokens} output",
+                f"- **Token source:** {evidence.token_count_source}",
+                f"- **Finish:** {evidence.finish_reason} ({evidence.finish_confidence})",
+                f"- **Error kind:** {evidence.completion_error_kind or 'none'}",
+                f"- **Max tokens:** {evidence.request_max_tokens or 'unavailable'}",
+                f"- **Temperature:** {_format_optional(evidence.request_temperature)}",
+                f"- **Timeout:** {_format_seconds(evidence.request_timeout_seconds)}",
+                f"- **Stop sequences:** {_format_list(evidence.request_stop_sequences)}",
+                "",
+                "## Prompt",
+                "",
+                "```text",
+                evidence.prompt,
+                "```",
+                "",
+                "## Response",
+                "",
+                "```text",
+                evidence.response_text,
+                "```",
+            ]
+        )
+        if evidence.reasoning_text:
+            lines.extend(["", "## Reasoning", "", "```text", evidence.reasoning_text, "```"])
+    else:
+        lines.extend(
+            [
+                "",
+                "## Load Request",
+                "",
+                f"- **Requested backend:** {evidence.requested_backend or 'default'}",
+                f"- **Requested context:** {evidence.requested_ctx_size or 'default'}",
+                f"- **Merge args:** {_format_bool(evidence.merge_args)}",
+                f"- **Save options:** {_format_bool(evidence.save_options)}",
+                f"- **Message:** {evidence.load_message or 'unavailable'}",
+                f"- **llama.cpp args:** {evidence.requested_llamacpp_args or 'none'}",
+            ]
+        )
+
+    if evidence.error:
+        lines.extend(["", "## Error", "", evidence.error])
+    if evidence.warnings:
+        lines.extend(["", "## Warnings", "", *[f"- {warning}" for warning in evidence.warnings]])
+    return "\n".join(lines) + "\n"
+
+
+def _format_gb(value: float | None) -> str:
+    return f"{value:.2f} GB" if value is not None else "unavailable"
+
+
+def _format_bool(value: bool | None) -> str:
+    if value is None:
+        return "unavailable"
+    return "yes" if value else "no"
+
+
+def _format_optional(value: float | None) -> str:
+    return str(value) if value is not None else "unavailable"
+
+
+def _format_seconds(value: int | None) -> str:
+    return f"{value} s" if value is not None else "unavailable"
+
+
+def _format_list(values: list[str]) -> str:
+    return ", ".join(f"`{value}`" for value in values) if values else "none"
 
 
 class SmokeTestRunner:
