@@ -8,13 +8,10 @@
   import { connectionStatus } from '$lib/stores/connection';
   import { AlertTriangle, Check, Clock3, Cpu, HardDrive, Info, PackageCheck, RefreshCw, Server, TimerReset } from 'lucide-svelte';
   import DiagnosticsPanel from '$lib/components/diagnostics/DiagnosticsPanel.svelte';
-  import type { HardwareInfo, LastTaskInfo, LoadedModelInfo, ServerStatus } from '$lib/types';
+  import type { BackendReadinessResponse, HardwareInfo, LastTaskInfo, LoadedModelInfo, ServerStatus } from '$lib/types';
   import {
-    backendReadinessCounts,
     backendStateBadgeClass,
     backendStateLabel,
-    extractBackendReadiness,
-    type BackendReadinessItem,
   } from '$lib/utils/backendReadiness';
   import { formatDuration, formatNumber, formatPercent, formatTPS } from '$lib/utils/format';
 
@@ -25,12 +22,11 @@
   $: lastTask = data.lastTask;
   $: isLoading = $dashboardLoading === 'loading';
   $: readiness = $connectionStatus === 'connected' ? 'Connected' : $connectionStatus === 'degraded' ? 'Degraded' : $connectionStatus === 'checking' ? 'Checking' : 'Offline';
-  let backendItems: BackendReadinessItem[] = [];
+  let backendReadiness: BackendReadinessResponse | null = null;
+  let backendReadinessLoading = true;
   let backendReadinessError: string | null = null;
-  $: backendCounts = backendReadinessCounts(backendItems);
-  $: backendHighlights = backendItems
-    .filter((item) => item.state === 'update_required' || item.state === 'installed')
-    .slice(0, 3);
+  $: backendCounts = backendReadiness?.counts;
+  $: backendHighlights = backendReadiness?.items.slice(0, 3) ?? [];
 
   onMount(() => {
     startDashboardPolling(30_000);
@@ -71,14 +67,16 @@
   }
 
   async function refreshBackendReadiness() {
+    backendReadinessLoading = true;
     backendReadinessError = null;
-    const result = await api.lemonade.systemInfo();
+    const result = await api.lemonade.backendReadiness();
     if (result.ok) {
-      backendItems = extractBackendReadiness(result.data);
+      backendReadiness = result.data;
     } else {
       backendReadinessError = result.error;
-      backendItems = [];
+      backendReadiness = null;
     }
+    backendReadinessLoading = false;
   }
 </script>
 
@@ -245,26 +243,34 @@
         <div>
           <h2 class="ops-title">Backend Readiness</h2>
           <p class="ops-subtitle">
-            {backendReadinessError
+            {backendReadinessLoading
+              ? 'Loading authoritative Lemonade backend state'
+              : backendReadinessError
               ? 'Backend readiness unavailable'
-              : `${backendCounts.installed} installed, ${backendCounts.updateRequired} update required, ${backendCounts.installable} installable`}
+              : backendReadiness && !backendReadiness.available
+                ? backendReadiness.message
+                : `${backendCounts?.installed ?? 0} installed, ${backendCounts?.update_required ?? 0} update required, ${backendCounts?.installable ?? 0} installable`}
           </p>
         </div>
       </div>
       <a class="text-sm text-lemon hover:text-lemon-light" href="/backends">View all</a>
     </div>
     <div class="grid gap-3 p-4 md:grid-cols-3">
-      {#if backendReadinessError}
+      {#if backendReadinessLoading}
+        <p class="text-sm text-muted-foreground">Loading backend readiness...</p>
+      {:else if backendReadinessError}
         <p class="text-sm text-status-warn">{backendReadinessError}</p>
+      {:else if backendReadiness && !backendReadiness.available}
+        <p class="text-sm text-status-warn">{backendReadiness.message}</p>
       {:else if backendHighlights.length === 0}
-        <p class="text-sm text-muted-foreground">No backend readiness data available.</p>
+        <p class="text-sm text-muted-foreground">Lemonade reported no backend readiness entries.</p>
       {:else}
         {#each backendHighlights as item}
           <div class="rounded border border-[#34382d] bg-[#111312] p-3">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="truncate font-semibold">{item.recipeName}</p>
-                <p class="mt-1 text-xs text-muted-foreground">{item.backendKey}{item.version ? ` · ${item.version}` : ''}</p>
+                <p class="truncate font-semibold">{item.recipe_name}</p>
+                <p class="mt-1 text-xs text-muted-foreground">{item.backend_key}{item.version ? ` · ${item.version}` : ''}</p>
               </div>
               <span class="ops-badge {backendStateBadgeClass(item.state)}">{backendStateLabel(item.state)}</span>
             </div>

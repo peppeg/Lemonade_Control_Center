@@ -1,7 +1,7 @@
 """Pydantic schemas for the diagnostic engine."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 
@@ -31,7 +31,7 @@ class DiagnosticAlert(BaseModel):
     impact: str
     suggestion: str
     evidence: dict = Field(default_factory=dict)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: AlertStatus = AlertStatus.active
 
 
@@ -45,7 +45,7 @@ class RuleResult(BaseModel):
 
 
 class DiagnosticReport(BaseModel):
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     total_rules: int
     passed: int
     warnings: int

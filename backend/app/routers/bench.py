@@ -1,16 +1,17 @@
 """Bench Lab endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 
+from app.dependencies import get_completion_runner
 from app.services.bench.models import BenchPrompt, BenchRunRequest
 from app.services.bench.runner import BenchRunner
 from app.services.bench.storage import BenchStorage
 from app.services.bench.suites import SUITES
+from app.services.completion_runner import CompletionRunner
 
 router = APIRouter(prefix="/api/bench", tags=["bench"])
-runner = BenchRunner()
 storage = BenchStorage()
 
 
@@ -20,7 +21,11 @@ async def list_suites():
 
 
 @router.post("/run")
-async def run_bench(request: BenchRunRequest):
+async def run_bench(
+    request: BenchRunRequest,
+    completion_runner: CompletionRunner = Depends(get_completion_runner),
+):
+    runner = BenchRunner(completion_runner)
     if request.suite_id:
         if request.suite_id not in SUITES:
             raise HTTPException(404, f"Suite '{request.suite_id}' not found")

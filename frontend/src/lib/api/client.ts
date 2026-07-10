@@ -27,6 +27,7 @@ import type {
   SystemConfig,
   AlertHistoryEntry,
   BenchResult,
+  BackendReadinessResponse,
   BenchStoredResult,
   BenchSuite,
   DiagnosticReport,
@@ -160,6 +161,7 @@ export const api = {
     health: () => get<LemonadeHealth>('/lemonade/health'),
     stats: () => get<Record<string, unknown>>('/lemonade/stats'),
     systemInfo: () => get<Record<string, unknown>>('/lemonade/system-info'),
+    backendReadiness: () => get<BackendReadinessResponse>('/lemonade/backend-readiness'),
     models: (catalog = false) => get<{ models: unknown[]; source: string }>(`/lemonade/models${catalog ? '?catalog=true' : ''}`),
     running: () => get<{ models: unknown[] }>('/lemonade/running'),
     savedOptions: (modelName?: string) =>
@@ -173,7 +175,7 @@ export const api = {
       merge_args?: boolean;
       save_options?: boolean;
     }) => post<{ success: boolean; message: string; evidence?: RunEvidenceSeed | null }>('/lemonade/load', body),
-    smokeTest: (body: { model_name: string; prompt?: string; max_tokens?: number; temperature?: number }) =>
+    smokeTest: (body: { model_name: string; prompt?: string; max_tokens?: number; temperature?: number; app_timeout_seconds?: number; stop_sequences?: string[] }) =>
       post<SmokeTestResponse>('/lemonade/smoke-test', body),
     runEvidence: (modelName?: string) =>
       get<{ results: RunEvidenceSeed[] }>(`/lemonade/run-evidence${modelName ? `?model_name=${enc(modelName)}` : ''}`),

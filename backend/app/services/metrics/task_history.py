@@ -6,7 +6,7 @@ import io
 import json
 from collections import deque
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.capabilities import capabilities
@@ -52,7 +52,7 @@ class TaskHistory:
         if key in self._seen_keys:
             return
         record = TaskRecord(
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             model="current",
             input_tokens=task.input_tokens or 0,
             output_tokens=task.output_tokens or 0,

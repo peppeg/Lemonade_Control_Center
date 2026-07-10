@@ -50,7 +50,6 @@
   let removingRuntimeId: string | null = null;
   let savingRuntime = false;
   let savingSystem = false;
-  let savingAppearance = false;
   let editingRuntimeId: string | 'new' | null = null;
   let runtimeForm: RuntimeConfigRequest = emptyRuntimeForm();
   let runtimeSecret = '';
@@ -139,18 +138,6 @@
       notify.error('System settings failed', result.error);
     }
     savingSystem = false;
-  }
-
-  async function saveAppearance() {
-    savingAppearance = true;
-    const result = await api.settings.updateAppearance(appearanceForm);
-    if (result.ok) {
-      applyConfig(result.data);
-      notify.success('Appearance settings saved', appearanceForm.theme);
-    } else {
-      notify.error('Appearance settings failed', result.error);
-    }
-    savingAppearance = false;
   }
 
   function statusClass(runtime: RuntimeConfigPublic): string {
@@ -819,13 +806,6 @@
               <option value="green">green</option>
             </select>
           </label>
-          <label class="block space-y-2">
-            <span class="ops-label">polling interval (seconds)</span>
-            <input class="ops-input" type="number" min="2" max="60" bind:value={appearanceForm.polling_interval_s} />
-          </label>
-          <button class="ops-button ops-button-primary" type="button" on:click={saveAppearance} disabled={savingAppearance}>
-            {savingAppearance ? 'Saving' : 'Save Appearance'}
-          </button>
         </div>
       </section>
     {:else}

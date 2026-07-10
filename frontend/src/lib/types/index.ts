@@ -45,6 +45,37 @@ export interface Capabilities {
   probe_timestamp: string | null;
 }
 
+export interface BackendReadinessItem {
+  recipe_key: string;
+  recipe_name: string;
+  backend_key: string;
+  state: string;
+  version: string | null;
+  message: string;
+  action: string;
+  devices: string[];
+  release_url: string | null;
+  download_filename: string | null;
+  experimental: boolean;
+}
+
+export interface BackendReadinessCounts {
+  installed: number;
+  update_required: number;
+  installable: number;
+  unsupported: number;
+  other: number;
+}
+
+export interface BackendReadinessResponse {
+  status: 'ready' | 'empty' | 'degraded' | 'unavailable';
+  available: boolean;
+  source: 'lemonade_system_info';
+  message: string;
+  counts: BackendReadinessCounts;
+  items: BackendReadinessItem[];
+}
+
 // ── Navigation ──
 
 export interface NavItem {
@@ -376,12 +407,20 @@ export interface RunEvidenceSeed {
   model_name: string;
   prompt: string;
   response_text: string;
+  reasoning_text: string;
   success: boolean;
   error: string | null;
   load_message: string | null;
   requested_backend: string | null;
   requested_ctx_size: number | null;
   requested_llamacpp_args: string | null;
+  request_max_tokens: number | null;
+  request_temperature: number | null;
+  request_timeout_seconds: number | null;
+  request_stop_sequences: string[];
+  completion_endpoint: string | null;
+  completion_error_kind: string | null;
+  token_count_source: string;
   merge_args: boolean | null;
   save_options: boolean | null;
   input_tokens: number;
@@ -581,6 +620,8 @@ export interface BenchPrompt {
   system_prompt: string;
   max_tokens: number;
   temperature: number;
+  app_timeout_seconds: number;
+  stop_sequences: string[];
   expected_format: string | null;
   tags: string[];
 }
@@ -610,6 +651,10 @@ export interface BenchResult {
   finish_confidence: string;
   response_preview: string;
   response_full: string;
+  reasoning_text: string;
+  token_count_source: string;
+  completion_endpoint: string | null;
+  warnings: string[];
   timestamp: string;
   error: string | null;
 }

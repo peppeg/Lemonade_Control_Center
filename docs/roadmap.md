@@ -192,7 +192,7 @@ Examples:
 - Agent fallback
 - Stress test
 
-Profiles should connect model, target server, load options, request defaults, notes, known caveats, and last useful result.
+Profiles should connect model, target server, load options, LCC workflow defaults, notes, known caveats, and last useful result. Workflow defaults apply only to requests initiated by LCC; external clients retain their own request configuration.
 
 ### Hugging Face Model Intake
 
@@ -215,7 +215,7 @@ LCC should add:
 
 ### Run Evidence V0
 
-Status: seed implemented for post-load smoke tests and load attempts
+Status: seed implemented for post-load smoke tests and load attempts; core completion transport consolidated
 
 Goal:
 
@@ -230,10 +230,14 @@ Initial evidence:
 - TTFT, tokens/sec, token counts. V0 stores this for smoke tests.
 - finish reason and truncation confidence. V0 stores this for smoke tests.
 - RAM/swap/process snapshot. V0 stores this for smoke tests when available.
+- LCC workflow defaults used for a smoke test. V0 records max tokens, temperature, timeout, and stop sequences; diagnostic summaries omit stop-sequence content.
+- shared completion evidence records endpoint, metric provenance, reasoning separately from final text, protocol warnings, and structured error kinds.
 - relevant logs in the run window
 - JSON/Markdown export
 
 ### Backend Readiness And Updates
+
+Status: P1 V1 implemented; hardware/profile relevance remains a follow-up
 
 Goal:
 
@@ -253,13 +257,18 @@ Observed on Lemonade `10.9.0`:
 - `llamacpp:rocm` can report `update_required` with an operator action such as `lemonade backends install llamacpp:rocm`.
 - other recipe/backend pairs can report `installable` or `unsupported` with device and OS context.
 
-LCC should add:
+V1 includes:
 
-- a Backend Readiness panel that summarizes installed, update-required, installable, and unsupported backends;
-- alerts for update-required backends that are relevant to current hardware or selected profiles;
-- clear separation between authoritative readiness data from `/v1/system-info` and historical event evidence from logs;
-- optional links or copied commands from Lemonade's `action` field;
-- diagnostic bundle entries for backend readiness state.
+- a backend-owned, typed normalization layer for `/v1/system-info` readiness data;
+- a Dashboard summary and dedicated Backends page for installed, update-required, installable, unsupported, and unknown states;
+- clear separation between authoritative readiness data and historical backend/update events in logs;
+- release links, download filenames, and copied operator commands when Lemonade provides them;
+- a best-effort `backend_readiness.json` entry in diagnostic bundles.
+
+Follow-up scope:
+
+- rank or alert update-required backends by relevance to current hardware and selected workflow profiles;
+- preserve dated compatibility fixtures when Lemonade changes the system-info contract.
 
 Out of initial scope:
 

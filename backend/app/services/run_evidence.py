@@ -8,9 +8,9 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from app.models.completions import CompletionRequest
 from app.models.schemas import LoadModelRequest, LoadModelResponse, RunEvidenceSeed, SmokeTestRequest, SmokeTestResponse
-from app.services.bench.models import BenchPrompt
-from app.services.bench.runner import BenchRunner
+from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
 from app.services.process import find_llama_server
 
@@ -61,34 +61,34 @@ class SmokeTestRunner:
     def __init__(
         self,
         *,
-        bench_runner: BenchRunner | None = None,
+        completion_runner: CompletionRunner,
         storage: RunEvidenceStorage | None = None,
     ) -> None:
-        self.bench_runner = bench_runner or BenchRunner()
+        self.completion_runner = completion_runner
         self.storage = storage or RunEvidenceStorage()
 
     async def run(self, request: SmokeTestRequest) -> SmokeTestResponse:
         before_hardware = _safe_hardware_snapshot()
         before_process = _safe_process_snapshot()
 
-        prompt = BenchPrompt(
-            id="post_load_smoke",
-            name="Post-load Smoke Test",
+        completion_request = CompletionRequest(
+            model=request.model_name,
             prompt=request.prompt,
             max_tokens=request.max_tokens,
             temperature=request.temperature,
-            expected_format="text",
-            tags=["smoke", "run-evidence"],
+            timeout_seconds=request.app_timeout_seconds,
+            stop_sequences=request.stop_sequences,
         )
-        result = await self.bench_runner.run_prompt(prompt, request.model_name)
+        result = await self.completion_runner.run(completion_request)
 
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
         process = after_process or before_process
         warnings: list[str] = []
 
-        if result.error:
+        if not result.success:
             warnings.append("Smoke request failed; check Lemonade health, loaded model state, and logs.")
+        warnings.extend(result.warnings)
         if not process:
             warnings.append("No llama-server process evidence was available for this run.")
 
@@ -96,9 +96,17 @@ class SmokeTestRunner:
             id=str(uuid.uuid4()),
             model_name=request.model_name,
             prompt=request.prompt,
-            response_text=result.response_full,
-            success=result.error is None,
-            error=result.error,
+            response_text=result.response_text,
+            reasoning_text=result.reasoning_text,
+            success=result.success,
+            error=result.error.message if result.error else None,
+            completion_error_kind=result.error.kind if result.error else None,
+            completion_endpoint=result.endpoint,
+            token_count_source=result.token_count_source,
+            request_max_tokens=request.max_tokens,
+            request_temperature=request.temperature,
+            request_timeout_seconds=request.app_timeout_seconds,
+            request_stop_sequences=request.stop_sequences,
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
             prompt_eval_tps=result.prompt_eval_tps,

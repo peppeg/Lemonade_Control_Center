@@ -61,6 +61,8 @@ class AppearanceConfig(BaseModel):
 
     theme: Theme = "dark"
     accent_color: str = "lemon"
+    # Retained only so existing config files continue to validate. Polling is
+    # intentionally controlled per subsystem rather than by one global value.
     polling_interval_s: int = 5
     sidebar_position: SidebarPosition = "left"
 

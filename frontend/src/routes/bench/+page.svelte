@@ -16,6 +16,7 @@
     runSuiteBench,
   } from '$lib/stores/bench';
   import type { BenchStoredResult } from '$lib/types';
+  import { loadWorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   type Tab = 'quick' | 'suites' | 'results' | 'compare';
   let tab: Tab = 'quick';
@@ -26,6 +27,9 @@
   let temperature = 0.3;
 
   onMount(() => {
+    const defaults = loadWorkflowDefaults();
+    maxTokens = defaults.maxOutputTokens;
+    temperature = defaults.temperature;
     refreshModels();
     loadBenchData();
   });

@@ -19,6 +19,7 @@ from app.services.hardware import get_hardware_info, get_temperatures
 from app.services.log_parser import get_recent_logs, parse_last_task
 from app.services.process import find_llama_server, get_service_status
 from app.services.run_evidence import RunEvidenceStorage
+from app.services.backend_readiness import collect_backend_readiness, unavailable_backend_readiness
 from app.services.setup import SetupService
 
 
@@ -122,6 +123,7 @@ class DiagnosticBundleBuilder:
         self._collect_sync("service_status.json", lambda: get_service_status(timeout=2))
         self._collect_sync("last_task.json", lambda: parse_last_task(n_lines=120, timeout=3))
         self._collect_sync("run_evidence_summary.json", _run_evidence_summary)
+        await self._collect_backend_readiness()
 
         try:
             logs = get_recent_logs(n_lines=250, timeout=3)
@@ -155,6 +157,17 @@ class DiagnosticBundleBuilder:
             self.add_json(name, func())
         except Exception as exc:
             self.errors[name] = str(exc)
+
+    async def _collect_backend_readiness(self) -> None:
+        name = "backend_readiness.json"
+        try:
+            from app.dependencies import get_provider
+
+            readiness = await collect_backend_readiness(get_provider())
+        except Exception as exc:
+            self.errors[name] = str(exc)
+            readiness = unavailable_backend_readiness(str(exc))
+        self.add_json(name, readiness)
 
     def _manifest(self) -> dict[str, Any]:
         return {
@@ -211,6 +224,9 @@ def _run_evidence_summary() -> dict[str, Any]:
                 "load_message": item.load_message,
                 "requested_backend": item.requested_backend,
                 "requested_ctx_size": item.requested_ctx_size,
+                "request_max_tokens": item.request_max_tokens,
+                "request_temperature": item.request_temperature,
+                "request_timeout_seconds": item.request_timeout_seconds,
                 "merge_args": item.merge_args,
                 "save_options": item.save_options,
                 "input_tokens": item.input_tokens,
@@ -220,6 +236,9 @@ def _run_evidence_summary() -> dict[str, Any]:
                 "total_seconds": item.total_seconds,
                 "finish_reason": item.finish_reason,
                 "finish_confidence": item.finish_confidence,
+                "completion_endpoint": item.completion_endpoint,
+                "completion_error_kind": item.completion_error_kind,
+                "token_count_source": item.token_count_source,
                 "observed_pid": item.observed_pid,
                 "observed_backend": item.observed_backend,
                 "observed_ctx_size": item.observed_ctx_size,
@@ -233,7 +252,7 @@ def _run_evidence_summary() -> dict[str, Any]:
             }
             for item in results[:10]
         ],
-        "omitted_fields": ["prompt", "response_text", "requested_llamacpp_args"],
+        "omitted_fields": ["prompt", "response_text", "reasoning_text", "requested_llamacpp_args", "request_stop_sequences"],
     }
 
 

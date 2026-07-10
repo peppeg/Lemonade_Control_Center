@@ -13,6 +13,7 @@
   import { notify } from '$lib/stores/notifications';
   import type { ModelEntry, RunEvidenceSeed } from '$lib/types';
   import { formatGB } from '$lib/utils/format';
+  import { loadWorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   let isRefreshing = false;
   let filter = '';
@@ -88,7 +89,14 @@
     if (!modelName) return;
     smokeRunning = true;
     try {
-      const result = await api.lemonade.smokeTest({ model_name: modelName });
+      const defaults = loadWorkflowDefaults();
+      const result = await api.lemonade.smokeTest({
+        model_name: modelName,
+        max_tokens: Math.min(defaults.maxOutputTokens, 256),
+        temperature: defaults.temperature,
+        app_timeout_seconds: defaults.appTimeoutSeconds,
+        stop_sequences: defaults.stopSequences,
+      });
       if (result.ok) {
         latestSmoke = result.data.evidence;
         if (result.data.success) {
@@ -192,12 +200,15 @@
               <span class="ops-badge {latestSmoke.success ? 'ops-badge-ok' : 'ops-badge-danger'}">
                 {latestSmoke.success ? 'passed' : 'failed'}
               </span>
+              {#if latestSmoke.completion_error_kind}
+                <span class="ops-badge ops-badge-danger">{latestSmoke.completion_error_kind}</span>
+              {/if}
             </div>
             <p class="ops-muted mt-2 break-all text-sm">{latestSmoke.response_text || latestSmoke.error || 'No response text captured.'}</p>
           </div>
           <span class="ops-muted text-xs">{new Date(latestSmoke.timestamp).toLocaleString()}</span>
         </div>
-        <dl class="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4 xl:grid-cols-8">
+        <dl class="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4 xl:grid-cols-10">
           <div>
             <dt class="ops-label">TTFT</dt>
             <dd class="ops-value mt-1">{latestSmoke.ttft_seconds.toFixed(3)}s</dd>
@@ -233,6 +244,14 @@
                 ? `${(latestSmoke.ram_used_after_gb - latestSmoke.ram_used_before_gb).toFixed(1)} GB`
                 : 'unknown'}
             </dd>
+          </div>
+          <div>
+            <dt class="ops-label">endpoint</dt>
+            <dd class="ops-value mt-1 break-all">{latestSmoke.completion_endpoint ?? 'unknown'}</dd>
+          </div>
+          <div>
+            <dt class="ops-label">token source</dt>
+            <dd class="ops-value mt-1">{latestSmoke.token_count_source}</dd>
           </div>
         </dl>
         {#if latestSmoke.warnings.length > 0}

@@ -6,8 +6,9 @@ isn't available, the provider raises a clean 501 error.
 """
 from fastapi import APIRouter, Depends, Query
 
-from app.dependencies import get_provider
+from app.dependencies import get_completion_runner, get_provider
 from app.providers.lemonade import LemonadeProvider
+from app.models.backend_readiness import BackendReadinessResponse
 from app.models.schemas import (
     LemonadeHealthResponse,
     LemonadeStatsResponse,
@@ -27,6 +28,8 @@ from app.models.schemas import (
     ConfigUpdateRequest,
 )
 from app.services.lemonade_options import read_saved_options
+from app.services.backend_readiness import collect_backend_readiness
+from app.services.completion_runner import CompletionRunner
 from app.services.run_evidence import LoadEvidenceRecorder, RunEvidenceStorage, SmokeTestRunner
 
 router = APIRouter(prefix="/api/lemonade", tags=["lemonade"])
@@ -48,6 +51,12 @@ async def lemonade_stats(provider: LemonadeProvider = Depends(get_provider)):
 async def lemonade_system_info(provider: LemonadeProvider = Depends(get_provider)):
     """Get Lemonade system/device info."""
     return await provider.get_system_info()
+
+
+@router.get("/backend-readiness", response_model=BackendReadinessResponse)
+async def backend_readiness(provider: LemonadeProvider = Depends(get_provider)):
+    """Return normalized authoritative backend state from Lemonade system-info."""
+    return await collect_backend_readiness(provider)
 
 
 @router.get("/models", response_model=ModelsListResponse)
@@ -98,9 +107,14 @@ async def load_model(
 
 
 @router.post("/smoke-test", response_model=SmokeTestResponse)
-async def smoke_test(request: SmokeTestRequest):
+async def smoke_test(
+    request: SmokeTestRequest,
+    completion_runner: CompletionRunner = Depends(get_completion_runner),
+):
     """Run a small post-load request and save a local run evidence seed."""
-    return await SmokeTestRunner().run(request)
+    return await SmokeTestRunner(
+        completion_runner=completion_runner,
+    ).run(request)
 
 
 @router.get("/run-evidence", response_model=RunEvidenceListResponse)

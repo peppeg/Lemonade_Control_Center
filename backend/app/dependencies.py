@@ -6,7 +6,10 @@ Usage in routers:
   async def list_models(provider: LemonadeProvider = Depends(get_provider)):
       return await provider.list_models()
 """
+from fastapi import Depends
+
 from app.providers.lemonade import LemonadeProvider
+from app.services.completion_runner import CompletionRunner
 from app.services.setup import SetupService
 
 
@@ -32,3 +35,10 @@ def get_provider() -> LemonadeProvider:
             use_settings_admin_key=False,
         )
     return LemonadeProvider()
+
+
+def get_completion_runner(
+    provider: LemonadeProvider = Depends(get_provider),
+) -> CompletionRunner:
+    """Build the core completion runner for the active Lemonade runtime."""
+    return CompletionRunner(provider.base_url)

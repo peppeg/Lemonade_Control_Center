@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { notify } from '$lib/stores/notifications';
+  import { loadWorkflowDefaults, resetWorkflowDefaults, saveWorkflowDefaults } from '$lib/utils/workflowDefaults';
   import { AlertCircle, ServerCog, SlidersHorizontal } from 'lucide-svelte';
 
   type PresetName = 'Safe' | 'Coding' | 'Long Context' | 'Stress' | 'Executor Strict';
@@ -10,7 +11,7 @@
   const tokenOptions = [256, 1024, 2048, 4096];
   const backendOptions = ['auto', 'rocm', 'vulkan', 'cpu', 'cuda'];
 
-  let activePreset: PresetName = 'Coding';
+  let activePreset: string = 'Coding';
   let runtimeConfig: Record<string, unknown> = {};
   let runtimeError: string | null = null;
   let runtimeReadable = false;
@@ -128,48 +129,35 @@
   }
 
   function saveLocalDefaults() {
-    const payload = {
+    saveWorkflowDefaults({
       maxOutputTokens,
       temperature,
       appTimeoutSeconds,
       stopSequences,
       activePreset,
-    };
-    localStorage.setItem('lcc.requestDefaults', JSON.stringify(payload));
-    localMessage = 'Local Request Defaults saved.';
-    notify.success('Request defaults saved', activePreset, { toastDuration: 2500 });
+    });
+    localMessage = 'LCC Workflow Defaults saved.';
+    notify.success('Workflow defaults saved', activePreset, { toastDuration: 2500 });
   }
 
   function loadLocalDefaults() {
-    const raw = localStorage.getItem('lcc.requestDefaults');
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as {
-        maxOutputTokens?: number;
-        temperature?: number;
-        appTimeoutSeconds?: number;
-        stopSequences?: string[];
-        activePreset?: PresetName;
-      };
-      maxOutputTokens = parsed.maxOutputTokens ?? maxOutputTokens;
-      temperature = parsed.temperature ?? temperature;
-      appTimeoutSeconds = parsed.appTimeoutSeconds ?? appTimeoutSeconds;
-      stopSequences = parsed.stopSequences ?? stopSequences;
-      activePreset = parsed.activePreset ?? activePreset;
-    } catch {
-      localMessage = 'Stored local defaults could not be parsed.';
-    }
+    const defaults = loadWorkflowDefaults();
+    maxOutputTokens = defaults.maxOutputTokens;
+    temperature = defaults.temperature;
+    appTimeoutSeconds = defaults.appTimeoutSeconds;
+    stopSequences = defaults.stopSequences;
+    activePreset = defaults.activePreset;
   }
 
   function resetLocalDefaults() {
+    const defaults = resetWorkflowDefaults();
     activePreset = 'Coding';
-    maxOutputTokens = 2048;
-    temperature = 0.7;
-    appTimeoutSeconds = 300;
-    stopSequences = ['<|im_end|>', '\\n\\nUser:'];
-    localStorage.removeItem('lcc.requestDefaults');
-    localMessage = 'Local Request Defaults reset.';
-    notify.info('Request defaults reset', 'Local request defaults are back to Coding.');
+    maxOutputTokens = defaults.maxOutputTokens;
+    temperature = defaults.temperature;
+    appTimeoutSeconds = defaults.appTimeoutSeconds;
+    stopSequences = defaults.stopSequences;
+    localMessage = 'LCC Workflow Defaults reset.';
+    notify.info('Workflow defaults reset', 'LCC request behavior is back to Coding.');
   }
 </script>
 
@@ -178,7 +166,7 @@
     <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
         <h2 class="ops-title">Configuration Presets</h2>
-        <p class="ops-subtitle">Presets fill local request defaults and visible runtime fields. Server-side writes still require admin capability.</p>
+        <p class="ops-subtitle">Presets fill LCC workflow defaults and visible runtime fields. Server-side writes still require admin capability.</p>
       </div>
       <div class="flex flex-wrap gap-2 rounded border border-[#444936] bg-[#2b2d2a] p-1">
         {#each presets as preset}
@@ -210,7 +198,7 @@
             <AlertCircle class="mt-0.5 h-5 w-5 shrink-0" />
             <div>
               <p class="font-semibold">Runtime Config unavailable.</p>
-              <p class="mt-1 text-sm"><code class="ops-mono">LEMONADE_ADMIN_API_KEY</code> may be missing. Request Defaults still work locally.</p>
+              <p class="mt-1 text-sm"><code class="ops-mono">LEMONADE_ADMIN_API_KEY</code> may be missing. LCC Workflow Defaults still work locally.</p>
             </div>
           </div>
         {:else if runtimeLoading}
@@ -259,9 +247,9 @@
       <div class="ops-card-header">
         <div class="flex items-center gap-3">
           <SlidersHorizontal class="h-5 w-5 text-lemon" />
-          <h2 class="ops-title">Request Defaults</h2>
+          <h2 class="ops-title">LCC Workflow Defaults</h2>
         </div>
-        <span class="ops-badge">Local</span>
+        <span class="ops-badge">LCC requests</span>
       </div>
 
       <div class="ops-card-body flex min-h-[540px] flex-col">
@@ -333,7 +321,7 @@
           {/if}
           <div class="flex justify-end gap-3">
             <button class="ops-button" type="button" on:click={resetLocalDefaults}>Reset Defaults</button>
-            <button class="ops-button ops-button-primary" type="button" on:click={saveLocalDefaults}>Save Local Defaults</button>
+            <button class="ops-button ops-button-primary" type="button" on:click={saveLocalDefaults}>Save Workflow Defaults</button>
           </div>
         </div>
       </div>

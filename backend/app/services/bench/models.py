@@ -1,7 +1,7 @@
 """Pydantic schemas for Bench Lab."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +13,8 @@ class BenchPrompt(BaseModel):
     system_prompt: str = ""
     max_tokens: int = 4000
     temperature: float = 0.7
+    app_timeout_seconds: int = 3600
+    stop_sequences: list[str] = Field(default_factory=list)
     expected_format: str | None = None
     tags: list[str] = Field(default_factory=list)
 
@@ -42,7 +44,11 @@ class BenchResult(BaseModel):
     finish_confidence: str = "unknown"
     response_preview: str = ""
     response_full: str = ""
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    reasoning_text: str = ""
+    token_count_source: str = "unavailable"
+    completion_endpoint: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     error: str | None = None
 
 
@@ -57,7 +63,7 @@ class SuiteResult(BaseModel):
     total_seconds: float
     truncated_count: int
     error_count: int
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class BenchRunRequest(BaseModel):

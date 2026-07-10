@@ -18,6 +18,10 @@ The project is under active development, so entries currently describe the evolv
 - P0 closeout documentation with official Lemonade docs audit notes and P1/P2 deferrals.
 - Backend and update event surfacing in Logs & Stats for Lemonade backend installs, llama-server upgrades, and model update notices.
 - Backend Readiness summary on the Dashboard plus a dedicated Backends page with state filters, backend versions, devices, and operator actions.
+- Typed Backend Readiness API derived from Lemonade system-info, with defensive normalization and state counts.
+- Backend readiness snapshots in diagnostic bundles, including an explicit unavailable state when Lemonade cannot be reached.
+- LCC Workflow Defaults with automatic migration from the previous browser storage key.
+- Core OpenAI-compatible CompletionRunner shared by Smoke Test and Bench Lab, with structured errors, active-runtime routing, reasoning separation, and defensive SSE parsing.
 
 ### Changed
 
@@ -27,6 +31,15 @@ The project is under active development, so entries currently describe the evolv
 - Diagnostic bundle sanitization preserves non-secret token counters and boolean configured flags.
 - Log parsing now treats expected AMD-machine NVIDIA detection failures and low-level `W:` lines as warnings instead of hard errors.
 - Logs & Stats now keeps backend/update events as filtered log entries instead of showing a duplicate summary panel, and abbreviates the performance level label to `PERF`.
+- Dashboard and Backends views now consume the backend-owned readiness contract and distinguish loading, unavailable, empty, and populated states.
+- Removed the inert global polling control from Settings; health, dashboard, diagnostics, and hardware retain subsystem-specific refresh behavior.
+- Backend timestamps now use timezone-aware UTC values for current Python compatibility.
+- Renamed local Request Defaults to LCC Workflow Defaults and applied them to smoke-test requests and Bench Lab quick-test initialization.
+- Smoke Test now uses the core CompletionRunner directly; BenchRunner is limited to prompt adaptation, suite orchestration, aggregation, and storage.
+
+### Fixed
+
+- Completion streaming now closes every `httpx` response explicitly and accepts metadata/reasoning chunks where `delta.content` is null.
 
 ## 0.2.0 - 2026-07-09
 

@@ -1,13 +1,13 @@
 """Pydantic schemas for per-model profiles."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
 
 class ProfileConfig(BaseModel):
-    """Runtime and request defaults stored in a profile."""
+    """Runtime configuration and LCC workflow defaults stored in a profile."""
 
     ctx_size: int | None = None
     global_timeout: int | None = None
@@ -29,8 +29,8 @@ class Profile(BaseModel):
     config: ProfileConfig
     is_builtin: bool = False
     is_default: bool = False
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ModelProfiles(BaseModel):
