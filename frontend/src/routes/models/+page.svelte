@@ -13,6 +13,7 @@
   import { notify } from '$lib/stores/notifications';
   import type { ModelEntry, RunEvidenceSeed } from '$lib/types';
   import { formatGB } from '$lib/utils/format';
+  import { loadWorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   let isRefreshing = false;
   let filter = '';
@@ -88,7 +89,14 @@
     if (!modelName) return;
     smokeRunning = true;
     try {
-      const result = await api.lemonade.smokeTest({ model_name: modelName });
+      const defaults = loadWorkflowDefaults();
+      const result = await api.lemonade.smokeTest({
+        model_name: modelName,
+        max_tokens: Math.min(defaults.maxOutputTokens, 256),
+        temperature: defaults.temperature,
+        app_timeout_seconds: defaults.appTimeoutSeconds,
+        stop_sequences: defaults.stopSequences,
+      });
       if (result.ok) {
         latestSmoke = result.data.evidence;
         if (result.data.success) {

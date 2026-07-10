@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.dependencies import get_provider
 from app.providers.lemonade import LemonadeProvider
+from app.models.backend_readiness import BackendReadinessResponse
 from app.models.schemas import (
     LemonadeHealthResponse,
     LemonadeStatsResponse,
@@ -27,6 +28,7 @@ from app.models.schemas import (
     ConfigUpdateRequest,
 )
 from app.services.lemonade_options import read_saved_options
+from app.services.backend_readiness import collect_backend_readiness
 from app.services.run_evidence import LoadEvidenceRecorder, RunEvidenceStorage, SmokeTestRunner
 
 router = APIRouter(prefix="/api/lemonade", tags=["lemonade"])
@@ -48,6 +50,12 @@ async def lemonade_stats(provider: LemonadeProvider = Depends(get_provider)):
 async def lemonade_system_info(provider: LemonadeProvider = Depends(get_provider)):
     """Get Lemonade system/device info."""
     return await provider.get_system_info()
+
+
+@router.get("/backend-readiness", response_model=BackendReadinessResponse)
+async def backend_readiness(provider: LemonadeProvider = Depends(get_provider)):
+    """Return normalized authoritative backend state from Lemonade system-info."""
+    return await collect_backend_readiness(provider)
 
 
 @router.get("/models", response_model=ModelsListResponse)

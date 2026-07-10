@@ -44,7 +44,8 @@ def test_run_evidence_storage_ignores_invalid_records(tmp_path):
 @pytest.mark.asyncio
 async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, monkeypatch):
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
-    runner = SmokeTestRunner(bench_runner=FakeBenchRunner(), storage=storage)
+    bench_runner = FakeBenchRunner()
+    runner = SmokeTestRunner(bench_runner=bench_runner, storage=storage)
 
     monkeypatch.setattr(
         "app.services.run_evidence._safe_hardware_snapshot",
@@ -60,7 +61,15 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
         lambda: {"pid": 1234, "rss_gb": 38.2, "backend": "vulkan", "ctx_size": 65536},
     )
 
-    response = await runner.run(SmokeTestRequest(model_name="qwen-coder"))
+    response = await runner.run(
+        SmokeTestRequest(
+            model_name="qwen-coder",
+            max_tokens=128,
+            temperature=0.25,
+            app_timeout_seconds=240,
+            stop_sequences=["DONE"],
+        )
+    )
 
     assert response.success is True
     assert response.evidence.model_name == "qwen-coder"
@@ -70,6 +79,14 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
     assert response.evidence.observed_ctx_size == 65536
     assert response.evidence.ram_used_before_gb == 40.0
     assert response.evidence.ram_used_after_gb == 41.5
+    assert response.evidence.request_max_tokens == 128
+    assert response.evidence.request_temperature == 0.25
+    assert response.evidence.request_timeout_seconds == 240
+    assert response.evidence.request_stop_sequences == ["DONE"]
+    assert bench_runner.last_prompt.max_tokens == 128
+    assert bench_runner.last_prompt.temperature == 0.25
+    assert bench_runner.last_prompt.app_timeout_seconds == 240
+    assert bench_runner.last_prompt.stop_sequences == ["DONE"]
     assert storage.get_all()[0].id == response.evidence.id
 
 
@@ -122,7 +139,11 @@ def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_pat
 
 
 class FakeBenchRunner:
+    def __init__(self):
+        self.last_prompt = None
+
     async def run_prompt(self, prompt, model):
+        self.last_prompt = prompt
         return BenchResult(
             prompt_id=prompt.id,
             prompt_name=prompt.name,

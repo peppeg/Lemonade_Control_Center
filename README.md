@@ -84,7 +84,9 @@ LCC distinguishes between model names exposed through compatibility APIs and the
 The Configuration workspace separates two different kinds of state:
 
 - **Runtime configuration**, owned by Lemonade and applied when models are loaded.
-- **Request defaults**, stored locally by LCC and used as operator preferences.
+- **LCC workflow defaults**, stored locally and used by LCC-owned requests such as smoke tests and Bench Lab quick tests.
+
+Workflow defaults do not reconfigure external clients such as Open WebUI or coding agents. Those clients continue to send their own request parameters.
 
 Built-in profiles provide practical starting points such as Safe, Coding, Long Context, Stress, and Executor Strict. Risky settings remain explicit, and Lemonade-managed arguments are not silently duplicated.
 

@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from app.services.diagnostic_bundle import DiagnosticBundleBuilder, DiagnosticBundleSanitizer
 
 
@@ -89,3 +91,21 @@ def test_bundle_builder_records_manifest_sanitization_counts():
     assert manifest["sanitization"]["enabled"] is True
     assert manifest["sanitization"]["redactions"]["secret_key"] == 1
     assert manifest["sanitization"]["redactions"]["private_ip"] == 1
+
+
+@pytest.mark.asyncio
+async def test_bundle_builder_records_unavailable_backend_readiness(monkeypatch):
+    class FailingProvider:
+        async def get_system_info(self):
+            raise RuntimeError("Lemonade offline")
+
+    monkeypatch.setattr("app.dependencies.get_provider", lambda: FailingProvider())
+    builder = DiagnosticBundleBuilder()
+
+    await builder._collect_backend_readiness()
+
+    readiness = json.loads(builder.entries["backend_readiness.json"])
+    assert readiness["status"] == "unavailable"
+    assert readiness["available"] is False
+    assert readiness["items"] == []
+    assert builder.errors["backend_readiness.json"] == "Lemonade offline"

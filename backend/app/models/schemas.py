@@ -8,7 +8,7 @@ Naming convention:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 
@@ -138,6 +138,8 @@ class SmokeTestRequest(BaseModel):
     prompt: str = "Reply with exactly: LCC_SMOKE_OK"
     max_tokens: int = Field(default=32, ge=1, le=256)
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    app_timeout_seconds: int = Field(default=300, ge=1, le=3600)
+    stop_sequences: list[str] = Field(default_factory=list)
 
 
 class RunEvidenceSeed(BaseModel):
@@ -153,6 +155,10 @@ class RunEvidenceSeed(BaseModel):
     requested_backend: str | None = None
     requested_ctx_size: int | None = None
     requested_llamacpp_args: str | None = None
+    request_max_tokens: int | None = None
+    request_temperature: float | None = None
+    request_timeout_seconds: int | None = None
+    request_stop_sequences: list[str] = Field(default_factory=list)
     merge_args: bool | None = None
     save_options: bool | None = None
     input_tokens: int = 0
@@ -172,7 +178,7 @@ class RunEvidenceSeed(BaseModel):
     swap_used_before_gb: float | None = None
     swap_used_after_gb: float | None = None
     warnings: list[str] = Field(default_factory=list)
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SmokeTestResponse(BaseModel):

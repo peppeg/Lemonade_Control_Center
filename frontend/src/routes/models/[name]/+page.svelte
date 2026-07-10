@@ -122,7 +122,7 @@
       </a>
       <h1 class="break-all text-3xl font-bold">Profiles: {modelName}</h1>
       <p class="mt-2 max-w-3xl text-sm text-muted-foreground">
-        Profiles store explicit runtime config and request defaults for this model. Apply writes runtime config when admin access is available; Apply & Load also sends a load request to Lemonade.
+        Profiles store explicit runtime config and LCC workflow defaults for this model. Apply writes runtime config when admin access is available; Apply & Load also sends a load request to Lemonade.
       </p>
     </div>
     <div class="flex flex-wrap gap-2">

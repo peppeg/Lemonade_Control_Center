@@ -14,7 +14,6 @@ from app.services.bench.suites import SUITES
 class BenchRunner:
     def __init__(self) -> None:
         self.base_url = settings.lemonade_url.rstrip("/")
-        self.timeout = httpx.Timeout(3600.0)
 
     async def run_prompt(self, prompt: BenchPrompt, model: str) -> BenchResult:
         start = time.monotonic()
@@ -37,9 +36,12 @@ class BenchRunner:
             "temperature": prompt.temperature,
             "stream": True,
         }
+        if prompt.stop_sequences:
+            payload["stop"] = prompt.stop_sequences
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            timeout = httpx.Timeout(float(prompt.app_timeout_seconds))
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await self._open_stream(client, payload)
                 async with response:
                     async for line in response.aiter_lines():

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.models.profiles import (
@@ -149,7 +149,7 @@ class ProfileService:
             profile.is_default = True
             model_profiles.default_profile_id = profile.id
 
-        profile.updated_at = datetime.utcnow()
+        profile.updated_at = datetime.now(timezone.utc)
         self._save(model_profiles)
         return profile
 

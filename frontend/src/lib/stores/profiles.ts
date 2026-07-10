@@ -3,6 +3,7 @@ import { api } from '$lib/api/client';
 import { loadModel } from '$lib/stores/models';
 import { notify } from '$lib/stores/notifications';
 import type { LemonadeSavedOptions, ModelProfiles, Profile, ProfileConfig, SmartRecommendation } from '$lib/types';
+import { loadWorkflowDefaults, saveWorkflowDefaults } from '$lib/utils/workflowDefaults';
 
 export const currentModelName = writable<string | null>(null);
 export const modelProfiles = writable<ModelProfiles | null>(null);
@@ -170,14 +171,16 @@ export async function applyProfile(profile: Profile): Promise<boolean> {
   if (profile.config.global_timeout !== null) runtimeUpdates.global_timeout = profile.config.global_timeout;
   if (profile.config.llamacpp_backend) runtimeUpdates.llamacpp_backend = profile.config.llamacpp_backend;
 
-  const requestDefaults = {
-    maxOutputTokens: profile.config.max_tokens,
-    temperature: profile.config.temperature,
-    appTimeoutSeconds: profile.config.app_timeout,
-    stopSequences: parseStopSequences(profile.config.stop_sequences),
+  const currentDefaults = loadWorkflowDefaults();
+  saveWorkflowDefaults({
+    maxOutputTokens: profile.config.max_tokens ?? currentDefaults.maxOutputTokens,
+    temperature: profile.config.temperature ?? currentDefaults.temperature,
+    appTimeoutSeconds: profile.config.app_timeout ?? currentDefaults.appTimeoutSeconds,
+    stopSequences: profile.config.stop_sequences === null
+      ? currentDefaults.stopSequences
+      : parseStopSequences(profile.config.stop_sequences),
     activePreset: profile.name,
-  };
-  localStorage.setItem('lcc.requestDefaults', JSON.stringify(requestDefaults));
+  });
 
   if (Object.keys(runtimeUpdates).length === 0) {
     activeProfileId.set(profile.id);

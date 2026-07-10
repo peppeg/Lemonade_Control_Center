@@ -68,6 +68,28 @@ Direct browser refresh on frontend routes should return the dashboard shell, not
 
 Linux host inspection depends on what the machine exposes through `/proc`, `/sys`, `systemctl`, `journalctl`, `psutil`, and available sensor tooling. Missing probes should degrade gracefully.
 
+## Backend Readiness Manual Check
+
+After changing backend readiness collection or presentation, verify:
+
+- Dashboard shows a loading state before readiness data arrives.
+- An unreachable Lemonade target produces an unavailable warning, not zero-valued success data.
+- Installed, update-required, installable, unsupported, and unknown states have correct counts.
+- A response with no backend entries is described as empty.
+- Search and state filters work on the Backends page.
+- Operator actions can be copied, and provided release links open separately.
+- Desktop and mobile navigation reach the Backends page.
+- A diagnostic bundle contains `backend_readiness.json` even when Lemonade is unavailable.
+
+## Workflow Defaults Manual Check
+
+- Saving LCC Workflow Defaults survives a page reload.
+- Existing `lcc.requestDefaults` browser data migrates to `lcc.workflowDefaults` without losing values.
+- Applying a model profile updates the workflow defaults and preserves the profile name.
+- Smoke Test uses the saved token, temperature, timeout, and stop settings within its safety limits.
+- New smoke-test Run Evidence records contain the request settings used.
+- Bench Lab quick tests initialize token and temperature controls from the same defaults.
+
 ## Local Data
 
 Runtime data is stored under backend-managed data paths and is intentionally excluded from git. Do not commit secrets, local settings, diagnostic bundles, or private planning documents.

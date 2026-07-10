@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
-  import { Copy, PackageCheck, RefreshCw, Search } from 'lucide-svelte';
+  import { Copy, ExternalLink, PackageCheck, RefreshCw, Search } from 'lucide-svelte';
+  import type { BackendReadinessCounts, BackendReadinessItem, BackendReadinessResponse } from '$lib/types';
   import {
-    backendReadinessCounts,
     backendStateBadgeClass,
     backendStateLabel,
-    extractBackendReadiness,
-    type BackendReadinessItem,
   } from '$lib/utils/backendReadiness';
 
+  const emptyCounts: BackendReadinessCounts = { installed: 0, update_required: 0, installable: 0, unsupported: 0, other: 0 };
+  let readiness: BackendReadinessResponse | null = null;
   let items: BackendReadinessItem[] = [];
   let loading = true;
   let error: string | null = null;
@@ -29,9 +29,9 @@
     refreshBackends();
   });
 
-  $: counts = backendReadinessCounts(items);
+  $: counts = readiness?.counts ?? emptyCounts;
   $: filteredItems = items.filter((item) => {
-    const body = `${item.recipeName} ${item.recipeKey} ${item.backendKey} ${item.state} ${item.version ?? ''} ${item.message} ${item.action} ${item.devices.join(' ')}`.toLowerCase();
+    const body = `${item.recipe_name} ${item.recipe_key} ${item.backend_key} ${item.state} ${item.version ?? ''} ${item.message} ${item.action} ${item.devices.join(' ')}`.toLowerCase();
     const matchesFilter = activeFilter === 'all' || item.state === activeFilter;
     const matchesSearch = search.trim() === '' || body.includes(search.trim().toLowerCase());
     return matchesFilter && matchesSearch;
@@ -40,11 +40,13 @@
   async function refreshBackends() {
     loading = true;
     error = null;
-    const result = await api.lemonade.systemInfo();
+    const result = await api.lemonade.backendReadiness();
     if (result.ok) {
-      items = extractBackendReadiness(result.data);
+      readiness = result.data;
+      items = result.data.items;
     } else {
       error = result.error;
+      readiness = null;
       items = [];
     }
     loading = false;
@@ -77,6 +79,8 @@
 
   {#if error}
     <section class="ops-banner ops-banner-danger">{error}</section>
+  {:else if readiness && !readiness.available}
+    <section class="ops-banner text-status-warn">{readiness.message}</section>
   {/if}
 
   <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -85,28 +89,28 @@
         <span class="ops-label">Installed</span>
         <PackageCheck class="h-4 w-4 text-status-ok" />
       </div>
-      <p class="mt-5 ops-value text-3xl font-bold">{counts.installed}</p>
+      <p class="mt-5 ops-value text-3xl font-bold">{loading ? '--' : counts.installed}</p>
     </article>
     <article class="ops-card p-5">
       <div class="flex items-center justify-between">
         <span class="ops-label">Update Required</span>
         <PackageCheck class="h-4 w-4 text-status-warn" />
       </div>
-      <p class="mt-5 ops-value text-3xl font-bold">{counts.updateRequired}</p>
+      <p class="mt-5 ops-value text-3xl font-bold">{loading ? '--' : counts.update_required}</p>
     </article>
     <article class="ops-card p-5">
       <div class="flex items-center justify-between">
         <span class="ops-label">Installable</span>
         <PackageCheck class="h-4 w-4 text-lemon" />
       </div>
-      <p class="mt-5 ops-value text-3xl font-bold">{counts.installable}</p>
+      <p class="mt-5 ops-value text-3xl font-bold">{loading ? '--' : counts.installable}</p>
     </article>
     <article class="ops-card p-5">
       <div class="flex items-center justify-between">
         <span class="ops-label">Unsupported</span>
         <PackageCheck class="h-4 w-4 text-danger" />
       </div>
-      <p class="mt-5 ops-value text-3xl font-bold">{counts.unsupported}</p>
+      <p class="mt-5 ops-value text-3xl font-bold">{loading ? '--' : counts.unsupported}</p>
     </article>
   </section>
 
@@ -151,16 +155,19 @@
             {#each filteredItems as item}
               <tr>
                 <td>
-                  <span class="ops-value">{item.recipeName}</span>
+                  <span class="ops-value">{item.recipe_name}</span>
                   {#if item.experimental}
                     <span class="ops-badge ml-2">Experimental</span>
                   {/if}
                 </td>
-                <td class="ops-value">{item.backendKey}</td>
+                <td class="ops-value">{item.backend_key}</td>
                 <td><span class="ops-badge {backendStateBadgeClass(item.state)}">{backendStateLabel(item.state)}</span></td>
                 <td class="ops-value">{item.version ?? 'Unavailable'}</td>
                 <td class="text-muted-foreground">{devicesLabel(item.devices)}</td>
                 <td class="max-w-[460px]">
+                  {#if item.message}
+                    <p class="mb-2 text-muted-foreground">{item.message}</p>
+                  {/if}
                   {#if item.action}
                     <div class="grid grid-cols-[minmax(0,1fr)_32px] items-start gap-3">
                       <code class="ops-mono min-w-0 whitespace-normal break-words">{item.action}</code>
@@ -176,9 +183,16 @@
                     {#if copiedAction === item.action}
                       <p class="mt-1 text-xs text-status-ok">Copied</p>
                     {/if}
-                  {:else if item.message}
-                    <span class="text-muted-foreground">{item.message}</span>
-                  {:else}
+                  {/if}
+                  {#if item.release_url}
+                    <a class="mt-2 inline-flex items-center gap-1 text-xs text-lemon hover:text-lemon-light" href={item.release_url} target="_blank" rel="noreferrer">
+                      Release <ExternalLink class="h-3.5 w-3.5" />
+                    </a>
+                  {/if}
+                  {#if item.download_filename}
+                    <p class="mt-1 break-all text-xs text-muted-foreground">{item.download_filename}</p>
+                  {/if}
+                  {#if !item.message && !item.action && !item.release_url && !item.download_filename}
                     <span class="text-muted-foreground">None</span>
                   {/if}
                 </td>
