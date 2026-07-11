@@ -8,6 +8,7 @@
   import { loadModelDetailed, loadAction, type LoadModelActionResult } from '$lib/stores/models';
   import { AlertTriangle, CheckCircle2, Cpu, Database, Loader2, RefreshCw, Save, SlidersHorizontal, Terminal } from 'lucide-svelte';
   import type { HardwareInfo, LemonadeSavedOptions } from '$lib/types';
+  import { loadWorkflowDefaults, type WorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   export let modelName: string;
   export let modelSizeBytes: number | null = null;
@@ -31,6 +32,7 @@
   let savedOptions: LemonadeSavedOptions | null = null;
   let preflightError: string | null = null;
   let loadResult: LoadModelActionResult | null = null;
+  let appliedWorkflow: WorkflowDefaults = loadWorkflowDefaults();
 
   const ctxPresets = [
     { label: 'Default', value: 'default', size: null, note: 'Lemonade' },
@@ -96,6 +98,7 @@
   $: ctxRisk = classifyCtxRisk(effectiveCtx, estimatedSafeCtx, estimatedRiskCtx);
   $: selectedSavedOptions = savedOptions?.selected_options ?? null;
   $: if (open && modelName && preflightModel !== modelName && !preflightLoading) {
+    appliedWorkflow = loadWorkflowDefaults();
     void loadPreflight();
   }
 
@@ -258,6 +261,13 @@
   widthClass="sm:max-w-[980px]"
   on:close={closeDialog}
 >
+  <div class="mb-4 ops-banner {appliedWorkflow.activeProfileId && appliedWorkflow.activeProfileModelName === modelName ? '' : 'ops-banner-muted'}">
+    {#if appliedWorkflow.activeProfileId && appliedWorkflow.activeProfileModelName === modelName}
+      Applied workflow profile: <strong>{appliedWorkflow.activePreset}</strong> <span class="ops-mono">({appliedWorkflow.activeProfileId}).</span>
+    {:else}
+      This is a direct load with no explicitly applied workflow profile for {modelName}.
+    {/if}
+  </div>
   <div class="space-y-5">
     <section class="space-y-3 border border-[#30342b] bg-[#101211] p-4">
       <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

@@ -6,6 +6,18 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
 
+class ProfileEvidenceRef(BaseModel):
+    """Small live reference to useful evidence; never copied into profile storage."""
+
+    id: str
+    kind: str
+    success: bool
+    timestamp: datetime
+    observed_model_name: str | None = None
+    observed_backend: str | None = None
+    observed_ctx_size: int | None = None
+
+
 class ProfileConfig(BaseModel):
     """Runtime configuration and LCC workflow defaults stored in a profile."""
 
@@ -25,12 +37,17 @@ class Profile(BaseModel):
     id: str
     name: str
     description: str = ""
+    intent: str = ""
+    notes: str = ""
+    known_caveats: list[str] = Field(default_factory=list)
+    runtime_id: str | None = None
     icon: str = "profile"
     config: ProfileConfig
     is_builtin: bool = False
     is_default: bool = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    latest_evidence: ProfileEvidenceRef | None = None
 
 
 class ModelProfiles(BaseModel):
@@ -61,6 +78,10 @@ class SmartRecommendation(BaseModel):
 class ProfileCreateRequest(BaseModel):
     name: str
     description: str = ""
+    intent: str = ""
+    notes: str = ""
+    known_caveats: list[str] = Field(default_factory=list)
+    runtime_id: str | None = None
     icon: str = "profile"
     config: ProfileConfig
 
@@ -68,6 +89,10 @@ class ProfileCreateRequest(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     name: str | None = None
     description: str | None = None
+    intent: str | None = None
+    notes: str | None = None
+    known_caveats: list[str] | None = None
+    runtime_id: str | None = None
     icon: str | None = None
     config: ProfileConfig | None = None
     is_default: bool | None = None

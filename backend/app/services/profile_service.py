@@ -11,9 +11,11 @@ from app.models.profiles import (
     Profile,
     ProfileConfig,
     ProfileCreateRequest,
+    ProfileEvidenceRef,
     ProfileUpdateRequest,
     SmartRecommendation,
 )
+from app.services.run_evidence import RunEvidenceStorage
 
 PROFILES_DIR = Path(__file__).parent.parent / "data" / "profiles"
 
@@ -23,6 +25,7 @@ BUILTIN_PROFILES = [
         name="Safe",
         icon="safe",
         description="Conservative settings for reliable loading and moderate output.",
+        intent="Agent Fallback",
         is_builtin=True,
         is_default=True,
         config=ProfileConfig(ctx_size=8192, global_timeout=300, max_tokens=2000, temperature=0.7),
@@ -32,6 +35,7 @@ BUILTIN_PROFILES = [
         name="Coding",
         icon="code",
         description="Balanced profile for code generation and terminal-style workflows.",
+        intent="Coding Fast",
         is_builtin=True,
         config=ProfileConfig(
             ctx_size=16384,
@@ -46,6 +50,7 @@ BUILTIN_PROFILES = [
         name="Long Context",
         icon="context",
         description="Larger context window for analysis, logs, and long documents.",
+        intent="Coding Long Context",
         is_builtin=True,
         config=ProfileConfig(ctx_size=32768, global_timeout=900, max_tokens=8000, temperature=0.6),
     ),
@@ -54,6 +59,7 @@ BUILTIN_PROFILES = [
         name="Stress",
         icon="stress",
         description="Aggressive profile for controlled experiments on capable hardware.",
+        intent="Stress Test",
         is_builtin=True,
         config=ProfileConfig(ctx_size=65536, global_timeout=1800, max_tokens=16000, temperature=0.7),
     ),
@@ -62,8 +68,18 @@ BUILTIN_PROFILES = [
         name="Executor Strict",
         icon="executor",
         description="Deterministic profile for automation and local executors.",
+        intent="Review Heavy",
         is_builtin=True,
         config=ProfileConfig(ctx_size=16384, global_timeout=600, max_tokens=4000, temperature=0.0),
+    ),
+    Profile(
+        id="italian-writing",
+        name="Italian Writing",
+        icon="writing",
+        description="Low-variance Italian drafting and revision workflow.",
+        intent="Italian Writing",
+        is_builtin=True,
+        config=ProfileConfig(ctx_size=16384, global_timeout=600, max_tokens=4000, temperature=0.5),
     ),
 ]
 
@@ -71,18 +87,23 @@ BUILTIN_PROFILES = [
 class ProfileService:
     """Manages per-model profiles stored as JSON files."""
 
-    def __init__(self) -> None:
-        PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    def __init__(self, profiles_dir: Path = PROFILES_DIR, evidence_storage: RunEvidenceStorage | None = None) -> None:
+        self.profiles_dir = profiles_dir
+        self.evidence_storage = evidence_storage or RunEvidenceStorage()
+        self.profiles_dir.mkdir(parents=True, exist_ok=True)
 
     def _file_path(self, model_name: str) -> Path:
         safe_name = re.sub(r"[^A-Za-z0-9._-]+", "__", model_name).strip("._-")
-        return PROFILES_DIR / f"{safe_name or 'model'}.json"
+        return self.profiles_dir / f"{safe_name or 'model'}.json"
 
     def _load(self, model_name: str) -> ModelProfiles:
         path = self._file_path(model_name)
         if path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
-            return ModelProfiles(**data)
+            model_profiles = ModelProfiles(**data)
+            if self._merge_builtin_metadata(model_profiles):
+                self._save(model_profiles)
+            return model_profiles
 
         model_profiles = ModelProfiles(
             model_name=model_name,
@@ -94,13 +115,19 @@ class ProfileService:
 
     def _save(self, model_profiles: ModelProfiles) -> None:
         path = self._file_path(model_profiles.model_name)
-        path.write_text(model_profiles.model_dump_json(indent=2), encoding="utf-8")
+        data = model_profiles.model_dump(mode="json")
+        for profile in data["profiles"]:
+            profile.pop("latest_evidence", None)
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def list_profiles(self, model_name: str) -> ModelProfiles:
-        return self._load(model_name)
+        model_profiles = self._load(model_name)
+        self._attach_latest_evidence(model_profiles)
+        return model_profiles
 
     def get_profile(self, model_name: str, profile_id: str) -> Profile | None:
         model_profiles = self._load(model_name)
+        self._attach_latest_evidence(model_profiles)
         return next((profile for profile in model_profiles.profiles if profile.id == profile_id), None)
 
     def create_profile(self, model_name: str, request: ProfileCreateRequest) -> Profile:
@@ -117,6 +144,10 @@ class ProfileService:
             id=slug,
             name=request.name,
             description=request.description,
+            intent=request.intent,
+            notes=request.notes,
+            known_caveats=request.known_caveats,
+            runtime_id=request.runtime_id,
             icon=request.icon,
             config=request.config,
         )
@@ -139,6 +170,14 @@ class ProfileService:
             profile.name = request.name
         if request.description is not None:
             profile.description = request.description
+        if request.intent is not None:
+            profile.intent = request.intent
+        if request.notes is not None:
+            profile.notes = request.notes
+        if request.known_caveats is not None:
+            profile.known_caveats = request.known_caveats
+        if "runtime_id" in request.model_fields_set:
+            profile.runtime_id = request.runtime_id
         if request.icon is not None:
             profile.icon = request.icon
         if request.config is not None:
@@ -176,6 +215,10 @@ class ProfileService:
             ProfileCreateRequest(
                 name=new_name,
                 description=f"Cloned from {source.name}",
+                intent=source.intent,
+                notes=source.notes,
+                known_caveats=list(source.known_caveats),
+                runtime_id=source.runtime_id,
                 icon=source.icon,
                 config=source.config.model_copy(deep=True),
             ),
@@ -203,12 +246,53 @@ class ProfileService:
                 ProfileCreateRequest(
                     name=str(profile_data.get("name", "Imported Profile")),
                     description=str(profile_data.get("description", "Imported profile")),
+                    intent=str(profile_data.get("intent", "")),
+                    notes=str(profile_data.get("notes", "")),
+                    known_caveats=[str(item) for item in profile_data.get("known_caveats", [])],
+                    runtime_id=profile_data.get("runtime_id"),
                     icon=str(profile_data.get("icon", "profile")),
                     config=ProfileConfig(**profile_data.get("config", {})),
                 ),
             )
         except (TypeError, ValueError):
             return None
+
+    def _merge_builtin_metadata(self, model_profiles: ModelProfiles) -> bool:
+        """Add new built-ins and fill new metadata without overwriting operator edits."""
+        changed = False
+        existing = {profile.id: profile for profile in model_profiles.profiles}
+        for builtin in BUILTIN_PROFILES:
+            current = existing.get(builtin.id)
+            if current is None:
+                model_profiles.profiles.append(builtin.model_copy(deep=True))
+                changed = True
+                continue
+            if current.is_builtin and not current.intent and builtin.intent:
+                current.intent = builtin.intent
+                changed = True
+        return changed
+
+    def _attach_latest_evidence(self, model_profiles: ModelProfiles) -> None:
+        for profile in model_profiles.profiles:
+            matches = self.evidence_storage.get_all(
+                model_name=model_profiles.model_name,
+                success=True,
+                workflow_profile_id=profile.id,
+            )
+            latest = matches[0] if matches else None
+            profile.latest_evidence = (
+                ProfileEvidenceRef(
+                    id=latest.id,
+                    kind=latest.kind,
+                    success=latest.success,
+                    timestamp=latest.timestamp,
+                    observed_model_name=latest.observed_model_name,
+                    observed_backend=latest.observed_backend,
+                    observed_ctx_size=latest.observed_ctx_size,
+                )
+                if latest
+                else None
+            )
 
     def compute_recommendation(
         self,

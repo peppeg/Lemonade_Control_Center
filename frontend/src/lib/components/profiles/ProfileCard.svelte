@@ -41,6 +41,23 @@
       {#if profile.description}
         <p class="mt-2 text-sm text-muted-foreground">{profile.description}</p>
       {/if}
+      <div class="mt-3 flex flex-wrap gap-2">
+        {#if profile.intent}<span class="ops-badge ops-badge-warn">{profile.intent}</span>{/if}
+        {#if profile.runtime_id}<span class="ops-badge ops-mono">{profile.runtime_id}</span>{/if}
+      </div>
+      {#if profile.notes}<p class="mt-3 text-sm">{profile.notes}</p>{/if}
+      {#if profile.known_caveats.length > 0}
+        <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-status-warn">
+          {#each profile.known_caveats as caveat}<li>{caveat}</li>{/each}
+        </ul>
+      {/if}
+      {#if profile.latest_evidence}
+        <a class="mt-3 inline-flex text-sm text-lemon hover:underline" href={`/evidence?run=${encodeURIComponent(profile.latest_evidence.id)}`}>
+          Latest useful evidence · {profile.latest_evidence.kind} · {new Date(profile.latest_evidence.timestamp).toLocaleString()}
+        </a>
+      {:else}
+        <p class="mt-3 text-xs text-muted-foreground">No successful Run Evidence is linked to this profile yet.</p>
+      {/if}
     </div>
 
     <div class="flex flex-wrap gap-2">

@@ -22,7 +22,13 @@
     { label: 'Load attempts', value: 'load_attempt' },
   ];
 
-  onMount(refreshEvidence);
+  onMount(async () => {
+    await refreshEvidence();
+    const requestedId = new URLSearchParams(window.location.search).get('run');
+    if (requestedId && evidence.some((item) => item.id === requestedId)) {
+      await selectEvidence(requestedId);
+    }
+  });
 
   $: filteredEvidence = evidence.filter((item) => {
     const query = search.trim().toLowerCase();

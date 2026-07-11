@@ -4,14 +4,19 @@
 
   export let profile: Profile | null = null;
   export let submitLabel = 'Save Profile';
+  export let defaultRuntimeId: string | null = null;
 
   const dispatch = createEventDispatcher<{
-    save: { name: string; description: string; icon: string; config: ProfileConfig };
+    save: { name: string; description: string; intent: string; notes: string; known_caveats: string[]; runtime_id: string | null; icon: string; config: ProfileConfig };
     cancel: void;
   }>();
 
   let name = '';
   let description = '';
+  let intent = '';
+  let notes = '';
+  let caveats = '';
+  let runtimeId: string | null = defaultRuntimeId;
   let icon = 'profile';
   let ctxSize: number | null = 16384;
   let globalTimeout: number | null = 600;
@@ -22,9 +27,15 @@
   let appTimeout: number | null = 300;
   let stopSequences = '<|im_end|>';
 
+  $: if (!profile && !runtimeId && defaultRuntimeId) runtimeId = defaultRuntimeId;
+
   $: if (profile) {
     name = profile.name;
     description = profile.description;
+    intent = profile.intent;
+    notes = profile.notes;
+    caveats = profile.known_caveats.join('\n');
+    runtimeId = profile.runtime_id;
     icon = profile.icon;
     ctxSize = profile.config.ctx_size;
     globalTimeout = profile.config.global_timeout;
@@ -40,6 +51,10 @@
     dispatch('save', {
       name,
       description,
+      intent,
+      notes,
+      known_caveats: caveats.split('\n').map((item) => item.trim()).filter(Boolean),
+      runtime_id: runtimeId?.trim() || null,
       icon,
       config: {
         ctx_size: emptyToNull(ctxSize),
@@ -77,6 +92,30 @@
     <label class="block space-y-2 md:col-span-2">
       <span class="ops-label">Description</span>
       <input class="ops-input" bind:value={description} placeholder="Short operational note" />
+    </label>
+    <label class="block space-y-2">
+      <span class="ops-label">Workflow intent</span>
+      <input class="ops-input" bind:value={intent} list="workflow-intents" placeholder="Coding Fast" />
+      <datalist id="workflow-intents">
+        <option value="Coding Fast"></option>
+        <option value="Coding Long Context"></option>
+        <option value="Review Heavy"></option>
+        <option value="Italian Writing"></option>
+        <option value="Agent Fallback"></option>
+        <option value="Stress Test"></option>
+      </datalist>
+    </label>
+    <label class="block space-y-2">
+      <span class="ops-label">Target runtime ID</span>
+      <input class="ops-input ops-mono" bind:value={runtimeId} placeholder="Any active runtime" />
+    </label>
+    <label class="block space-y-2 md:col-span-2">
+      <span class="ops-label">Operator notes</span>
+      <textarea class="ops-textarea" bind:value={notes} placeholder="Why this workflow exists and when to use it"></textarea>
+    </label>
+    <label class="block space-y-2 md:col-span-2">
+      <span class="ops-label">Known caveats</span>
+      <textarea class="ops-textarea" bind:value={caveats} placeholder="One caveat per line"></textarea>
     </label>
     <label class="block space-y-2">
       <span class="ops-label">ctx_size</span>
