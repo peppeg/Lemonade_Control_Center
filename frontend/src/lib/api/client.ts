@@ -174,14 +174,18 @@ export const api = {
       llamacpp_args?: string;
       merge_args?: boolean;
       save_options?: boolean;
+      workflow_profile_id?: string;
+      workflow_profile_name?: string;
     }) => post<{ success: boolean; message: string; evidence?: RunEvidenceSeed | null }>('/lemonade/load', body),
-    smokeTest: (body: { model_name: string; prompt?: string; max_tokens?: number; temperature?: number; app_timeout_seconds?: number; stop_sequences?: string[] }) =>
+    smokeTest: (body: { model_name: string; prompt?: string; max_tokens?: number; temperature?: number; app_timeout_seconds?: number; stop_sequences?: string[]; workflow_profile_id?: string; workflow_profile_name?: string }) =>
       post<SmokeTestResponse>('/lemonade/smoke-test', body),
-    runEvidence: (filters?: { modelName?: string; kind?: RunEvidenceSeed['kind']; success?: boolean }) => {
+    runEvidence: (filters?: { modelName?: string; kind?: RunEvidenceSeed['kind']; success?: boolean; runtimeId?: string; workflowProfileId?: string }) => {
       const params = new URLSearchParams();
       if (filters?.modelName) params.set('model_name', filters.modelName);
       if (filters?.kind) params.set('kind', filters.kind);
       if (filters?.success !== undefined) params.set('success', String(filters.success));
+      if (filters?.runtimeId) params.set('runtime_id', filters.runtimeId);
+      if (filters?.workflowProfileId) params.set('workflow_profile_id', filters.workflowProfileId);
       const query = params.toString();
       return get<{ results: RunEvidenceSeed[]; total: number }>(`/lemonade/run-evidence${query ? `?${query}` : ''}`);
     },

@@ -18,15 +18,15 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 
 - P0 operator basics are complete. See [P0 Closeout](./p0-closeout.md).
 - Backend Readiness V1, LCC Workflow Defaults, and the shared CompletionRunner foundation are implemented on `main`.
-- Run Evidence viewer, detail API, filters, JSON/Markdown export, and operation-window journal correlation are implemented on branch `codex/run-evidence-viewer`.
-- GitHub pull request [#11](https://github.com/peppeg/Lemonade_Control_Center/pull/11) contains the current Run Evidence work. Automated CI is green; manual operator validation and merge are the remaining delivery steps.
-- Existing evidence records remain backward compatible. Records created before journal correlation show logs as unavailable.
+- Run Evidence viewer, detail API, filters, JSON/Markdown export, and operation-window journal correlation are implemented on `main` through merged pull request [#11](https://github.com/peppeg/Lemonade_Control_Center/pull/11).
+- Run Evidence Identity Linkage is implemented and validated on branch `codex/run-evidence-identity-linkage`; pull request review and merge are the remaining delivery steps.
+- Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
 
 #### 0. Close The Current Run Evidence Delivery
 
-Status: implementation complete, manual validation and merge pending
+Status: complete
 
 Done when:
 
@@ -39,7 +39,7 @@ Done when:
 
 #### 1. Complete Run Evidence Identity Linkage
 
-Status: next implementation block
+Status: implementation and validation complete, merge pending
 
 Goal:
 

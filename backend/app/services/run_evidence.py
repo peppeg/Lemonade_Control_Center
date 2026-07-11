@@ -6,11 +6,13 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import ValidationError
 
 from app.models.completions import CompletionRequest
 from app.models.schemas import LoadModelRequest, LoadModelResponse, RunEvidenceSeed, SmokeTestRequest, SmokeTestResponse
+from app.models.setup import RuntimeConfig
 from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
 from app.services.log_parser import get_logs_for_window
@@ -40,6 +42,8 @@ class RunEvidenceStorage:
         model_name: str | None = None,
         kind: str | None = None,
         success: bool | None = None,
+        runtime_id: str | None = None,
+        workflow_profile_id: str | None = None,
     ) -> list[RunEvidenceSeed]:
         if not self.path.exists():
             return []
@@ -63,6 +67,10 @@ class RunEvidenceStorage:
             results = [item for item in results if item.kind == kind]
         if success is not None:
             results = [item for item in results if item.success is success]
+        if runtime_id:
+            results = [item for item in results if item.runtime_id == runtime_id]
+        if workflow_profile_id:
+            results = [item for item in results if item.workflow_profile_id == workflow_profile_id]
         return results[: self.max_results]
 
     def get(self, evidence_id: str) -> RunEvidenceSeed | None:
@@ -85,6 +93,14 @@ def render_evidence_markdown(evidence: RunEvidenceSeed) -> str:
         f"- **Kind:** {evidence.kind}",
         f"- **Outcome:** {outcome}",
         f"- **Model:** `{evidence.model_name}`",
+        f"- **Requested model:** `{evidence.requested_model_name or evidence.model_name}`",
+        f"- **Observed model:** `{evidence.observed_model_name}`" if evidence.observed_model_name else "- **Observed model:** unavailable",
+        "",
+        "## LCC Identity",
+        "",
+        f"- **Runtime:** {evidence.runtime_label or 'unavailable'} ({evidence.runtime_id or 'unavailable'})",
+        f"- **Server URL:** `{evidence.runtime_server_url}`" if evidence.runtime_server_url else "- **Server URL:** unavailable",
+        f"- **Workflow profile:** {evidence.workflow_profile_name or 'unavailable'} ({evidence.workflow_profile_id or 'unavailable'})",
         "",
         "## Runtime",
         "",
@@ -209,12 +225,14 @@ class SmokeTestRunner:
         completion_runner: CompletionRunner,
         storage: RunEvidenceStorage | None = None,
         log_collector=None,
+        runtime: RuntimeConfig | None = None,
     ) -> None:
         self.completion_runner = completion_runner
         self.storage = storage or RunEvidenceStorage()
         self.log_collector = log_collector or _safe_log_snapshot
+        self.runtime = runtime
 
-    async def run(self, request: SmokeTestRequest) -> SmokeTestResponse:
+    async def run(self, request: SmokeTestRequest, observed_model_name: str | None = None) -> SmokeTestResponse:
         started_at = datetime.now(timezone.utc)
         before_hardware = _safe_hardware_snapshot()
         before_process = _safe_process_snapshot()
@@ -247,6 +265,9 @@ class SmokeTestRunner:
         evidence = RunEvidenceSeed(
             id=str(uuid.uuid4()),
             model_name=request.model_name,
+            requested_model_name=request.model_name,
+            observed_model_name=observed_model_name,
+            **_identity_fields(self.runtime, request.workflow_profile_id, request.workflow_profile_name),
             prompt=request.prompt,
             response_text=result.response_text,
             reasoning_text=result.reasoning_text,
@@ -294,9 +315,15 @@ class SmokeTestRunner:
 class LoadEvidenceRecorder:
     """Records a load attempt as local operator evidence."""
 
-    def __init__(self, storage: RunEvidenceStorage | None = None, log_collector=None) -> None:
+    def __init__(
+        self,
+        storage: RunEvidenceStorage | None = None,
+        log_collector=None,
+        runtime: RuntimeConfig | None = None,
+    ) -> None:
         self.storage = storage or RunEvidenceStorage()
         self.log_collector = log_collector or _safe_log_snapshot
+        self.runtime = runtime
 
     def start(self) -> dict:
         return {
@@ -311,6 +338,7 @@ class LoadEvidenceRecorder:
         request: LoadModelRequest,
         response: LoadModelResponse,
         started: dict,
+        observed_model_name: str | None = None,
     ) -> RunEvidenceSeed:
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
@@ -325,6 +353,9 @@ class LoadEvidenceRecorder:
             id=str(uuid.uuid4()),
             kind="load_attempt",
             model_name=request.model_name,
+            requested_model_name=request.model_name,
+            observed_model_name=observed_model_name,
+            **_identity_fields(self.runtime, request.workflow_profile_id, request.workflow_profile_name),
             success=response.success,
             error=None if response.success else response.message,
             load_message=response.message,
@@ -427,3 +458,40 @@ def _load_warnings(
     if request.ctx_size and process.get("ctx_size") and request.ctx_size != process["ctx_size"]:
         warnings.append(f"Requested ctx {request.ctx_size}, observed {process['ctx_size']}.")
     return warnings
+
+
+def _identity_fields(
+    runtime: RuntimeConfig | None,
+    workflow_profile_id: str | None,
+    workflow_profile_name: str | None,
+) -> dict:
+    return {
+        "runtime_id": runtime.id if runtime else None,
+        "runtime_label": runtime.name if runtime else None,
+        "runtime_server_url": _normalize_server_url(runtime.url) if runtime else None,
+        "workflow_profile_id": workflow_profile_id,
+        "workflow_profile_name": workflow_profile_name,
+    }
+
+
+def _normalize_server_url(value: str) -> str:
+    """Persist a stable runtime root URL without query strings or fragments."""
+    raw = value.strip().rstrip("/")
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = f"http://{raw}"
+    parsed = urlsplit(raw)
+    hostname = parsed.hostname or ""
+    safe_host = f"[{hostname}]" if ":" in hostname and not hostname.startswith("[") else hostname
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    netloc = f"{safe_host}:{port}" if port is not None else safe_host
+    path = parsed.path.rstrip("/")
+    for suffix in ("/api/v1", "/api", "/v1"):
+        if path.endswith(suffix):
+            path = path[: -len(suffix)]
+            break
+    return urlunsplit((parsed.scheme.lower(), netloc.lower(), path, "", "")).rstrip("/")

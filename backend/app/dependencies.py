@@ -9,8 +9,21 @@ Usage in routers:
 from fastapi import Depends
 
 from app.providers.lemonade import LemonadeProvider
+from app.models.setup import RuntimeConfig
 from app.services.completion_runner import CompletionRunner
 from app.services.setup import SetupService
+
+
+def get_active_runtime_config() -> RuntimeConfig | None:
+    """Return the configured active runtime, if one is persisted."""
+    service = SetupService()
+    if not service.config_file.exists():
+        return None
+    config = service.get_config()
+    return next(
+        (runtime for runtime in config.runtimes if runtime.id == config.active_runtime_id),
+        None,
+    )
 
 
 def get_provider() -> LemonadeProvider:
@@ -19,15 +32,7 @@ def get_provider() -> LemonadeProvider:
     M14 prepares multiple runtime records, but existing API routes still proxy
     Lemonade endpoints. Only active runtimes of type "lemonade" are wired here.
     """
-    service = SetupService()
-    if not service.config_file.exists():
-        return LemonadeProvider()
-
-    config = service.get_config()
-    active = next(
-        (runtime for runtime in config.runtimes if runtime.id == config.active_runtime_id),
-        None,
-    )
+    active = get_active_runtime_config()
     if active and active.type == "lemonade":
         return LemonadeProvider(
             url=active.url,

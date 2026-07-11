@@ -399,12 +399,21 @@ export interface LoadModelOptions {
   llamacppArgs: string;
   mergeArgs: boolean;
   saveOptions: boolean;
+  workflowProfileId?: string | null;
+  workflowProfileName?: string | null;
 }
 
 export interface RunEvidenceSeed {
   id: string;
   kind: 'smoke_test' | 'load_attempt';
   model_name: string;
+  requested_model_name: string | null;
+  observed_model_name: string | null;
+  runtime_id: string | null;
+  runtime_label: string | null;
+  runtime_server_url: string | null;
+  workflow_profile_id: string | null;
+  workflow_profile_name: string | null;
   prompt: string;
   response_text: string;
   reasoning_text: string;
