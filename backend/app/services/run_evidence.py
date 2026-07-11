@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -12,6 +13,7 @@ from app.models.completions import CompletionRequest
 from app.models.schemas import LoadModelRequest, LoadModelResponse, RunEvidenceSeed, SmokeTestRequest, SmokeTestResponse
 from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
+from app.services.log_parser import get_logs_for_window
 from app.services.process import find_llama_server
 
 EVIDENCE_FILE = Path(__file__).parent.parent / "data" / "run_evidence.json"
@@ -33,7 +35,12 @@ class RunEvidenceStorage:
             encoding="utf-8",
         )
 
-    def get_all(self, model_name: str | None = None) -> list[RunEvidenceSeed]:
+    def get_all(
+        self,
+        model_name: str | None = None,
+        kind: str | None = None,
+        success: bool | None = None,
+    ) -> list[RunEvidenceSeed]:
         if not self.path.exists():
             return []
         try:
@@ -52,7 +59,145 @@ class RunEvidenceStorage:
                 continue
         if model_name:
             results = [item for item in results if item.model_name == model_name]
+        if kind:
+            results = [item for item in results if item.kind == kind]
+        if success is not None:
+            results = [item for item in results if item.success is success]
         return results[: self.max_results]
+
+    def get(self, evidence_id: str) -> RunEvidenceSeed | None:
+        return next((item for item in self.get_all() if item.id == evidence_id), None)
+
+
+def render_evidence_json(evidence: RunEvidenceSeed) -> str:
+    """Render one complete evidence record for local export."""
+    return json.dumps(evidence.model_dump(mode="json"), indent=2)
+
+
+def render_evidence_markdown(evidence: RunEvidenceSeed) -> str:
+    """Render one evidence record as a readable operator report."""
+    outcome = "passed" if evidence.success else "failed"
+    lines = [
+        "# LCC Run Evidence",
+        "",
+        f"- **ID:** `{evidence.id}`",
+        f"- **Timestamp:** {evidence.timestamp.isoformat()}",
+        f"- **Kind:** {evidence.kind}",
+        f"- **Outcome:** {outcome}",
+        f"- **Model:** `{evidence.model_name}`",
+        "",
+        "## Runtime",
+        "",
+        f"- **Backend:** {evidence.observed_backend or 'unavailable'}",
+        f"- **Context:** {evidence.observed_ctx_size or 'unavailable'}",
+        f"- **PID:** {evidence.observed_pid or 'unavailable'}",
+        f"- **Process RSS:** {_format_gb(evidence.process_rss_gb)}",
+        f"- **RAM used:** {_format_gb(evidence.ram_used_before_gb)} before / {_format_gb(evidence.ram_used_after_gb)} after",
+        f"- **Swap used:** {_format_gb(evidence.swap_used_before_gb)} before / {_format_gb(evidence.swap_used_after_gb)} after",
+        f"- **Duration:** {evidence.total_seconds:.3f} s",
+    ]
+
+    if evidence.kind == "smoke_test":
+        lines.extend(
+            [
+                "",
+                "## Completion",
+                "",
+                f"- **Endpoint:** {evidence.completion_endpoint or 'unavailable'}",
+                f"- **TTFT:** {evidence.ttft_seconds:.3f} s",
+                f"- **Prompt evaluation:** {evidence.prompt_eval_tps:.2f} tok/s",
+                f"- **Generation:** {evidence.generation_tps:.2f} tok/s",
+                f"- **Tokens:** {evidence.input_tokens} input / {evidence.output_tokens} output",
+                f"- **Token source:** {evidence.token_count_source}",
+                f"- **Finish:** {evidence.finish_reason} ({evidence.finish_confidence})",
+                f"- **Error kind:** {evidence.completion_error_kind or 'none'}",
+                f"- **Max tokens:** {evidence.request_max_tokens or 'unavailable'}",
+                f"- **Temperature:** {_format_optional(evidence.request_temperature)}",
+                f"- **Timeout:** {_format_seconds(evidence.request_timeout_seconds)}",
+                f"- **Stop sequences:** {_format_list(evidence.request_stop_sequences)}",
+                "",
+                "## Prompt",
+                "",
+                "```text",
+                evidence.prompt,
+                "```",
+                "",
+                "## Response",
+                "",
+                "```text",
+                evidence.response_text,
+                "```",
+            ]
+        )
+        if evidence.reasoning_text:
+            lines.extend(["", "## Reasoning", "", "```text", evidence.reasoning_text, "```"])
+    else:
+        lines.extend(
+            [
+                "",
+                "## Load Request",
+                "",
+                f"- **Requested backend:** {evidence.requested_backend or 'default'}",
+                f"- **Requested context:** {evidence.requested_ctx_size or 'default'}",
+                f"- **Merge args:** {_format_bool(evidence.merge_args)}",
+                f"- **Save options:** {_format_bool(evidence.save_options)}",
+                f"- **Message:** {evidence.load_message or 'unavailable'}",
+                f"- **llama.cpp args:** {evidence.requested_llamacpp_args or 'none'}",
+            ]
+        )
+
+    if evidence.error:
+        lines.extend(["", "## Error", "", evidence.error])
+    lines.extend(
+        [
+            "",
+            "## Correlated Logs",
+            "",
+            f"- **Source:** {evidence.log_source}",
+            f"- **Window start:** {_format_datetime(evidence.log_window_started_at)}",
+            f"- **Window end:** {_format_datetime(evidence.log_window_ended_at)}",
+        ]
+    )
+    if evidence.log_capture_error:
+        lines.append(f"- **Capture error:** {evidence.log_capture_error}")
+    if evidence.log_entries:
+        lines.extend(["", "```text"])
+        lines.extend(
+            f"{entry.timestamp or 'unknown time'} [{entry.level.value.upper()}] {entry.message}"
+            for entry in evidence.log_entries
+        )
+        lines.append("```")
+    else:
+        lines.extend(["", "No log entries were captured for this run window."])
+    if evidence.warnings:
+        lines.extend(["", "## Warnings", "", *[f"- {warning}" for warning in evidence.warnings]])
+    return "\n".join(lines) + "\n"
+
+
+def _format_gb(value: float | None) -> str:
+    return f"{value:.2f} GB" if value is not None else "unavailable"
+
+
+def _format_bool(value: bool | None) -> str:
+    if value is None:
+        return "unavailable"
+    return "yes" if value else "no"
+
+
+def _format_optional(value: float | None) -> str:
+    return str(value) if value is not None else "unavailable"
+
+
+def _format_seconds(value: int | None) -> str:
+    return f"{value} s" if value is not None else "unavailable"
+
+
+def _format_list(values: list[str]) -> str:
+    return ", ".join(f"`{value}`" for value in values) if values else "none"
+
+
+def _format_datetime(value: datetime | None) -> str:
+    return value.isoformat() if value is not None else "unavailable"
 
 
 class SmokeTestRunner:
@@ -63,11 +208,14 @@ class SmokeTestRunner:
         *,
         completion_runner: CompletionRunner,
         storage: RunEvidenceStorage | None = None,
+        log_collector=None,
     ) -> None:
         self.completion_runner = completion_runner
         self.storage = storage or RunEvidenceStorage()
+        self.log_collector = log_collector or _safe_log_snapshot
 
     async def run(self, request: SmokeTestRequest) -> SmokeTestResponse:
+        started_at = datetime.now(timezone.utc)
         before_hardware = _safe_hardware_snapshot()
         before_process = _safe_process_snapshot()
 
@@ -83,6 +231,8 @@ class SmokeTestRunner:
 
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
+        ended_at = datetime.now(timezone.utc)
+        log_capture = self.log_collector(started_at, ended_at)
         process = after_process or before_process
         warnings: list[str] = []
 
@@ -91,6 +241,8 @@ class SmokeTestRunner:
         warnings.extend(result.warnings)
         if not process:
             warnings.append("No llama-server process evidence was available for this run.")
+        if log_capture["error"]:
+            warnings.append(log_capture["error"])
 
         evidence = RunEvidenceSeed(
             id=str(uuid.uuid4()),
@@ -123,6 +275,11 @@ class SmokeTestRunner:
             ram_used_after_gb=after_hardware["ram_used_gb"] if after_hardware else None,
             swap_used_before_gb=before_hardware["swap_used_gb"] if before_hardware else None,
             swap_used_after_gb=after_hardware["swap_used_gb"] if after_hardware else None,
+            log_window_started_at=started_at,
+            log_window_ended_at=ended_at,
+            log_source=log_capture["source"],
+            log_entries=log_capture["entries"],
+            log_capture_error=log_capture["error"],
             warnings=warnings,
         )
         self.storage.add(evidence)
@@ -137,12 +294,14 @@ class SmokeTestRunner:
 class LoadEvidenceRecorder:
     """Records a load attempt as local operator evidence."""
 
-    def __init__(self, storage: RunEvidenceStorage | None = None) -> None:
+    def __init__(self, storage: RunEvidenceStorage | None = None, log_collector=None) -> None:
         self.storage = storage or RunEvidenceStorage()
+        self.log_collector = log_collector or _safe_log_snapshot
 
     def start(self) -> dict:
         return {
             "started_at": time.monotonic(),
+            "wall_started_at": datetime.now(timezone.utc),
             "hardware": _safe_hardware_snapshot(),
             "process": _safe_process_snapshot(),
         }
@@ -155,8 +314,12 @@ class LoadEvidenceRecorder:
     ) -> RunEvidenceSeed:
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
+        ended_at = datetime.now(timezone.utc)
+        log_capture = self.log_collector(started["wall_started_at"], ended_at)
         process = after_process or started.get("process")
         warnings = _load_warnings(request, response, process)
+        if log_capture["error"]:
+            warnings.append(log_capture["error"])
 
         evidence = RunEvidenceSeed(
             id=str(uuid.uuid4()),
@@ -179,6 +342,11 @@ class LoadEvidenceRecorder:
             ram_used_after_gb=after_hardware["ram_used_gb"] if after_hardware else None,
             swap_used_before_gb=started["hardware"]["swap_used_gb"] if started.get("hardware") else None,
             swap_used_after_gb=after_hardware["swap_used_gb"] if after_hardware else None,
+            log_window_started_at=started["wall_started_at"],
+            log_window_ended_at=ended_at,
+            log_source=log_capture["source"],
+            log_entries=log_capture["entries"],
+            log_capture_error=log_capture["error"],
             warnings=warnings,
         )
         self.storage.add(evidence)
@@ -217,6 +385,28 @@ def _safe_process_snapshot() -> dict | None:
         "rss_gb": info.process.rss_gb,
         "backend": info.params.backend if info.params else None,
         "ctx_size": info.params.ctx_size if info.params else None,
+    }
+
+
+def _safe_log_snapshot(started_at: datetime, ended_at: datetime) -> dict:
+    try:
+        response = get_logs_for_window(started_at, ended_at)
+    except Exception as exc:
+        return {
+            "source": "error",
+            "entries": [],
+            "error": f"Run log capture failed: {exc}",
+        }
+
+    error = None
+    if response.source == "unavailable":
+        error = "Run log capture unavailable; journalctl could not be queried."
+    elif response.source == "error":
+        error = "Run log capture failed; journalctl returned an error."
+    return {
+        "source": response.source,
+        "entries": response.entries,
+        "error": error,
     }
 
 

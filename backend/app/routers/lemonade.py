@@ -4,7 +4,10 @@ Router that proxies all Lemonade API calls through the LemonadeProvider.
 Every endpoint is capability-driven: if the underlying Lemonade endpoint
 isn't available, the provider raises a clean 501 error.
 """
-from fastapi import APIRouter, Depends, Query
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 
 from app.dependencies import get_completion_runner, get_provider
 from app.providers.lemonade import LemonadeProvider
@@ -17,6 +20,7 @@ from app.models.schemas import (
     ModelShowResponse,
     LoadModelRequest,
     LoadModelResponse,
+    RunEvidenceSeed,
     RunEvidenceListResponse,
     PullModelRequest,
     PullModelResponse,
@@ -30,7 +34,13 @@ from app.models.schemas import (
 from app.services.lemonade_options import read_saved_options
 from app.services.backend_readiness import collect_backend_readiness
 from app.services.completion_runner import CompletionRunner
-from app.services.run_evidence import LoadEvidenceRecorder, RunEvidenceStorage, SmokeTestRunner
+from app.services.run_evidence import (
+    LoadEvidenceRecorder,
+    RunEvidenceStorage,
+    SmokeTestRunner,
+    render_evidence_json,
+    render_evidence_markdown,
+)
 
 router = APIRouter(prefix="/api/lemonade", tags=["lemonade"])
 
@@ -118,9 +128,49 @@ async def smoke_test(
 
 
 @router.get("/run-evidence", response_model=RunEvidenceListResponse)
-async def run_evidence(model_name: str | None = None):
+async def run_evidence(
+    model_name: str | None = None,
+    kind: Literal["smoke_test", "load_attempt"] | None = None,
+    success: bool | None = None,
+):
     """Return local run evidence seeds."""
-    return RunEvidenceListResponse(results=RunEvidenceStorage().get_all(model_name=model_name))
+    results = RunEvidenceStorage().get_all(model_name=model_name, kind=kind, success=success)
+    return RunEvidenceListResponse(results=results, total=len(results))
+
+
+@router.get("/run-evidence/{evidence_id}", response_model=RunEvidenceSeed)
+async def run_evidence_detail(evidence_id: str):
+    """Return one complete local evidence record."""
+    evidence = RunEvidenceStorage().get(evidence_id)
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Run evidence not found.")
+    return evidence
+
+
+@router.get("/run-evidence/{evidence_id}/export")
+async def export_run_evidence(
+    evidence_id: str,
+    format: Literal["json", "markdown"] = "json",
+):
+    """Download one complete evidence record as JSON or Markdown."""
+    evidence = RunEvidenceStorage().get(evidence_id)
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Run evidence not found.")
+
+    extension = "json" if format == "json" else "md"
+    filename_id = "".join(character for character in evidence.id if character.isalnum() or character in "-_")
+    filename_id = filename_id or "record"
+    content = (
+        render_evidence_json(evidence)
+        if format == "json"
+        else render_evidence_markdown(evidence)
+    )
+    media_type = "application/json" if format == "json" else "text/markdown; charset=utf-8"
+    return PlainTextResponse(
+        content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="lcc-run-evidence-{filename_id}.{extension}"'},
+    )
 
 
 @router.post("/pull", response_model=PullModelResponse)

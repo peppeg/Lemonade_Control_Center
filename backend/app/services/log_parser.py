@@ -9,8 +9,10 @@ Extracts structured information from raw log lines:
 - Finish reason (confirmed vs inferred)
 - Slot lifecycle events
 """
+import json
 import re
 import subprocess
+from datetime import datetime, timezone
 
 from app.models.schemas import (
     LogEntry,
@@ -105,6 +107,75 @@ def get_recent_logs(
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return RecentLogsResponse(entries=[], total_lines=0, source="unavailable")
+
+
+def get_logs_for_window(
+    started_at: datetime,
+    ended_at: datetime,
+    service: str = "lemond.service",
+    max_lines: int = 200,
+    timeout: float = 3,
+) -> RecentLogsResponse:
+    """Return structured journald entries emitted during one operator action."""
+    since = _as_utc(started_at).isoformat()
+    until = _as_utc(ended_at).isoformat()
+    try:
+        result = subprocess.run(
+            [
+                "journalctl",
+                "-u",
+                service,
+                "--since",
+                since,
+                "--until",
+                until,
+                "-n",
+                str(max_lines),
+                "-o",
+                "json",
+                "--no-pager",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return RecentLogsResponse(entries=[], total_lines=0, source="unavailable")
+
+    if result.returncode != 0:
+        return RecentLogsResponse(entries=[], total_lines=0, source="error")
+
+    entries: list[LogEntry] = []
+    for raw_line in result.stdout.splitlines():
+        try:
+            payload = json.loads(raw_line)
+        except (TypeError, ValueError):
+            continue
+        message = payload.get("MESSAGE")
+        if not isinstance(message, str) or not message.strip():
+            continue
+        entry = _parse_log_line(message)
+        journal_timestamp = _journal_timestamp(payload.get("__REALTIME_TIMESTAMP"))
+        if journal_timestamp:
+            entry.timestamp = journal_timestamp
+        entries.append(entry)
+
+    entries = entries[-max_lines:]
+    return RecentLogsResponse(entries=entries, total_lines=len(entries), source="journalctl")
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _journal_timestamp(value: object) -> str | None:
+    try:
+        microseconds = int(str(value))
+    except (TypeError, ValueError):
+        return None
+    return datetime.fromtimestamp(microseconds / 1_000_000, tz=timezone.utc).isoformat()
 
 
 def parse_last_task(

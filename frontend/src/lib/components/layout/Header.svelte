@@ -16,6 +16,7 @@
     '/logs': 'Logs & Stats',
     '/system': 'System',
     '/backends': 'Backends',
+    '/evidence': 'Run Evidence',
   };
 
   $: currentLabel = routeLabels[$page.url.pathname] || 'Dashboard';

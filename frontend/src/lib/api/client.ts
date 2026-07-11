@@ -177,8 +177,18 @@ export const api = {
     }) => post<{ success: boolean; message: string; evidence?: RunEvidenceSeed | null }>('/lemonade/load', body),
     smokeTest: (body: { model_name: string; prompt?: string; max_tokens?: number; temperature?: number; app_timeout_seconds?: number; stop_sequences?: string[] }) =>
       post<SmokeTestResponse>('/lemonade/smoke-test', body),
-    runEvidence: (modelName?: string) =>
-      get<{ results: RunEvidenceSeed[] }>(`/lemonade/run-evidence${modelName ? `?model_name=${enc(modelName)}` : ''}`),
+    runEvidence: (filters?: { modelName?: string; kind?: RunEvidenceSeed['kind']; success?: boolean }) => {
+      const params = new URLSearchParams();
+      if (filters?.modelName) params.set('model_name', filters.modelName);
+      if (filters?.kind) params.set('kind', filters.kind);
+      if (filters?.success !== undefined) params.set('success', String(filters.success));
+      const query = params.toString();
+      return get<{ results: RunEvidenceSeed[]; total: number }>(`/lemonade/run-evidence${query ? `?${query}` : ''}`);
+    },
+    runEvidenceDetail: (evidenceId: string) =>
+      get<RunEvidenceSeed>(`/lemonade/run-evidence/${enc(evidenceId)}`),
+    runEvidenceExportUrl: (evidenceId: string, format: 'json' | 'markdown') =>
+      `${BASE}${withLccKey(`/lemonade/run-evidence/${enc(evidenceId)}/export?format=${format}`)}`,
     pullModel: (modelName: string) =>
       post<{ success: boolean; message: string; raw?: Record<string, unknown> }>('/lemonade/pull', { model_name: modelName }),
     unloadModel: (name?: string) =>

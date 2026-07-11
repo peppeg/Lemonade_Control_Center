@@ -22,6 +22,9 @@ The project is under active development, so entries currently describe the evolv
 - Backend readiness snapshots in diagnostic bundles, including an explicit unavailable state when Lemonade cannot be reached.
 - LCC Workflow Defaults with automatic migration from the previous browser storage key.
 - Core OpenAI-compatible CompletionRunner shared by Smoke Test and Bench Lab, with structured errors, active-runtime routing, reasoning separation, and defensive SSE parsing.
+- Run Evidence workspace with result filters, full record inspection, and per-run JSON or Markdown export.
+- Run Evidence detail and export API endpoints with backend-tested lookup, filtering, and attachment handling.
+- Per-run Lemonade journal windows captured for smoke tests and load attempts, with structured timestamps, levels, messages, and explicit unavailable/error states.
 
 ### Changed
 
@@ -36,6 +39,7 @@ The project is under active development, so entries currently describe the evolv
 - Backend timestamps now use timezone-aware UTC values for current Python compatibility.
 - Renamed local Request Defaults to LCC Workflow Defaults and applied them to smoke-test requests and Bench Lab quick-test initialization.
 - Smoke Test now uses the core CompletionRunner directly; BenchRunner is limited to prompt adaptation, suite orchestration, aggregation, and storage.
+- Run Evidence detail and Markdown exports now include the Lemonade logs emitted during the recorded operation window.
 
 ### Fixed
 

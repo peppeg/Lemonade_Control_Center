@@ -135,7 +135,7 @@ LCC is guided by three product pillars:
 
 The current priority is P0: sharpen the public positioning, document overlap with official Lemonade tools, improve Connection Doctor/discovery, strengthen guided model operations, and keep compatibility testing disciplined as Lemonade evolves.
 
-See [Overlap Matrix](docs/overlap-matrix.md) and [Roadmap](docs/roadmap.md) for the working product plan.
+See [Overlap Matrix](docs/overlap-matrix.md) and the [Roadmap Current Execution Plan](docs/roadmap.md#current-execution-plan) for product boundaries, current delivery state, implementation references, and the ordered remaining work.
 
 ## Safety Model
 
@@ -183,6 +183,7 @@ Development keeps Vite and FastAPI separate for faster iteration. The unified ru
 - hardware and process inspection
 - log parsing and metrics collection
 - diagnostics and support bundles
+- local Run Evidence lookup, operation-window log correlation, and JSON/Markdown report generation
 - shared OpenAI-compatible completion streaming for Smoke Test and optional Bench Lab workflows
 
 ### Frontend responsibilities
@@ -192,6 +193,7 @@ Development keeps Vite and FastAPI separate for faster iteration. The unified ru
 - model-management workflows
 - configuration and profile editing
 - logs, diagnostics, and settings
+- Run Evidence filtering, detail inspection, and report download
 - confirmations, warnings, and live feedback
 
 ## Requirements

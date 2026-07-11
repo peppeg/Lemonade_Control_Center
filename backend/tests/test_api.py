@@ -1,8 +1,9 @@
 import pytest
+from fastapi import HTTPException
 
-from app.models.schemas import ModelInfo, ModelsListResponse
+from app.models.schemas import ModelInfo, ModelsListResponse, RunEvidenceSeed
 from app.dependencies import get_completion_runner
-from app.routers.lemonade import list_models
+from app.routers.lemonade import export_run_evidence, list_models, run_evidence, run_evidence_detail
 from app.services.security import security_status
 
 
@@ -51,3 +52,46 @@ def test_completion_runner_uses_active_provider_url():
     runner = get_completion_runner(provider=Provider())
 
     assert runner.base_url == "http://active-runtime.test:13305"
+
+
+@pytest.mark.asyncio
+async def test_run_evidence_endpoints_filter_and_return_detail(monkeypatch):
+    stored = RunEvidenceSeed(id="run-1", model_name="qwen-test", success=True)
+
+    class FakeStorage:
+        def get_all(self, **filters):
+            assert filters == {"model_name": "qwen-test", "kind": "smoke_test", "success": True}
+            return [stored]
+
+        def get(self, evidence_id):
+            return stored if evidence_id == stored.id else None
+
+    monkeypatch.setattr("app.routers.lemonade.RunEvidenceStorage", FakeStorage)
+
+    listing = await run_evidence(model_name="qwen-test", kind="smoke_test", success=True)
+    detail = await run_evidence_detail("run-1")
+
+    assert listing.total == 1
+    assert listing.results == [stored]
+    assert detail == stored
+
+    with pytest.raises(HTTPException) as exc_info:
+        await run_evidence_detail("missing")
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_run_evidence_export_sets_safe_attachment_name(monkeypatch):
+    stored = RunEvidenceSeed(id="../run-1", model_name="qwen-test", response_text="ok")
+
+    class FakeStorage:
+        def get(self, evidence_id):
+            return stored
+
+    monkeypatch.setattr("app.routers.lemonade.RunEvidenceStorage", FakeStorage)
+
+    response = await export_run_evidence("../run-1", format="markdown")
+
+    assert response.media_type == "text/markdown; charset=utf-8"
+    assert response.headers["content-disposition"] == 'attachment; filename="lcc-run-evidence-run-1.md"'
+    assert b"# LCC Run Evidence" in response.body
