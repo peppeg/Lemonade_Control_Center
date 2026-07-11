@@ -4,6 +4,8 @@ export interface WorkflowDefaults {
   appTimeoutSeconds: number;
   stopSequences: string[];
   activePreset: string;
+  activeProfileId: string | null;
+  activeProfileModelName: string | null;
 }
 
 const STORAGE_KEY = 'lcc.workflowDefaults';
@@ -15,6 +17,8 @@ export const DEFAULT_WORKFLOW_DEFAULTS: WorkflowDefaults = {
   appTimeoutSeconds: 300,
   stopSequences: ['<|im_end|>', '\n\nUser:'],
   activePreset: 'Coding',
+  activeProfileId: null,
+  activeProfileModelName: null,
 };
 
 export function loadWorkflowDefaults(): WorkflowDefaults {
@@ -63,6 +67,8 @@ function normalizeWorkflowDefaults(value: unknown): WorkflowDefaults {
       ? record.stopSequences.filter((item): item is string => typeof item === 'string' && item.length > 0)
       : [...DEFAULT_WORKFLOW_DEFAULTS.stopSequences],
     activePreset: typeof record.activePreset === 'string' && record.activePreset ? record.activePreset : DEFAULT_WORKFLOW_DEFAULTS.activePreset,
+    activeProfileId: typeof record.activeProfileId === 'string' && record.activeProfileId ? record.activeProfileId : null,
+    activeProfileModelName: typeof record.activeProfileModelName === 'string' && record.activeProfileModelName ? record.activeProfileModelName : null,
   };
 }
 

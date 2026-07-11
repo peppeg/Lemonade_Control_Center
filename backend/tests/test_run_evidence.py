@@ -4,6 +4,7 @@ import pytest
 
 from app.models.completions import CompletionError, CompletionResult
 from app.models.schemas import LoadModelRequest, LoadModelResponse, LogEntry, SmokeTestRequest
+from app.models.setup import RuntimeConfig
 from app.services.run_evidence import (
     LoadEvidenceRecorder,
     RunEvidenceStorage,
@@ -33,6 +34,8 @@ def test_run_evidence_storage_filters_and_gets_by_id(tmp_path):
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
     passed_smoke = _evidence("smoke", "model-a")
     passed_smoke.success = True
+    passed_smoke.runtime_id = "runtime-a"
+    passed_smoke.workflow_profile_id = "coding"
     failed_load = _evidence("load", "model-a")
     failed_load.kind = "load_attempt"
     storage.add(passed_smoke)
@@ -40,6 +43,8 @@ def test_run_evidence_storage_filters_and_gets_by_id(tmp_path):
 
     assert [item.id for item in storage.get_all(kind="smoke_test")] == ["smoke"]
     assert [item.id for item in storage.get_all(success=False)] == ["load"]
+    assert [item.id for item in storage.get_all(runtime_id="runtime-a")] == ["smoke"]
+    assert [item.id for item in storage.get_all(workflow_profile_id="coding")] == ["smoke"]
     assert storage.get("smoke") == passed_smoke
     assert storage.get("missing") is None
 
@@ -61,14 +66,27 @@ def test_run_evidence_exports_complete_json_and_markdown():
         )
     ]
     evidence.warnings = ["Token count estimated."]
+    evidence.requested_model_name = "qwen-coder:latest"
+    evidence.observed_model_name = "qwen-coder"
+    evidence.runtime_id = "lemonade-local"
+    evidence.runtime_label = "Local Lemonade"
+    evidence.runtime_server_url = "http://localhost:13305"
+    evidence.workflow_profile_id = "coding"
+    evidence.workflow_profile_name = "Coding Fast"
 
     exported_json = json.loads(render_evidence_json(evidence))
     exported_markdown = render_evidence_markdown(evidence)
 
     assert exported_json["id"] == "evidence-1"
     assert exported_json["response_text"] == "pong"
+    assert exported_json["runtime_id"] == "lemonade-local"
+    assert exported_json["workflow_profile_id"] == "coding"
     assert "# LCC Run Evidence" in exported_markdown
     assert "**Backend:** vulkan" in exported_markdown
+    assert "Local Lemonade (lemonade-local)" in exported_markdown
+    assert "Coding Fast (coding)" in exported_markdown
+    assert "qwen-coder:latest" in exported_markdown
+    assert "qwen-coder`" in exported_markdown
     assert "pong" in exported_markdown
     assert "## Correlated Logs" in exported_markdown
     assert "[PERFORMANCE] eval time" in exported_markdown
@@ -94,6 +112,9 @@ def test_run_evidence_storage_ignores_invalid_records(tmp_path):
     assert [item.id for item in results] == ["valid", "legacy"]
     assert results[1].completion_endpoint is None
     assert results[1].token_count_source == "unavailable"
+    assert results[1].requested_model_name is None
+    assert results[1].runtime_id is None
+    assert results[1].workflow_profile_id is None
 
 
 @pytest.mark.asyncio
@@ -101,7 +122,12 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
     completion_runner = FakeCompletionRunner()
     logs = FakeLogCollector()
-    runner = SmokeTestRunner(completion_runner=completion_runner, storage=storage, log_collector=logs)
+    runner = SmokeTestRunner(
+        completion_runner=completion_runner,
+        storage=storage,
+        log_collector=logs,
+        runtime=_runtime(),
+    )
 
     monkeypatch.setattr(
         "app.services.run_evidence._safe_hardware_snapshot",
@@ -124,11 +150,22 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
             temperature=0.25,
             app_timeout_seconds=240,
             stop_sequences=["DONE"],
+            workflow_profile_id="coding",
+            workflow_profile_name="Coding Fast",
         )
+        ,
+        observed_model_name="qwen-coder-canonical",
     )
 
     assert response.success is True
     assert response.evidence.model_name == "qwen-coder"
+    assert response.evidence.requested_model_name == "qwen-coder"
+    assert response.evidence.observed_model_name == "qwen-coder-canonical"
+    assert response.evidence.runtime_id == "lemonade-local"
+    assert response.evidence.runtime_label == "Local Lemonade"
+    assert response.evidence.runtime_server_url == "http://localhost:13305"
+    assert response.evidence.workflow_profile_id == "coding"
+    assert response.evidence.workflow_profile_name == "Coding Fast"
     assert response.evidence.response_text == "LCC_SMOKE_OK"
     assert response.evidence.reasoning_text == "internal reasoning"
     assert response.evidence.completion_endpoint == "/v1/chat/completions"
@@ -177,7 +214,7 @@ async def test_smoke_test_runner_stores_structured_completion_failure(tmp_path, 
 
 def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_path, monkeypatch):
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
-    recorder = LoadEvidenceRecorder(storage=storage, log_collector=FakeLogCollector())
+    recorder = LoadEvidenceRecorder(storage=storage, log_collector=FakeLogCollector(), runtime=_runtime())
 
     monkeypatch.setattr(
         "app.services.run_evidence._safe_hardware_snapshot",
@@ -202,14 +239,23 @@ def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_pat
             llamacpp_args="--flash-attn on",
             merge_args=True,
             save_options=True,
+            workflow_profile_id="review",
+            workflow_profile_name="Review Heavy",
         ),
         LoadModelResponse(success=True, message="loaded"),
         started,
+        observed_model_name="qwen-coder-canonical",
     )
 
     assert evidence.kind == "load_attempt"
     assert evidence.success is True
     assert evidence.load_message == "loaded"
+    assert evidence.requested_model_name == "qwen-coder"
+    assert evidence.observed_model_name == "qwen-coder-canonical"
+    assert evidence.runtime_id == "lemonade-local"
+    assert evidence.runtime_server_url == "http://localhost:13305"
+    assert evidence.workflow_profile_id == "review"
+    assert evidence.workflow_profile_name == "Review Heavy"
     assert evidence.requested_backend == "rocm"
     assert evidence.requested_ctx_size == 65536
     assert evidence.requested_llamacpp_args == "--flash-attn on"
@@ -286,4 +332,14 @@ def _evidence(id_: str, model_name: str):
         id=id_,
         model_name=model_name,
         prompt="ping",
+    )
+
+
+def _runtime() -> RuntimeConfig:
+    return RuntimeConfig(
+        id="lemonade-local",
+        type="lemonade",
+        name="Local Lemonade",
+        url="HTTP://operator:secret@LOCALHOST:13305/api/v1/?token=discarded",
+        is_active=True,
     )

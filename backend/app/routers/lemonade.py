@@ -9,7 +9,8 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
-from app.dependencies import get_completion_runner, get_provider
+from app.dependencies import get_active_runtime_config, get_completion_runner, get_provider
+from app.models.setup import RuntimeConfig
 from app.providers.lemonade import LemonadeProvider
 from app.models.backend_readiness import BackendReadinessResponse
 from app.models.schemas import (
@@ -102,17 +103,23 @@ async def show_model(
 @router.post("/load", response_model=LoadModelResponse)
 async def load_model(
     request: LoadModelRequest,
-    provider: LemonadeProvider = Depends(get_provider)
+    provider: LemonadeProvider = Depends(get_provider),
+    runtime: RuntimeConfig | None = Depends(get_active_runtime_config),
 ):
     """Load a model into memory with optional configuration."""
-    recorder = LoadEvidenceRecorder()
+    recorder = LoadEvidenceRecorder(runtime=runtime)
     started = recorder.start()
     try:
         response = await provider.load_model(request)
     except Exception as exc:
         recorder.record_exception(request, exc, started)
         raise
-    response.evidence = recorder.record_response(request, response, started)
+    response.evidence = recorder.record_response(
+        request,
+        response,
+        started,
+        observed_model_name=await _observed_model_name(provider),
+    )
     return response
 
 
@@ -120,11 +127,14 @@ async def load_model(
 async def smoke_test(
     request: SmokeTestRequest,
     completion_runner: CompletionRunner = Depends(get_completion_runner),
+    provider: LemonadeProvider = Depends(get_provider),
+    runtime: RuntimeConfig | None = Depends(get_active_runtime_config),
 ):
     """Run a small post-load request and save a local run evidence seed."""
     return await SmokeTestRunner(
         completion_runner=completion_runner,
-    ).run(request)
+        runtime=runtime,
+    ).run(request, observed_model_name=await _observed_model_name(provider))
 
 
 @router.get("/run-evidence", response_model=RunEvidenceListResponse)
@@ -132,9 +142,17 @@ async def run_evidence(
     model_name: str | None = None,
     kind: Literal["smoke_test", "load_attempt"] | None = None,
     success: bool | None = None,
+    runtime_id: str | None = None,
+    workflow_profile_id: str | None = None,
 ):
     """Return local run evidence seeds."""
-    results = RunEvidenceStorage().get_all(model_name=model_name, kind=kind, success=success)
+    results = RunEvidenceStorage().get_all(
+        model_name=model_name,
+        kind=kind,
+        success=success,
+        runtime_id=runtime_id,
+        workflow_profile_id=workflow_profile_id,
+    )
     return RunEvidenceListResponse(results=results, total=len(results))
 
 
@@ -171,6 +189,15 @@ async def export_run_evidence(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="lcc-run-evidence-{filename_id}.{extension}"'},
     )
+
+
+async def _observed_model_name(provider: LemonadeProvider) -> str | None:
+    """Read the canonical loaded model name when Lemonade exposes it."""
+    try:
+        running = await provider.get_running_models()
+    except Exception:
+        return None
+    return running.models[0].name if running.models else None
 
 
 @router.post("/pull", response_model=PullModelResponse)

@@ -96,6 +96,8 @@
         temperature: defaults.temperature,
         app_timeout_seconds: defaults.appTimeoutSeconds,
         stop_sequences: defaults.stopSequences,
+        workflow_profile_id: defaults.activeProfileModelName === modelName ? defaults.activeProfileId ?? undefined : undefined,
+        workflow_profile_name: defaults.activeProfileModelName === modelName && defaults.activeProfileId ? defaults.activePreset : undefined,
       });
       if (result.ok) {
         latestSmoke = result.data.evidence;

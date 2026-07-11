@@ -36,6 +36,7 @@ SENSITIVE_ASSIGNMENT_RE = re.compile(
     r"(?i)\b(api[_-]?key|admin[_-]?key|authorization|token|secret|password|passwd|credential)"
     r"(\s*[:=]\s*)([\"']?)([^\"'\s,}]+)"
 )
+SAFE_STRING_METADATA_KEYS = {"token_count_source"}
 
 
 class DiagnosticBundleSanitizer:
@@ -52,7 +53,12 @@ class DiagnosticBundleSanitizer:
             redacted: dict[Any, Any] = {}
             for key, item in value.items():
                 key_text = str(key)
-                if SENSITIVE_KEY_RE.search(key_text) and isinstance(item, str) and item:
+                if (
+                    key_text not in SAFE_STRING_METADATA_KEYS
+                    and SENSITIVE_KEY_RE.search(key_text)
+                    and isinstance(item, str)
+                    and item
+                ):
                     self._mark("secret_key")
                     redacted[key] = "[redacted]"
                 else:
@@ -219,9 +225,13 @@ def _run_evidence_summary() -> dict[str, Any]:
                 "id": item.id,
                 "kind": item.kind,
                 "model_name": item.model_name,
+                "requested_model_name": item.requested_model_name,
+                "observed_model_name": item.observed_model_name,
+                "runtime_id": item.runtime_id,
+                "runtime_label": item.runtime_label,
+                "workflow_profile_id": item.workflow_profile_id,
+                "workflow_profile_name": item.workflow_profile_name,
                 "success": item.success,
-                "error": item.error,
-                "load_message": item.load_message,
                 "requested_backend": item.requested_backend,
                 "requested_ctx_size": item.requested_ctx_size,
                 "request_max_tokens": item.request_max_tokens,
@@ -252,7 +262,16 @@ def _run_evidence_summary() -> dict[str, Any]:
             }
             for item in results[:10]
         ],
-        "omitted_fields": ["prompt", "response_text", "reasoning_text", "requested_llamacpp_args", "request_stop_sequences"],
+        "omitted_fields": [
+            "prompt",
+            "response_text",
+            "reasoning_text",
+            "requested_llamacpp_args",
+            "request_stop_sequences",
+            "runtime_server_url",
+            "error",
+            "load_message",
+        ],
     }
 
 

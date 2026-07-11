@@ -166,6 +166,8 @@ export async function loadModelDetailed(opts: LoadModelOptions): Promise<LoadMod
     llamacpp_args: opts.llamacppArgs || undefined,
     merge_args: opts.mergeArgs,
     save_options: opts.saveOptions,
+    workflow_profile_id: opts.workflowProfileId ?? undefined,
+    workflow_profile_name: opts.workflowProfileName ?? undefined,
   });
 
   if (result.ok && result.data.success) {

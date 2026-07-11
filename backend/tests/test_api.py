@@ -60,7 +60,13 @@ async def test_run_evidence_endpoints_filter_and_return_detail(monkeypatch):
 
     class FakeStorage:
         def get_all(self, **filters):
-            assert filters == {"model_name": "qwen-test", "kind": "smoke_test", "success": True}
+            assert filters == {
+                "model_name": "qwen-test",
+                "kind": "smoke_test",
+                "success": True,
+                "runtime_id": "runtime-a",
+                "workflow_profile_id": "coding",
+            }
             return [stored]
 
         def get(self, evidence_id):
@@ -68,7 +74,13 @@ async def test_run_evidence_endpoints_filter_and_return_detail(monkeypatch):
 
     monkeypatch.setattr("app.routers.lemonade.RunEvidenceStorage", FakeStorage)
 
-    listing = await run_evidence(model_name="qwen-test", kind="smoke_test", success=True)
+    listing = await run_evidence(
+        model_name="qwen-test",
+        kind="smoke_test",
+        success=True,
+        runtime_id="runtime-a",
+        workflow_profile_id="coding",
+    )
     detail = await run_evidence_detail("run-1")
 
     assert listing.total == 1

@@ -111,6 +111,11 @@ Smoke Test and Bench Lab share the core completion transport, but Smoke Test mus
 - New smoke and load records show Lemonade journal entries limited to the recorded operation window.
 - Missing, timed-out, or failed journal access produces an explicit capture state without failing the operator action.
 - JSON and Markdown downloads contain the selected complete record and use a safe attachment filename.
+- New records show the active LCC runtime id/label and normalized server URL.
+- Apply & Load records show the selected profile id/name; a later smoke test preserves that linkage only for the same model.
+- Requested and observed model names are distinct when Lemonade exposes a canonical loaded name.
+- Legacy records show unavailable identity fields without disappearing from the list.
+- Diagnostic `run_evidence_summary.json` omits server URLs, prompts, responses, reasoning, stop sequences, and llama.cpp arguments.
 
 ## Local Data
 

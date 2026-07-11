@@ -27,7 +27,7 @@
   $: filteredEvidence = evidence.filter((item) => {
     const query = search.trim().toLowerCase();
     if (!query) return true;
-    return `${item.model_name} ${item.id} ${item.observed_backend ?? ''} ${item.error ?? ''}`
+    return `${item.model_name} ${item.requested_model_name ?? ''} ${item.observed_model_name ?? ''} ${item.runtime_id ?? ''} ${item.runtime_label ?? ''} ${item.workflow_profile_id ?? ''} ${item.workflow_profile_name ?? ''} ${item.id} ${item.observed_backend ?? ''} ${item.error ?? ''}`
       .toLowerCase()
       .includes(query);
   });
@@ -176,6 +176,13 @@
                     <button class="block w-full text-left" type="button" on:click={() => selectEvidence(item.id)}>
                       <span class="ops-value block truncate">{item.model_name}</span>
                       <span class="mt-1 block text-xs text-muted-foreground">{formatKind(item.kind)}</span>
+                      <span class="mt-1 block truncate text-xs text-muted-foreground">
+                        {item.runtime_label ?? item.runtime_id ?? 'Runtime unavailable'}
+                        {item.workflow_profile_name ? ` · ${item.workflow_profile_name}` : ''}
+                      </span>
+                      {#if item.observed_model_name && item.observed_model_name !== (item.requested_model_name ?? item.model_name)}
+                        <span class="mt-1 block truncate text-xs text-muted-foreground">Observed: {item.observed_model_name}</span>
+                      {/if}
                     </button>
                   </td>
                   <td>
@@ -225,6 +232,17 @@
             <div class="bg-[#171a19] p-3"><dt class="ops-label">RAM delta</dt><dd class="ops-value mt-1">{memoryDelta(selected.ram_used_before_gb, selected.ram_used_after_gb)}</dd></div>
             <div class="bg-[#171a19] p-3"><dt class="ops-label">RSS</dt><dd class="ops-value mt-1">{selected.process_rss_gb === null ? 'Unavailable' : `${formatNumber(selected.process_rss_gb)} GB`}</dd></div>
           </dl>
+
+          <section>
+            <h4 class="ops-label mb-3">Identity</h4>
+            <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+              <div><dt class="text-muted-foreground">Requested model</dt><dd class="ops-value mt-1 break-all">{selected.requested_model_name ?? selected.model_name}</dd></div>
+              <div><dt class="text-muted-foreground">Observed model</dt><dd class="ops-value mt-1 break-all">{selected.observed_model_name ?? 'Unavailable'}</dd></div>
+              <div><dt class="text-muted-foreground">LCC runtime</dt><dd class="ops-value mt-1">{selected.runtime_label ?? 'Unavailable'}{selected.runtime_id ? ` · ${selected.runtime_id}` : ''}</dd></div>
+              <div><dt class="text-muted-foreground">Workflow profile</dt><dd class="ops-value mt-1">{selected.workflow_profile_name ?? 'Unavailable'}{selected.workflow_profile_id ? ` · ${selected.workflow_profile_id}` : ''}</dd></div>
+              <div class="sm:col-span-2 xl:col-span-4"><dt class="text-muted-foreground">Server URL</dt><dd class="ops-value mt-1 break-all">{selected.runtime_server_url ?? 'Unavailable'}</dd></div>
+            </dl>
+          </section>
 
           <section>
             <h4 class="ops-label mb-3">Runtime</h4>

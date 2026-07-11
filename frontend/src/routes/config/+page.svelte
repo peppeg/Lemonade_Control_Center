@@ -135,6 +135,8 @@
       appTimeoutSeconds,
       stopSequences,
       activePreset,
+      activeProfileId: null,
+      activeProfileModelName: null,
     });
     localMessage = 'LCC Workflow Defaults saved.';
     notify.success('Workflow defaults saved', activePreset, { toastDuration: 2500 });

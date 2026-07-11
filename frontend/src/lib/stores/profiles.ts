@@ -180,6 +180,8 @@ export async function applyProfile(profile: Profile): Promise<boolean> {
       ? currentDefaults.stopSequences
       : parseStopSequences(profile.config.stop_sequences),
     activePreset: profile.name,
+    activeProfileId: profile.id,
+    activeProfileModelName: modelName,
   });
 
   if (Object.keys(runtimeUpdates).length === 0) {
@@ -210,6 +212,8 @@ export async function applyAndLoadProfile(profile: Profile, saveOptions = false)
     llamacppArgs: profile.config.llamacpp_args ?? '',
     mergeArgs: true,
     saveOptions,
+    workflowProfileId: profile.id,
+    workflowProfileName: profile.name,
   });
   if (success && saveOptions) {
     notify.success('Lemonade defaults saved', profile.name, { href: `/models/${encodeURIComponent(get(currentModelName) ?? '')}` });

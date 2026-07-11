@@ -122,6 +122,8 @@ class LoadModelRequest(BaseModel):
     llamacpp_args: str | None = None
     merge_args: bool | None = None
     save_options: bool = False
+    workflow_profile_id: str | None = None
+    workflow_profile_name: str | None = None
 
 
 class LoadModelResponse(BaseModel):
@@ -140,6 +142,8 @@ class SmokeTestRequest(BaseModel):
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     app_timeout_seconds: int = Field(default=300, ge=1, le=3600)
     stop_sequences: list[str] = Field(default_factory=list)
+    workflow_profile_id: str | None = None
+    workflow_profile_name: str | None = None
 
 
 class LogEntryLevel(str, Enum):
@@ -168,6 +172,13 @@ class RunEvidenceSeed(BaseModel):
     id: str
     kind: Literal["smoke_test", "load_attempt"] = "smoke_test"
     model_name: str
+    requested_model_name: str | None = None
+    observed_model_name: str | None = None
+    runtime_id: str | None = None
+    runtime_label: str | None = None
+    runtime_server_url: str | None = None
+    workflow_profile_id: str | None = None
+    workflow_profile_name: str | None = None
     prompt: str = ""
     response_text: str = ""
     reasoning_text: str = ""
