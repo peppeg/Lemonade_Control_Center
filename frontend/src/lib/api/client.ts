@@ -88,7 +88,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => 'Unknown error');
-      return { ok: false, error: text, status: resp.status };
+      return { ok: false, error: readableApiError(text), status: resp.status };
     }
 
     const data = await resp.json() as T;
@@ -97,6 +97,18 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     const msg = e instanceof Error ? e.message : 'Network error';
     return { ok: false, error: msg };
   }
+}
+
+function readableApiError(text: string): string {
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown; error?: unknown };
+    const detail = parsed.detail ?? parsed.error;
+    if (typeof detail === 'string') return detail;
+    if (detail !== undefined) return JSON.stringify(detail);
+  } catch {
+    // The server returned plain text; keep it intact.
+  }
+  return text || 'Unknown error';
 }
 
 async function get<T>(path: string): Promise<ApiResult<T>> {
@@ -228,12 +240,12 @@ export const api = {
       const size = typeof modelSizeGb === 'number' ? `?model_size_gb=${modelSizeGb}` : '';
       return get<SmartRecommendation>(`/profiles/${enc(modelName)}/recommendation${size}`);
     },
-    create: (modelName: string, body: { name: string; description?: string; icon?: string; config: ProfileConfig }) =>
+    create: (modelName: string, body: { name: string; description?: string; intent?: string; notes?: string; known_caveats?: string[]; runtime_id?: string | null; icon?: string; config: ProfileConfig }) =>
       post<Profile>(`/profiles/${enc(modelName)}`, body),
     update: (
       modelName: string,
       profileId: string,
-      body: { name?: string; description?: string; icon?: string; config?: ProfileConfig; is_default?: boolean },
+      body: { name?: string; description?: string; intent?: string; notes?: string; known_caveats?: string[]; runtime_id?: string | null; icon?: string; config?: ProfileConfig; is_default?: boolean },
     ) => put<Profile>(`/profiles/${enc(modelName)}/${enc(profileId)}`, body),
     delete: (modelName: string, profileId: string) =>
       del<{ deleted: boolean }>(`/profiles/${enc(modelName)}/${enc(profileId)}`),

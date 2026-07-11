@@ -16,7 +16,7 @@
     runSuiteBench,
   } from '$lib/stores/bench';
   import type { BenchStoredResult } from '$lib/types';
-  import { loadWorkflowDefaults } from '$lib/utils/workflowDefaults';
+  import { loadWorkflowDefaults, type WorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   type Tab = 'quick' | 'suites' | 'results' | 'compare';
   let tab: Tab = 'quick';
@@ -25,9 +25,11 @@
   let systemPrompt = '';
   let maxTokens = 2000;
   let temperature = 0.3;
+  let appliedWorkflow: WorkflowDefaults = loadWorkflowDefaults();
 
   onMount(() => {
     const defaults = loadWorkflowDefaults();
+    appliedWorkflow = defaults;
     maxTokens = defaults.maxOutputTokens;
     temperature = defaults.temperature;
     refreshModels();
@@ -37,6 +39,7 @@
   $: if (!selectedModel && $models.length > 0) {
     selectedModel = $models[0].name;
   }
+  $: benchProfileMatches = Boolean(appliedWorkflow.activeProfileId && appliedWorkflow.activeProfileModelName === selectedModel);
 
   function resultName(result: BenchStoredResult): string {
     return 'suite_name' in result ? result.suite_name : result.prompt_name;
@@ -74,6 +77,16 @@
     {#if $benchError}
       <section class="ops-banner ops-banner-danger">{$benchError}</section>
     {/if}
+
+    <section class="ops-banner {benchProfileMatches ? '' : 'ops-banner-muted'}">
+      {#if benchProfileMatches}
+        Applied workflow profile: <strong>{appliedWorkflow.activePreset}</strong>
+        <span class="ops-mono">({appliedWorkflow.activeProfileId})</span> for {selectedModel}.
+      {:else}
+        No workflow profile is applied to {selectedModel || 'the selected model'}.
+        {#if selectedModel}<a class="text-lemon hover:underline" href={`/models/${encodeURIComponent(selectedModel)}`}>Apply a profile before running Bench Lab</a>.{/if}
+      {/if}
+    </section>
 
     <div class="flex flex-wrap gap-2 rounded border border-[#444936] bg-[#2b2d2a] p-1">
       {#each ['quick', 'suites', 'results', 'compare'] as item}

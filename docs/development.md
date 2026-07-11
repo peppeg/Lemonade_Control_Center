@@ -117,6 +117,16 @@ Smoke Test and Bench Lab share the core completion transport, but Smoke Test mus
 - Legacy records show unavailable identity fields without disappearing from the list.
 - Diagnostic `run_evidence_summary.json` omits server URLs, prompts, responses, reasoning, stop sequences, and llama.cpp arguments.
 
+## Workflow Memory Manual Check
+
+- Existing profile files gain missing built-in intents without losing custom profile content.
+- Creating or editing a profile preserves intent, notes, caveats, target runtime, runtime options, and LCC request defaults.
+- A target-runtime mismatch blocks profile application and explains the active/required runtime ids.
+- Apply, Apply & Load, Smoke Test, and Bench Lab make the currently applied profile—or its absence—explicit.
+- A successful profile-linked Run Evidence record appears as the latest useful result on the corresponding profile card.
+- Opening the latest evidence link selects that exact record in the Run Evidence workspace.
+- Profile JSON storage contains no evidence payload; the latest evidence reference is computed at read time without copying prompt, response, logs, or full evidence.
+
 ## Local Data
 
 Runtime data is stored under backend-managed data paths and is intentionally excluded from git. Do not commit secrets, local settings, diagnostic bundles, or private planning documents.

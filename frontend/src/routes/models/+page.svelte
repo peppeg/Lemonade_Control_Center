@@ -13,7 +13,7 @@
   import { notify } from '$lib/stores/notifications';
   import type { ModelEntry, RunEvidenceSeed } from '$lib/types';
   import { formatGB } from '$lib/utils/format';
-  import { loadWorkflowDefaults } from '$lib/utils/workflowDefaults';
+  import { loadWorkflowDefaults, type WorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   let isRefreshing = false;
   let filter = '';
@@ -27,8 +27,10 @@
   let catalogLoaded = false;
   let smokeRunning = false;
   let latestSmoke: RunEvidenceSeed | null = null;
+  let appliedWorkflow: WorkflowDefaults = loadWorkflowDefaults();
 
   onMount(() => {
+    appliedWorkflow = loadWorkflowDefaults();
     refreshModels();
   });
 
@@ -38,6 +40,9 @@
   $: remoteCount = $models.filter((model) => !model.downloaded).length;
   $: downloadedCount = $models.filter((model) => model.downloaded).length;
   $: sourceLabel = formatSourceLabel($modelsSource);
+  $: appliedProfileMatches = Boolean(
+    $loadedModel && appliedWorkflow.activeProfileId && appliedWorkflow.activeProfileModelName === $loadedModel.name
+  );
 
   async function handleRefresh() {
     isRefreshing = true;
@@ -261,6 +266,21 @@
             {#each latestSmoke.warnings as warning}
               <div class="border border-[#4b4f39] bg-[#171a18] p-3 text-sm text-status-warn">{warning}</div>
             {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    {#if $loadedModel}
+      <div class="border-t border-[#30342b] p-5">
+        {#if appliedProfileMatches}
+          <div class="ops-banner">
+            Applied workflow profile: <strong>{appliedWorkflow.activePreset}</strong>
+            <span class="ops-mono">({appliedWorkflow.activeProfileId}).</span> Smoke Test will trace this profile.
+          </div>
+        {:else}
+          <div class="ops-banner ops-banner-muted">
+            No workflow profile is explicitly applied to this model. <a class="text-lemon hover:underline" href={`/models/${encodeURIComponent($loadedModel.name)}`}>Choose and apply one</a> before Smoke Test if you want profile traceability.
           </div>
         {/if}
       </div>

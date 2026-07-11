@@ -19,7 +19,8 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - P0 operator basics are complete. See [P0 Closeout](./p0-closeout.md).
 - Backend Readiness V1, LCC Workflow Defaults, and the shared CompletionRunner foundation are implemented on `main`.
 - Run Evidence viewer, detail API, filters, JSON/Markdown export, and operation-window journal correlation are implemented on `main` through merged pull request [#11](https://github.com/peppeg/Lemonade_Control_Center/pull/11).
-- Run Evidence Identity Linkage is implemented and validated on branch `codex/run-evidence-identity-linkage`; pull request review and merge are the remaining delivery steps.
+- Run Evidence Identity Linkage is implemented and merged on `main` through pull request [#12](https://github.com/peppeg/Lemonade_Control_Center/pull/12).
+- Workflow Profiles and Workflow Memory are being consolidated on branch `codex/workflow-memory`.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
@@ -39,7 +40,7 @@ Done when:
 
 #### 1. Complete Run Evidence Identity Linkage
 
-Status: implementation and validation complete, merge pending
+Status: complete
 
 Goal:
 
@@ -60,7 +61,7 @@ Done when backend tests prove persistence, legacy compatibility, filtering/detai
 
 #### 2. Consolidate Workflow Profiles And Workflow Memory
 
-Status: planned after identity linkage
+Status: implementation and validation complete, merge pending
 
 Goal:
 

@@ -520,12 +520,25 @@ export interface Profile {
   id: string;
   name: string;
   description: string;
+  intent: string;
+  notes: string;
+  known_caveats: string[];
+  runtime_id: string | null;
   icon: string;
   config: ProfileConfig;
   is_builtin: boolean;
   is_default: boolean;
   created_at: string;
   updated_at: string;
+  latest_evidence: {
+    id: string;
+    kind: string;
+    success: boolean;
+    timestamp: string;
+    observed_model_name: string | null;
+    observed_backend: string | null;
+    observed_ctx_size: number | null;
+  } | null;
 }
 
 export interface ModelProfiles {

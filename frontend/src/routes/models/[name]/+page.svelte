@@ -35,11 +35,24 @@
   let savedOptions: LemonadeSavedOptionsData | null = null;
   let savedOptionsLoading = true;
   let saveApplyLoadToLemonade = false;
+  let activeRuntimeId: string | null = null;
+
+  type ProfileInput = {
+    name: string;
+    description: string;
+    intent: string;
+    notes: string;
+    known_caveats: string[];
+    runtime_id: string | null;
+    icon: string;
+    config: ProfileConfig;
+  };
 
   onMount(() => {
     if (modelName) {
       loadProfiles(modelName, modelSizeGb);
       loadSavedOptions();
+      loadActiveRuntime();
     }
   });
 
@@ -48,6 +61,11 @@
       loadProfiles(modelName, modelSizeGb),
       loadSavedOptions(),
     ]);
+  }
+
+  async function loadActiveRuntime() {
+    const result = await api.settings.get();
+    activeRuntimeId = result.ok ? result.data.active_runtime_id : null;
   }
 
   async function loadSavedOptions() {
@@ -67,11 +85,11 @@
     savedOptionsLoading = false;
   }
 
-  async function handleCreate(event: CustomEvent<{ name: string; description: string; icon: string; config: ProfileConfig }>) {
+  async function handleCreate(event: CustomEvent<ProfileInput>) {
     await createProfile(event.detail);
   }
 
-  async function handleUpdate(event: CustomEvent<{ name: string; description: string; icon: string; config: ProfileConfig }>) {
+  async function handleUpdate(event: CustomEvent<ProfileInput>) {
     if (!editingProfile) return;
     const ok = await updateProfile(editingProfile.id, event.detail);
     if (ok) editingProfile = null;
@@ -153,9 +171,9 @@
   />
 
   {#if editingProfile}
-    <ProfileEditor profile={editingProfile} submitLabel="Update Profile" on:save={handleUpdate} on:cancel={() => editingProfile = null} />
+    <ProfileEditor profile={editingProfile} defaultRuntimeId={activeRuntimeId} submitLabel="Update Profile" on:save={handleUpdate} on:cancel={() => editingProfile = null} />
   {:else}
-    <ProfileEditor submitLabel="Create Profile" on:save={handleCreate} />
+    <ProfileEditor defaultRuntimeId={activeRuntimeId} submitLabel="Create Profile" on:save={handleCreate} />
   {/if}
 
   <section class="ops-panel">

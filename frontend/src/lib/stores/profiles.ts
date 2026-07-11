@@ -45,6 +45,10 @@ export async function loadProfiles(modelName: string, modelSizeGb?: number | nul
 export async function createProfile(input: {
   name: string;
   description?: string;
+  intent?: string;
+  notes?: string;
+  known_caveats?: string[];
+  runtime_id?: string | null;
   icon?: string;
   config: ProfileConfig;
 }): Promise<boolean> {
@@ -64,6 +68,10 @@ export async function createProfile(input: {
 export async function updateProfile(profileId: string, input: {
   name?: string;
   description?: string;
+  intent?: string;
+  notes?: string;
+  known_caveats?: string[];
+  runtime_id?: string | null;
   icon?: string;
   config?: ProfileConfig;
   is_default?: boolean;
@@ -166,6 +174,13 @@ export async function applyProfile(profile: Profile): Promise<boolean> {
   const modelName = get(currentModelName);
   if (!modelName) return false;
 
+  const settingsResult = await api.settings.get();
+  const activeRuntimeId = settingsResult.ok ? settingsResult.data.active_runtime_id : null;
+  if (profile.runtime_id && activeRuntimeId && profile.runtime_id !== activeRuntimeId) {
+    notify.error('Profile runtime mismatch', `${profile.name} targets ${profile.runtime_id}; active runtime is ${activeRuntimeId}.`);
+    return false;
+  }
+
   const runtimeUpdates: Record<string, unknown> = {};
   if (profile.config.ctx_size !== null) runtimeUpdates.ctx_size = profile.config.ctx_size;
   if (profile.config.global_timeout !== null) runtimeUpdates.global_timeout = profile.config.global_timeout;
@@ -197,14 +212,15 @@ export async function applyProfile(profile: Profile): Promise<boolean> {
     return true;
   }
 
-  notify.warning('Profile partially applied', `Local defaults saved. Runtime config failed: ${result.error}`, {
+  notify.warning('Workflow profile applied locally', `LCC request defaults saved. Lemonade global config was unchanged: ${result.error}`, {
     href: '/config',
+    toastDuration: 8000,
   });
-  return false;
+  return true;
 }
 
 export async function applyAndLoadProfile(profile: Profile, saveOptions = false): Promise<boolean> {
-  await applyProfile(profile);
+  if (!await applyProfile(profile)) return false;
   const success = await loadModel({
     modelName: get(currentModelName) ?? '',
     ctxSize: profile.config.ctx_size,
