@@ -1,5 +1,7 @@
 # P0 Closeout
 
+> Historical snapshot: this document records what was complete or deferred when P0 closed. For current delivery status and execution order, use the [Roadmap Current Execution Plan](./roadmap.md#current-execution-plan).
+
 P0 focused on making Lemonade Control Center clear, defensible, and useful as an operator console.
 
 LCC is an independent, unofficial companion for Lemonade. It is not a replacement for the official Lemonade Web UI, not a chat client, and not a model marketplace.
@@ -103,7 +105,7 @@ LCC should avoid becoming a chat client, generic model marketplace, official con
 ## Deferred To P1
 
 - Trusted/manual server management beyond setup discovery.
-- Run Evidence list/detail viewer.
+- Run Evidence list/detail viewer. Delivered during P1; see the current roadmap status.
 - Workflow profiles that attach intent and notes to evidence.
 - Hugging Face intake that checks compatibility and creates profiles without becoming a marketplace.
 - Optional telemetry providers such as `xdna-top` and `amdgpu_top`.

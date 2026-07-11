@@ -8,6 +8,176 @@ The roadmap is organized around one rule:
 Make Lemonade easier to operate, then make the runtime behavior easier to prove.
 ```
 
+## Current Execution Plan
+
+Last reviewed: 2026-07-11
+
+This section is the canonical handoff for ongoing implementation. The P0/P1/P2 sections below explain product direction and scope; this section defines the order in which the remaining work should be completed.
+
+### Current Delivery State
+
+- P0 operator basics are complete. See [P0 Closeout](./p0-closeout.md).
+- Backend Readiness V1, LCC Workflow Defaults, and the shared CompletionRunner foundation are implemented on `main`.
+- Run Evidence viewer, detail API, filters, JSON/Markdown export, and operation-window journal correlation are implemented on branch `codex/run-evidence-viewer`.
+- GitHub pull request [#11](https://github.com/peppeg/Lemonade_Control_Center/pull/11) contains the current Run Evidence work. Automated CI is green; manual operator validation and merge are the remaining delivery steps.
+- Existing evidence records remain backward compatible. Records created before journal correlation show logs as unavailable.
+
+### Execution Order
+
+#### 0. Close The Current Run Evidence Delivery
+
+Status: implementation complete, manual validation and merge pending
+
+Done when:
+
+- a new smoke test appears in the Run Evidence workspace;
+- a new load attempt appears with requested and observed runtime state;
+- a new record shows correlated Lemonade journal entries or an honest unavailable/error state;
+- kind, result, and text filters behave correctly;
+- JSON and Markdown downloads contain the selected record;
+- pull request #11 is merged after manual validation.
+
+#### 1. Complete Run Evidence Identity Linkage
+
+Status: next implementation block
+
+Goal:
+
+```text
+Tie every useful record to the runtime and workflow intent that produced it.
+```
+
+Scope:
+
+- persist the active LCC runtime id, label, and normalized server URL;
+- persist the selected workflow profile id/name when an action uses one;
+- distinguish requested model identity from observed/canonical model identity where available;
+- keep old evidence files readable through optional fields and tested defaults;
+- expose identity fields in list/detail views and JSON/Markdown exports;
+- keep diagnostic summaries free of prompt, response, stop-sequence, and sensitive server data.
+
+Done when backend tests prove persistence, legacy compatibility, filtering/detail behavior, export behavior, and diagnostic redaction.
+
+#### 2. Consolidate Workflow Profiles And Workflow Memory
+
+Status: planned after identity linkage
+
+Goal:
+
+```text
+Store why a configuration exists, not only which flags it contains.
+```
+
+Scope:
+
+- connect model, runtime, load options, LCC Workflow Defaults, notes, and known caveats;
+- attach the latest useful Run Evidence result to a profile without copying full evidence into profile storage;
+- make profile application explicit before load, smoke, or Bench Lab actions;
+- preserve the boundary between Lemonade-owned runtime options and LCC-owned request defaults;
+- support practical intents such as Coding Fast, Coding Long Context, Review Heavy, Italian Writing, Agent Fallback, and Stress Test.
+
+Done when a profile can be selected, applied, traced into new evidence, and revisited with its last useful result.
+
+#### 3. Mature Bench Lab On The Shared Foundations
+
+Status: planned after Workflow Memory
+
+Goal:
+
+```text
+Compare real workflows and preserve enough evidence to explain the result.
+```
+
+Scope:
+
+- keep CompletionRunner as the only completion transport;
+- keep BenchRunner focused on prompt adaptation, suite orchestration, aggregation, and storage;
+- add coding-agent-oriented suites rather than duplicating `lemonade bench`;
+- preserve prompts, outputs, reasoning, metrics, runtime/profile identity, and resource evidence;
+- add manual quality scores and notes;
+- compare models and profiles;
+- export readable comparison reports.
+
+Done when two profile/model combinations can run the same workflow suite and produce an inspectable comparison report.
+
+#### 4. Add Telemetry Providers And Accelerator Evidence
+
+Status: planned
+
+- formalize the built-in Linux process/sysfs sampler as a provider;
+- add optional `xdna-top` and `amdgpu_top` providers when installed;
+- correlate provider samples with Run Evidence windows;
+- label every metric as measured, inferred, unavailable, unsupported, or degraded;
+- avoid claiming accelerator ownership when the available telemetry cannot prove it.
+
+#### 5. Add Guided Hugging Face Intake
+
+Status: planned
+
+- inspect repository and variant relevance without becoming a marketplace;
+- check GGUF/ONNX applicability and likely memory impact;
+- create or update a workflow profile;
+- offer an optional smoke test and follow-up Run Evidence or Bench Lab workflow;
+- continue using Lemonade for pull/import and update ownership.
+
+#### 6. Package LCC For Easier Deployment
+
+Status: planned
+
+- provide an LCC web/API container image;
+- provide a compose example for host or remote Lemonade;
+- document `/proc`, `/sys`, `/dev/dri`, `/dev/accel`, PID namespace, and privilege limitations;
+- never imply that container deployment provides host telemetry that is not actually mounted or reachable.
+
+#### 7. Extend To Multi-Host And Agent Readiness
+
+Status: later P2 work
+
+- distinguish API-only targets, LCC-on-host targets, SSH collectors, and a possible collector service;
+- add readiness checks for OpenAI-compatible clients and, where applicable, Anthropic Messages/vLLM clients;
+- include reachability, loaded model, context, latency, and recommended profile evidence;
+- do not confuse successful API reachability with trusted host telemetry.
+
+### Parallel Maintenance Lane
+
+These tasks should be handled when relevant but should not interrupt the execution order without a concrete compatibility or safety issue:
+
+- manually review official Lemonade Web UI/App changes and update the overlap matrix;
+- add dated compatibility fixtures when Lemonade changes `/v1/system-info` or completion streaming;
+- update [Tested Environment](./tested-environment.md) only after real smoke testing;
+- review real diagnostic bundles before public sharing;
+- rank Backend Readiness alerts by hardware/profile relevance after profile linkage exists;
+- deepen trusted/manual server management if remote API-only targets become common.
+
+### Validation Policy
+
+- Backend behavior, persistence, compatibility, parsing, redaction, and export contracts require automated tests.
+- Frontend changes require `svelte-check` and a production build.
+- Visual and workflow validation is performed manually in the running application by the operator; Playwright is not part of the current default validation flow.
+- Real Lemonade smoke tests remain necessary for version compatibility claims and updates to `docs/tested-environment.md`.
+- Do not start or leave LCC running automatically; the operator starts it explicitly, commonly through a Windows-to-Linux SSH workflow.
+
+### Implementation Map
+
+- Run Evidence schemas: `backend/app/models/schemas.py`
+- Run Evidence storage, capture, and export: `backend/app/services/run_evidence.py`
+- Journal parsing and window collection: `backend/app/services/log_parser.py`
+- Run Evidence and Smoke Test API: `backend/app/routers/lemonade.py`
+- Run Evidence backend tests: `backend/tests/test_run_evidence.py`, `backend/tests/test_log_parser.py`, `backend/tests/test_api.py`
+- Run Evidence workspace: `frontend/src/routes/evidence/+page.svelte`
+- Frontend API/types: `frontend/src/lib/api/client.ts`, `frontend/src/lib/types/index.ts`
+- Shared completion transport: `backend/app/services/completion_runner.py`, `backend/app/models/completions.py`
+- Completion transport tests: `backend/tests/test_completion_runner.py`
+- Existing profile backend: `backend/app/models/profiles.py`, `backend/app/services/profile_service.py`, `backend/app/routers/profiles.py`
+- Existing profile frontend: `frontend/src/lib/stores/profiles.ts`, `frontend/src/routes/models/[name]/+page.svelte`
+- Bench Lab orchestration: `backend/app/services/bench/`, `backend/app/routers/bench.py`
+- Bench Lab frontend: `frontend/src/routes/bench/+page.svelte`
+- Backend Readiness: `backend/app/services/backend_readiness.py`, `frontend/src/routes/backends/+page.svelte`
+- Diagnostic summary/redaction: `backend/app/services/diagnostic_bundle.py`
+- Manual development checks: [Development](./development.md)
+- Product overlap decisions: [Overlap Matrix](./overlap-matrix.md)
+- Delivered changes: [Changelog](../CHANGELOG.md)
+
 ## P0: Direction And Operator Basics
 
 P0 is about making the product direction concrete and removing ambiguity around overlap with official Lemonade tooling.
