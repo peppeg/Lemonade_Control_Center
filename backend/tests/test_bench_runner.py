@@ -35,7 +35,16 @@ async def test_bench_runner_adapts_prompt_and_completion_result():
             warnings=["test warning"],
         )
     )
-    runner = BenchRunner(completion_runner)
+    runner = BenchRunner(
+        completion_runner,
+        identity={
+            "observed_model_name": "test-model-canonical",
+            "runtime_id": "runtime-a",
+            "runtime_label": "Local Lemonade",
+            "workflow_profile_id": "coding-fast",
+            "workflow_profile_name": "Coding Fast",
+        },
+    )
     prompt = BenchPrompt(
         id="quick",
         name="Quick",
@@ -54,11 +63,18 @@ async def test_bench_runner_adapts_prompt_and_completion_result():
     assert completion_runner.last_request.system_prompt == "system"
     assert completion_runner.last_request.timeout_seconds == 90
     assert result.response_full == "answer"
+    assert result.prompt == "question"
+    assert result.system_prompt == "system"
+    assert result.request_max_tokens == 128
     assert result.reasoning_text == "reasoning"
     assert result.token_count_source == "api"
     assert result.completion_endpoint == "/v1/chat/completions"
     assert result.warnings == ["test warning"]
     assert result.error is None
+    assert result.requested_model_name == "test-model"
+    assert result.observed_model_name == "test-model-canonical"
+    assert result.runtime_id == "runtime-a"
+    assert result.workflow_profile_id == "coding-fast"
 
 
 @pytest.mark.asyncio

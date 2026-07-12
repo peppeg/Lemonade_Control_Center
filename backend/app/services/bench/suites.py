@@ -25,6 +25,20 @@ def _prompt(
 
 
 SUITES: dict[str, BenchSuite] = {
+    "coding_agent": BenchSuite(
+        id="coding_agent",
+        name="Coding Agent Workflows",
+        description="Repository-scale planning, patching, review, and failure diagnosis tasks for coding agents.",
+        icon="agent",
+        recommended_ctx=32768,
+        recommended_temp=0.2,
+        estimated_minutes=18,
+        prompts=[
+            _prompt("agent_patch", "Scoped Patch", "Given a Python service with a failing idempotency test, propose a minimal patch, list changed files, and include focused tests. Do not rewrite unrelated code.", 3000, 0.2, "text", ["agent", "patch"]),
+            _prompt("agent_review", "Review Findings", "Review a hypothetical pull request that adds retry logic around an HTTP stream. Report only actionable correctness, resource-lifetime, and test-coverage findings ordered by severity.", 2600, 0.2, "text", ["agent", "review"]),
+            _prompt("agent_debug", "CI Diagnosis", "A Linux CI job passes locally but fails with read-only filesystem errors and leaked async responses. Produce an evidence-driven diagnosis and a safe validation plan.", 2600, 0.2, "text", ["agent", "debug"]),
+        ],
+    ),
     "coding": BenchSuite(
         id="coding",
         name="Coding",

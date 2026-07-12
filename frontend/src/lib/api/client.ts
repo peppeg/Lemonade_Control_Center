@@ -27,6 +27,7 @@ import type {
   SystemConfig,
   AlertHistoryEntry,
   BenchResult,
+  BenchComparison,
   BackendReadinessResponse,
   BenchStoredResult,
   BenchSuite,
@@ -278,11 +279,15 @@ export const api = {
   // ── Bench Lab (M13, backend-gated) ──
   bench: {
     suites: () => get<{ suites: BenchSuite[] }>('/bench/suites'),
-    runQuick: (body: { model: string; prompt: string; max_tokens: number; temperature: number; system_prompt?: string }) =>
+    runQuick: (body: { model: string; prompt: string; max_tokens: number; temperature: number; system_prompt?: string; workflow_profile_id?: string; workflow_profile_name?: string }) =>
       post<BenchResult>('/bench/run', body),
-    runSuite: (body: { model: string; suite_id: string }) =>
+    runSuite: (body: { model: string; suite_id: string; workflow_profile_id?: string; workflow_profile_name?: string }) =>
       post<SuiteResult>('/bench/run', body),
     results: () => get<{ results: BenchStoredResult[] }>('/bench/results'),
+    annotate: (resultId: string, body: { manual_quality_score: number | null; manual_notes: string }) =>
+      request<BenchStoredResult>('PATCH', `/bench/results/${enc(resultId)}`, body),
+    compare: (resultIds: string[]) => get<BenchComparison>(`/bench/compare?result_ids=${enc(resultIds.join(','))}`),
+    comparisonMarkdownUrl: (resultIds: string[]) => `${BASE}${withLccKey(`/bench/compare/markdown?result_ids=${enc(resultIds.join(','))}`)}`,
     clear: () => post<{ cleared: boolean }>('/bench/clear'),
     csvUrl: () => `${BASE}/bench/results/csv`,
     jsonUrl: () => `${BASE}/bench/results/json`,
