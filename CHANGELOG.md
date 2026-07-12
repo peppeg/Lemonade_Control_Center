@@ -29,6 +29,7 @@ The project is under active development, so entries currently describe the evolv
 - Workflow Memory metadata for profile intent, operator notes, known caveats, target runtime, and the latest successful Run Evidence reference.
 - Coding-agent Bench Lab suite, runtime/profile/resource evidence, manual quality assessments, and same-suite comparison reports.
 - Typed telemetry providers for Linux process/sysfs, optional `amdgpu_top`, and optional `xdna-top`, with per-metric provenance and quality.
+- Guided Hugging Face repository intake with Lemonade-backed GGUF variants, ONNX relevance checks, memory estimates, and workflow-profile creation.
 
 ### Changed
 
@@ -48,6 +49,7 @@ The project is under active development, so entries currently describe the evolv
 - Profile, direct-load, Smoke Test, and Bench Lab surfaces now make the applied workflow profile explicit before actions.
 - Bench Lab results now preserve full prompts, outputs, reasoning, request settings, runtime identity, process/memory evidence, and operator assessments.
 - Run Evidence now correlates provider samples at operation start/end and explicitly labels accelerator ownership as unproven.
+- Hugging Face inspection, profile creation, and explicit pull are separate steps; Lemonade remains responsible for registration, download, import, and updates.
 
 ### Fixed
 

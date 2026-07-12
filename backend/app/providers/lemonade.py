@@ -7,6 +7,7 @@ available, raises a clean error or returns a degraded response.
 """
 import asyncio
 import shlex
+from urllib.parse import quote
 
 import httpx
 from fastapi import HTTPException
@@ -29,6 +30,7 @@ from app.models.schemas import (
     LemonadeConfigResponse,
     ConfigUpdateRequest,
 )
+from app.models.intake import IntakePullRequest
 
 
 class LemonadeProvider(LLMProvider):
@@ -278,6 +280,33 @@ class LemonadeProvider(LLMProvider):
         return PullModelResponse(
             success=False,
             message=raw.get("message", f"Pull failed ({resp.status_code}): {resp.text[:300]}"),
+            raw=raw,
+        )
+
+    async def get_pull_variants(self, checkpoint: str) -> dict:
+        """Ask Lemonade to inspect installable GGUF variants for a HF repository."""
+        encoded = quote(checkpoint, safe="")
+        resp = await self._get(f"/api/v1/pull/variants?checkpoint={encoded}")
+        if resp.status_code == 404:
+            resp = await self._get(f"/v1/pull/variants?checkpoint={encoded}")
+        if resp.status_code != 200:
+            raise HTTPException(resp.status_code, f"Lemonade variant inspection failed: {resp.text[:300]}")
+        return resp.json()
+
+    async def pull_intake_model(self, request: IntakePullRequest) -> PullModelResponse:
+        """Delegate registration and installation of an inspected model to Lemonade."""
+        body = request.model_dump(exclude_none=True)
+        resp = await self._post("/api/v1/pull", body, timeout=3600.0)
+        if resp.status_code == 404:
+            resp = await self._post("/v1/pull", body, timeout=3600.0)
+        try:
+            raw = resp.json()
+        except ValueError:
+            raw = {"text": resp.text[:500]}
+        success = resp.status_code == 200 and raw.get("status") != "error"
+        return PullModelResponse(
+            success=success,
+            message=raw.get("message", f"Installed model: {request.model_name}" if success else f"Pull failed ({resp.status_code})"),
             raw=raw,
         )
 

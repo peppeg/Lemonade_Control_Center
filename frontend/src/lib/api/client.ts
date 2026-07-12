@@ -41,6 +41,9 @@ import type {
   SmokeTestResponse,
   TaskRecord,
   TelemetrySnapshot,
+  IntakeProfileResponse,
+  IntakeReport,
+  IntakeSearchResponse,
   SuiteResult,
 } from '$lib/types';
 
@@ -260,6 +263,19 @@ export const api = {
       get<Record<string, unknown>>(`/profiles/${enc(modelName)}/${enc(profileId)}/export`),
     importProfile: (modelName: string, body: Record<string, unknown>) =>
       post<Profile>(`/profiles/${enc(modelName)}/import`, body),
+  },
+
+  intake: {
+    search: (query: string) => post<IntakeSearchResponse>('/intake/search', { query }),
+    inspect: (repoId: string) => post<IntakeReport>('/intake/inspect', { repo_id: repoId }),
+    createProfile: (body: {
+      repo_id: string; model_name: string; variant_name: string; variant_size_bytes?: number | null;
+      profile_name: string; intent: string; runtime_id?: string | null;
+    }) => post<IntakeProfileResponse>('/intake/profile', body),
+    pull: (body: {
+      model_name: string; checkpoint: string; recipe: string; reasoning?: boolean; vision?: boolean;
+      embedding?: boolean; reranking?: boolean; mmproj?: string | null;
+    }) => post<{ success: boolean; message: string; raw?: Record<string, unknown> }>('/intake/pull', body),
   },
 
   // ── Diagnostics (M11) ──

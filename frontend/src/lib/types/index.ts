@@ -495,6 +495,49 @@ export interface TelemetrySnapshot {
   ownership_note: string;
 }
 
+export type IntakeApplicability = 'applicable' | 'possible' | 'unsupported' | 'unavailable';
+export type IntakeMemoryRisk = 'low' | 'moderate' | 'high' | 'unknown';
+
+export interface IntakeVariant {
+  name: string;
+  format: 'gguf' | 'onnx';
+  primary_file: string;
+  files: string[];
+  sharded: boolean;
+  size_bytes: number | null;
+  estimated_runtime_gb: number | null;
+  memory_risk: IntakeMemoryRisk;
+  fits_available_ram: boolean | null;
+  estimate_note: string;
+}
+
+export interface IntakeReport {
+  repo_id: string;
+  suggested_model_name: string;
+  suggested_labels: string[];
+  mmproj_files: string[];
+  formats: Array<{ format: 'gguf' | 'onnx'; applicability: IntakeApplicability; recipe: string | null; evidence: string }>;
+  variants: IntakeVariant[];
+  ram_total_gb: number;
+  ram_available_gb: number;
+  recommended_variant: string | null;
+  warnings: string[];
+  inspection_sources: string[];
+  ownership_note: string;
+}
+
+export interface IntakeProfileResponse {
+  model_name: string;
+  profile_id: string;
+  profile_name: string;
+}
+
+export interface IntakeSearchResponse {
+  query: string;
+  results: Array<{ repo_id: string; downloads: number | null; gated: boolean | string | null; last_modified: string | null; tags: string[] }>;
+  note: string;
+}
+
 export interface SmokeTestResponse {
   success: boolean;
   message: string;

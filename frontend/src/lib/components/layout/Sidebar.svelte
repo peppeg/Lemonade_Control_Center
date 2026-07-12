@@ -5,7 +5,7 @@
   import { connectionStatus } from '$lib/stores/connection';
   import {
     LayoutDashboard, Cpu, Settings, ScrollText, Monitor, Activity, LineChart, FlaskConical, Cog,
-    FileClock, PackageCheck, PanelLeft, Server
+    FileClock, PackageCheck, PanelLeft, Server, Import
   } from 'lucide-svelte';
 
   interface NavItem {
@@ -19,6 +19,7 @@
   const navItems: NavItem[] = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, milestone: 'M4' },
     { href: '/models',    label: 'Models',    icon: Cpu,             milestone: 'M5' },
+    { href: '/intake', label: 'HF Intake', icon: Import, milestone: 'P1' },
     { href: '/config',    label: 'Configuration', icon: Settings,    milestone: 'M6' },
     { href: '/logs',      label: 'Logs & Stats',  icon: ScrollText,  milestone: 'M7' },
     { href: '/system',    label: 'System',    icon: Monitor,         milestone: 'M8' },
