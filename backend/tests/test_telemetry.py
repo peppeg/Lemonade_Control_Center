@@ -46,6 +46,29 @@ def test_optional_command_provider_reports_unsupported_when_missing(monkeypatch)
     assert "not installed" in sample.error
 
 
+def test_container_scope_does_not_claim_host_or_accelerator_metrics(monkeypatch):
+    monkeypatch.setattr("app.services.telemetry.psutil.virtual_memory", lambda: SimpleNamespace(used=2 * 1024**3))
+    monkeypatch.setattr("app.services.telemetry.psutil.swap_memory", lambda: SimpleNamespace(used=0))
+    monkeypatch.setattr("app.services.telemetry.psutil.cpu_percent", lambda interval=None: 4.0)
+    monkeypatch.setattr(
+        "app.services.telemetry.find_llama_server",
+        lambda: SimpleNamespace(found=False, process=None),
+    )
+    monkeypatch.setattr(
+        "app.services.telemetry.get_gpu_info",
+        lambda: (_ for _ in ()).throw(AssertionError("container scope must not probe host GPU sysfs")),
+    )
+
+    sample = LinuxTelemetryProvider(scope="container").sample()
+
+    assert sample.provider_label == "Container process/sysfs"
+    assert {metric.name for metric in sample.metrics} >= {"container.ram_used", "container.cpu_busy"}
+    assert not any(metric.name.startswith("host.") for metric in sample.metrics)
+    gpu = next(metric for metric in sample.metrics if metric.name == "gpu.busy")
+    assert gpu.quality == "unsupported"
+    assert "not enabled for container scope" in gpu.evidence
+
+
 def test_amdgpu_top_provider_parses_last_streamed_json_sample(monkeypatch):
     payloads = [
         {"devices": [{"Info": {"DeviceName": "GPU 0"}, "gpu_activity": {"GFX": {"value": 10, "unit": "%"}}}]},

@@ -7,6 +7,7 @@ Hierarchy (highest priority first):
   3. Defaults defined here
 """
 from pathlib import Path
+from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +27,8 @@ class Settings(BaseSettings):
     enable_delete: bool = False
     enable_restart: bool = False
     enable_bench_lab: bool = False
+    telemetry_scope: Literal["host", "container"] = "host"
+    capabilities_mode: Literal["file", "safe_runtime"] = "file"
 
     # ── LCC Access Control ──
     # Localhost remains trusted by default. Non-loopback API access requires

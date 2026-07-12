@@ -1,0 +1,11 @@
+# Linux-only opt-in. This exposes host process/sysfs information to LCC.
+# Read docs/deployment.md before enabling it.
+services:
+  lcc:
+    pid: host
+    volumes:
+      - /sys:/sys:ro
+      - ${LEMONADE_CACHE_DIR:?Set LEMONADE_CACHE_DIR to the host Lemonade cache}:/opt/var/lib/lemonade/.cache/lemonade:ro
+    environment:
+      TELEMETRY_SCOPE: host
+      LEMONADE_RECIPE_OPTIONS_FILE: /opt/var/lib/lemonade/.cache/lemonade/recipe_options.json

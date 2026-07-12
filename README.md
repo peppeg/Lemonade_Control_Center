@@ -239,6 +239,12 @@ http://127.0.0.1:17600
 
 FastAPI serves both `/api/*` and the built dashboard. Vite is not needed for this mode.
 
+### Container deployment
+
+The repository includes a multi-stage LCC image and Compose examples for an API-only deployment or an explicit Linux host-telemetry override. The default container does not claim access to host processes, sysfs, accelerators, systemd, or journals.
+
+See [Container Deployment](docs/deployment.md) for authentication, Lemonade networking, persistence, device mapping, and telemetry limitations.
+
 ### Access from another computer with SSH
 
 When LCC remains bound to its safe localhost default, forward the application port from the client computer:

@@ -5,7 +5,9 @@ If probe_summary.json doesn't exist or is malformed, all capabilities
 default to False (safe degradation).
 """
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+import httpx
 from pydantic import BaseModel
 
 from app.config import settings
@@ -87,6 +89,9 @@ def load_capabilities() -> Capabilities:
     returns defaults (mostly False) — the app still works, just with
     reduced features and appropriate UI messaging.
     """
+    if settings.capabilities_mode == "safe_runtime":
+        return probe_safe_runtime_capabilities()
+
     caps = Capabilities()
     probe_path = Path(settings.capabilities_file)
 
@@ -127,6 +132,41 @@ def load_capabilities() -> Capabilities:
         cmd_data = commands.get(cmd_key, {})
         setattr(caps, field_name, cmd_data.get("works", False))
 
+    return caps
+
+
+def probe_safe_runtime_capabilities(client: httpx.Client | None = None) -> Capabilities:
+    """Probe only non-mutating Lemonade GET endpoints for container startup."""
+    caps = Capabilities(probe_timestamp=datetime.now(timezone.utc).isoformat())
+    owned_client = client is None
+    active_client = client or httpx.Client(timeout=2.0, trust_env=False)
+    safe_endpoints = {
+        "/api/v1/health": "health",
+        "/api/v1/stats": "stats",
+        "/api/v1/system-info": "system_info",
+        "/live": "live",
+        "/api/tags": "ollama_tags",
+        "/api/ps": "ollama_ps",
+        "/api/version": "ollama_version",
+        "/api/v1/models": "openai_models",
+    }
+    try:
+        for path, field_name in safe_endpoints.items():
+            try:
+                response = active_client.get(f"{settings.lemonade_url}{path}")
+            except httpx.HTTPError:
+                continue
+            if 200 <= response.status_code < 300:
+                setattr(caps, field_name, True)
+                if path == "/api/v1/health":
+                    try:
+                        payload = response.json()
+                        caps.lemonade_version = payload.get("version")
+                    except (ValueError, AttributeError):
+                        pass
+    finally:
+        if owned_client:
+            active_client.close()
     return caps
 
 

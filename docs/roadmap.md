@@ -23,7 +23,8 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - Workflow Profiles and Workflow Memory are implemented and merged on `main` through pull request [#13](https://github.com/peppeg/Lemonade_Control_Center/pull/13).
 - Bench Lab workflow comparison is implemented and merged on `main` through pull request [#14](https://github.com/peppeg/Lemonade_Control_Center/pull/14).
 - Telemetry Providers and Accelerator Evidence are implemented and merged on `main` through pull request [#15](https://github.com/peppeg/Lemonade_Control_Center/pull/15).
-- Guided Hugging Face Intake is implemented and validated on branch `codex/hugging-face-intake`; merge is the remaining delivery step.
+- Guided Hugging Face Intake is implemented and merged on `main` through pull request [#16](https://github.com/peppeg/Lemonade_Control_Center/pull/16).
+- LCC container packaging is implemented and validated on branch `codex/container-packaging`; merge is the remaining delivery step.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
@@ -116,7 +117,7 @@ Status: complete
 
 #### 5. Add Guided Hugging Face Intake
 
-Status: implementation and validation complete, merge pending
+Status: complete
 
 - inspect repository and variant relevance without becoming a marketplace;
 - check GGUF/ONNX applicability and likely memory impact;
@@ -126,7 +127,7 @@ Status: implementation and validation complete, merge pending
 
 #### 6. Package LCC For Easier Deployment
 
-Status: planned
+Status: implementation and validation complete, merge pending
 
 - provide an LCC web/API container image;
 - provide a compose example for host or remote Lemonade;
