@@ -26,6 +26,8 @@ from app.services.process import (
     get_service_status,
     restart_service,
 )
+from app.models.telemetry import TelemetrySnapshot
+from app.services.telemetry import TelemetryManager
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
@@ -46,6 +48,12 @@ async def temperatures():
 async def top_processes():
     """Get top 10 processes sorted by memory usage."""
     return get_top_processes(n=10)
+
+
+@router.get("/telemetry", response_model=TelemetrySnapshot)
+async def telemetry_snapshot():
+    """Sample all available telemetry providers with explicit quality labels."""
+    return TelemetryManager().snapshot()
 
 
 @router.get("/llama-server", response_model=LlamaServerInfoResponse)

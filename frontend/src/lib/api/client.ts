@@ -40,6 +40,7 @@ import type {
   RunEvidenceSeed,
   SmokeTestResponse,
   TaskRecord,
+  TelemetrySnapshot,
   SuiteResult,
 } from '$lib/types';
 
@@ -223,6 +224,7 @@ export const api = {
     temperatures: () => get<{ readings: unknown[]; available: boolean }>('/system/temperatures'),
     processes: () => get<{ processes: unknown[] }>('/system/processes'),
     llamaServer: () => get<{ found: boolean; process: unknown; params: unknown }>('/system/llama-server'),
+    telemetry: () => get<TelemetrySnapshot>('/system/telemetry'),
     service: () => get<{ active: boolean; status: string }>('/system/service'),
     restart: () => post<{ success: boolean; message: string }>('/system/restart'),
   },

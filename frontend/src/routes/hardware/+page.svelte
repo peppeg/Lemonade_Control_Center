@@ -20,13 +20,22 @@
     toggleMetricsPause,
   } from '$lib/stores/metrics';
   import type { MetricPoint, TimeRange } from '$lib/types';
+  import type { TelemetrySnapshot } from '$lib/types';
+  import { api } from '$lib/api/client';
 
   const ranges: TimeRange[] = [5, 15, 30];
+  let telemetry: TelemetrySnapshot | null = null;
 
   onMount(() => {
     loadMetrics();
     connectMetricsWs();
+    loadTelemetryProviders();
   });
+
+  async function loadTelemetryProviders() {
+    const result = await api.system.telemetry();
+    telemetry = result.ok ? result.data : null;
+  }
 
   onDestroy(() => {
     disconnectMetricsWs();
@@ -108,6 +117,32 @@
       <span class="ops-muted">Samples: <span class="ops-value">{$timeSeriesData.length}</span></span>
       <span class="ops-muted">Tasks: <span class="ops-value">{$taskHistory.length}</span></span>
     </div>
+  </section>
+
+  <section class="ops-panel p-5">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h2 class="ops-title">Telemetry Providers</h2>
+        <p class="ops-subtitle">Every metric reports provenance and quality. Activity correlation does not prove accelerator ownership.</p>
+      </div>
+      <button class="ops-button" type="button" on:click={loadTelemetryProviders}><RefreshCw class="h-4 w-4" /> Providers</button>
+    </div>
+    {#if telemetry}
+      <div class="mt-4 grid gap-3 lg:grid-cols-3">
+        {#each telemetry.samples as sample}
+          <article class="border border-[#34382d] bg-[#111312] p-4">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="ops-value">{sample.provider_label}</h3>
+              <span class="ops-badge {sample.quality === 'measured' ? 'ops-badge-ok' : sample.quality === 'unsupported' ? '' : 'ops-badge-danger'}">{sample.quality}</span>
+            </div>
+            <p class="mt-2 text-xs text-muted-foreground">{sample.error ?? `${sample.metrics.length} metrics`}</p>
+          </article>
+        {/each}
+      </div>
+      <p class="mt-4 text-xs text-status-warn">{telemetry.ownership_note}</p>
+    {:else}
+      <p class="mt-4 text-sm text-muted-foreground">Provider status is unavailable.</p>
+    {/if}
   </section>
 
   <section class="grid grid-cols-1 gap-4 xl:grid-cols-2">

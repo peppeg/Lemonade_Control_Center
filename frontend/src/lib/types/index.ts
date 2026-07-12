@@ -459,8 +459,40 @@ export interface RunEvidenceSeed {
     icon: string;
   }>;
   log_capture_error: string | null;
+  telemetry_samples: TelemetrySample[];
+  accelerator_ownership: 'unproven';
+  accelerator_ownership_note: string;
   warnings: string[];
   timestamp: string;
+}
+
+export type TelemetryQuality = 'measured' | 'inferred' | 'unavailable' | 'unsupported' | 'degraded';
+
+export interface TelemetryMetric {
+  name: string;
+  value: number | string | null;
+  unit: string | null;
+  quality: TelemetryQuality;
+  provider_id: string;
+  device: string | null;
+  evidence: string;
+}
+
+export interface TelemetrySample {
+  provider_id: string;
+  provider_label: string;
+  phase: 'point' | 'start' | 'end';
+  captured_at: string;
+  quality: TelemetryQuality;
+  available: boolean;
+  metrics: TelemetryMetric[];
+  error: string | null;
+}
+
+export interface TelemetrySnapshot {
+  samples: TelemetrySample[];
+  accelerator_ownership: 'unproven';
+  ownership_note: string;
 }
 
 export interface SmokeTestResponse {

@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from app.models.telemetry import TelemetrySample
 
 
 # ═══════════════════════════════════════════════════════════
@@ -218,6 +219,11 @@ class RunEvidenceSeed(BaseModel):
     log_source: Literal["journalctl", "unavailable", "error"] = "unavailable"
     log_entries: list[LogEntry] = Field(default_factory=list)
     log_capture_error: str | None = None
+    telemetry_samples: list[TelemetrySample] = Field(default_factory=list)
+    accelerator_ownership: Literal["unproven"] = "unproven"
+    accelerator_ownership_note: str = (
+        "Time-correlated provider activity does not prove accelerator ownership by Lemonade or llama-server."
+    )
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

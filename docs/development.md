@@ -136,6 +136,15 @@ Smoke Test and Bench Lab share the core completion transport, but Smoke Test mus
 - The comparison Markdown report contains both combinations, aggregate metrics, quality scores, and operator notes.
 - Missing process or memory probes remain explicitly unavailable rather than being reported as measured values.
 
+## Telemetry Providers Manual Check
+
+- Hardware Monitor lists Linux process/sysfs, `amdgpu_top`, and `xdna-top` independently with measured, unsupported, or degraded states.
+- Missing optional commands do not fail the API or operator action.
+- A new load or smoke Run Evidence record contains start/end samples inside its operation window.
+- Every provider metric includes provider id, quality, unit, and evidence/provenance text.
+- JSON and Markdown evidence exports preserve provider samples and quality labels.
+- The UI and exports state that accelerator ownership is unproven; time correlation is never presented as proof that Lemonade owned GPU/NPU work.
+
 ## Local Data
 
 Runtime data is stored under backend-managed data paths and is intentionally excluded from git. Do not commit secrets, local settings, diagnostic bundles, or private planning documents.
