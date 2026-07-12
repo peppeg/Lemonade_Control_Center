@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.capabilities import capabilities
 from app.middleware.access_control import LccAccessControlMiddleware
-from app.routers import health, lemonade, system, logs, diagnostic, diagnostics, metrics, profiles, security, setup, settings as settings_router
+from app.routers import health, intake, lemonade, system, logs, diagnostic, diagnostics, metrics, profiles, security, setup, settings as settings_router
 from app.services.metrics.collector import start_collector, stop_collector
 from app.services.security import is_loopback_host
 
@@ -62,6 +62,7 @@ app.include_router(system.router)
 app.include_router(logs.router)
 app.include_router(diagnostic.router)
 app.include_router(profiles.router)
+app.include_router(intake.router)
 app.include_router(diagnostics.router)
 app.include_router(metrics.router)
 app.include_router(metrics.ws_router)

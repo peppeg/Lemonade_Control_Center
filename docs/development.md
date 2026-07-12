@@ -145,6 +145,18 @@ Smoke Test and Bench Lab share the core completion transport, but Smoke Test mus
 - JSON and Markdown evidence exports preserve provider samples and quality labels.
 - The UI and exports state that accelerator ownership is unproven; time correlation is never presented as proof that Lemonade owned GPU/NPU work.
 
+## Guided Hugging Face Intake Manual Check
+
+- Inspecting a public `owner/repository` does not register or download a model.
+- A short search term resolves at most five GGUF repository candidates and explicitly states that popularity is not an endorsement or recommendation.
+- GGUF variants come from Lemonade's variant endpoint and show file size, estimated runtime memory, and risk against currently available RAM.
+- ONNX files are identified from repository metadata, but direct pull stays disabled when Lemonade recipe/layout compatibility is not proven.
+- Creating a profile preserves the source repository, selected variant, intended workflow, conservative runtime defaults, and estimation caveats.
+- Pull requires an explicit confirmation and sends a namespaced `user.*` registration request to Lemonade.
+- The resulting workflow profile uses Lemonade's canonical inventory identity without the registration-only `user.` namespace.
+- After pull, Models, Run Evidence, and Bench Lab are offered as follow-up workflows; a real load and Smoke Test remain required for runtime evidence.
+- Gated/private repository metadata may be partially unavailable; the UI reports which inspection sources succeeded and does not expose tokens.
+
 ## Local Data
 
 Runtime data is stored under backend-managed data paths and is intentionally excluded from git. Do not commit secrets, local settings, diagnostic bundles, or private planning documents.

@@ -22,7 +22,8 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - Run Evidence Identity Linkage is implemented and merged on `main` through pull request [#12](https://github.com/peppeg/Lemonade_Control_Center/pull/12).
 - Workflow Profiles and Workflow Memory are implemented and merged on `main` through pull request [#13](https://github.com/peppeg/Lemonade_Control_Center/pull/13).
 - Bench Lab workflow comparison is implemented and merged on `main` through pull request [#14](https://github.com/peppeg/Lemonade_Control_Center/pull/14).
-- Telemetry Providers and Accelerator Evidence are implemented and validated on branch `codex/telemetry-providers`; merge is the remaining delivery step.
+- Telemetry Providers and Accelerator Evidence are implemented and merged on `main` through pull request [#15](https://github.com/peppeg/Lemonade_Control_Center/pull/15).
+- Guided Hugging Face Intake is implemented and validated on branch `codex/hugging-face-intake`; merge is the remaining delivery step.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
@@ -105,7 +106,7 @@ Done when two profile/model combinations can run the same workflow suite and pro
 
 #### 4. Add Telemetry Providers And Accelerator Evidence
 
-Status: implementation and validation complete, merge pending
+Status: complete
 
 - formalize the built-in Linux process/sysfs sampler as a provider;
 - add optional `xdna-top` and `amdgpu_top` providers when installed;
@@ -115,7 +116,7 @@ Status: implementation and validation complete, merge pending
 
 #### 5. Add Guided Hugging Face Intake
 
-Status: planned
+Status: implementation and validation complete, merge pending
 
 - inspect repository and variant relevance without becoming a marketplace;
 - check GGUF/ONNX applicability and likely memory impact;
@@ -142,6 +143,8 @@ Status: later P2 work
 - do not confuse successful API reachability with trusted host telemetry.
 
 ### Parallel Maintenance Lane
+
+- Add persistent model-download progress and reconnectable job state for long Hugging Face pulls. Prefer Lemonade-owned `/v1/downloads` jobs (`stream=true`, `subscribe=false`) so progress survives page refreshes; do not move download ownership into LCC.
 
 These tasks should be handled when relevant but should not interrupt the execution order without a concrete compatibility or safety issue:
 
