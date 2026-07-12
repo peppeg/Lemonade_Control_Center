@@ -17,6 +17,7 @@ from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
 from app.services.log_parser import get_logs_for_window
 from app.services.process import find_llama_server
+from app.services.telemetry import TelemetryManager
 
 EVIDENCE_FILE = Path(__file__).parent.parent / "data" / "run_evidence.json"
 
@@ -185,6 +186,22 @@ def render_evidence_markdown(evidence: RunEvidenceSeed) -> str:
         lines.append("```")
     else:
         lines.extend(["", "No log entries were captured for this run window."])
+    lines.extend(
+        [
+            "",
+            "## Telemetry Providers",
+            "",
+            f"- **Accelerator ownership:** {evidence.accelerator_ownership}",
+            f"- **Ownership note:** {evidence.accelerator_ownership_note}",
+        ]
+    )
+    for sample in evidence.telemetry_samples:
+        lines.append(f"- **{sample.provider_label} ({sample.phase}):** {sample.quality}")
+        if sample.error:
+            lines.append(f"  - Error: {sample.error}")
+        for metric in sample.metrics:
+            value = "unavailable" if metric.value is None else f"{metric.value}{metric.unit or ''}"
+            lines.append(f"  - {metric.name}: {value} [{metric.quality}] ({metric.evidence})")
     if evidence.warnings:
         lines.extend(["", "## Warnings", "", *[f"- {warning}" for warning in evidence.warnings]])
     return "\n".join(lines) + "\n"
@@ -226,14 +243,17 @@ class SmokeTestRunner:
         storage: RunEvidenceStorage | None = None,
         log_collector=None,
         runtime: RuntimeConfig | None = None,
+        telemetry_manager: TelemetryManager | None = None,
     ) -> None:
         self.completion_runner = completion_runner
         self.storage = storage or RunEvidenceStorage()
         self.log_collector = log_collector or _safe_log_snapshot
         self.runtime = runtime
+        self.telemetry_manager = telemetry_manager or TelemetryManager()
 
     async def run(self, request: SmokeTestRequest, observed_model_name: str | None = None) -> SmokeTestResponse:
         started_at = datetime.now(timezone.utc)
+        telemetry_start = self.telemetry_manager.snapshot("start")
         before_hardware = _safe_hardware_snapshot()
         before_process = _safe_process_snapshot()
 
@@ -249,6 +269,7 @@ class SmokeTestRunner:
 
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
+        telemetry_end = self.telemetry_manager.snapshot("end")
         ended_at = datetime.now(timezone.utc)
         log_capture = self.log_collector(started_at, ended_at)
         process = after_process or before_process
@@ -301,6 +322,9 @@ class SmokeTestRunner:
             log_source=log_capture["source"],
             log_entries=log_capture["entries"],
             log_capture_error=log_capture["error"],
+            telemetry_samples=[*telemetry_start.samples, *telemetry_end.samples],
+            accelerator_ownership=telemetry_end.accelerator_ownership,
+            accelerator_ownership_note=telemetry_end.ownership_note,
             warnings=warnings,
         )
         self.storage.add(evidence)
@@ -320,10 +344,12 @@ class LoadEvidenceRecorder:
         storage: RunEvidenceStorage | None = None,
         log_collector=None,
         runtime: RuntimeConfig | None = None,
+        telemetry_manager: TelemetryManager | None = None,
     ) -> None:
         self.storage = storage or RunEvidenceStorage()
         self.log_collector = log_collector or _safe_log_snapshot
         self.runtime = runtime
+        self.telemetry_manager = telemetry_manager or TelemetryManager()
 
     def start(self) -> dict:
         return {
@@ -331,6 +357,7 @@ class LoadEvidenceRecorder:
             "wall_started_at": datetime.now(timezone.utc),
             "hardware": _safe_hardware_snapshot(),
             "process": _safe_process_snapshot(),
+            "telemetry": self.telemetry_manager.snapshot("start"),
         }
 
     def record_response(
@@ -342,6 +369,7 @@ class LoadEvidenceRecorder:
     ) -> RunEvidenceSeed:
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
+        telemetry_end = self.telemetry_manager.snapshot("end")
         ended_at = datetime.now(timezone.utc)
         log_capture = self.log_collector(started["wall_started_at"], ended_at)
         process = after_process or started.get("process")
@@ -378,6 +406,9 @@ class LoadEvidenceRecorder:
             log_source=log_capture["source"],
             log_entries=log_capture["entries"],
             log_capture_error=log_capture["error"],
+            telemetry_samples=[*started["telemetry"].samples, *telemetry_end.samples],
+            accelerator_ownership=telemetry_end.accelerator_ownership,
+            accelerator_ownership_note=telemetry_end.ownership_note,
             warnings=warnings,
         )
         self.storage.add(evidence)

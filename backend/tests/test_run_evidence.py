@@ -5,6 +5,7 @@ import pytest
 from app.models.completions import CompletionError, CompletionResult
 from app.models.schemas import LoadModelRequest, LoadModelResponse, LogEntry, SmokeTestRequest
 from app.models.setup import RuntimeConfig
+from app.models.telemetry import TelemetryMetric, TelemetrySample, TelemetrySnapshot
 from app.services.run_evidence import (
     LoadEvidenceRecorder,
     RunEvidenceStorage,
@@ -127,6 +128,7 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
         storage=storage,
         log_collector=logs,
         runtime=_runtime(),
+        telemetry_manager=FakeTelemetryManager(),
     )
 
     monkeypatch.setattr(
@@ -166,6 +168,13 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
     assert response.evidence.runtime_server_url == "http://localhost:13305"
     assert response.evidence.workflow_profile_id == "coding"
     assert response.evidence.workflow_profile_name == "Coding Fast"
+    assert [sample.phase for sample in response.evidence.telemetry_samples] == ["start", "end"]
+    assert response.evidence.telemetry_samples[0].metrics[0].quality == "measured"
+    assert response.evidence.accelerator_ownership == "unproven"
+    assert all(
+        response.evidence.log_window_started_at <= sample.captured_at <= response.evidence.log_window_ended_at
+        for sample in response.evidence.telemetry_samples
+    )
     assert response.evidence.response_text == "LCC_SMOKE_OK"
     assert response.evidence.reasoning_text == "internal reasoning"
     assert response.evidence.completion_endpoint == "/v1/chat/completions"
@@ -214,7 +223,12 @@ async def test_smoke_test_runner_stores_structured_completion_failure(tmp_path, 
 
 def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_path, monkeypatch):
     storage = RunEvidenceStorage(path=tmp_path / "run_evidence.json")
-    recorder = LoadEvidenceRecorder(storage=storage, log_collector=FakeLogCollector(), runtime=_runtime())
+    recorder = LoadEvidenceRecorder(
+        storage=storage,
+        log_collector=FakeLogCollector(),
+        runtime=_runtime(),
+        telemetry_manager=FakeTelemetryManager(),
+    )
 
     monkeypatch.setattr(
         "app.services.run_evidence._safe_hardware_snapshot",
@@ -256,6 +270,11 @@ def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_pat
     assert evidence.runtime_server_url == "http://localhost:13305"
     assert evidence.workflow_profile_id == "review"
     assert evidence.workflow_profile_name == "Review Heavy"
+    assert [sample.phase for sample in evidence.telemetry_samples] == ["start", "end"]
+    assert all(
+        evidence.log_window_started_at <= sample.captured_at <= evidence.log_window_ended_at
+        for sample in evidence.telemetry_samples
+    )
     assert evidence.requested_backend == "rocm"
     assert evidence.requested_ctx_size == 65536
     assert evidence.requested_llamacpp_args == "--flash-attn on"
@@ -323,6 +342,31 @@ class FakeLogCollector:
         error = None if self.source == "journalctl" else "Run log capture unavailable."
         entries = [LogEntry(message="request completed", raw="request completed")] if not error else []
         return {"source": self.source, "entries": entries, "error": error}
+
+
+class FakeTelemetryManager:
+    def snapshot(self, phase):
+        return TelemetrySnapshot(
+            samples=[
+                TelemetrySample(
+                    provider_id="fake",
+                    provider_label="Fake provider",
+                    phase=phase,
+                    quality="measured",
+                    available=True,
+                    metrics=[
+                        TelemetryMetric(
+                            name="gpu.busy",
+                            value=50,
+                            unit="%",
+                            quality="measured",
+                            provider_id="fake",
+                            evidence="test counter",
+                        )
+                    ],
+                )
+            ]
+        )
 
 
 def _evidence(id_: str, model_name: str):

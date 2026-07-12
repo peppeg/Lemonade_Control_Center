@@ -10,7 +10,7 @@ Make Lemonade easier to operate, then make the runtime behavior easier to prove.
 
 ## Current Execution Plan
 
-Last reviewed: 2026-07-11
+Last reviewed: 2026-07-12
 
 This section is the canonical handoff for ongoing implementation. The P0/P1/P2 sections below explain product direction and scope; this section defines the order in which the remaining work should be completed.
 
@@ -21,7 +21,8 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - Run Evidence viewer, detail API, filters, JSON/Markdown export, and operation-window journal correlation are implemented on `main` through merged pull request [#11](https://github.com/peppeg/Lemonade_Control_Center/pull/11).
 - Run Evidence Identity Linkage is implemented and merged on `main` through pull request [#12](https://github.com/peppeg/Lemonade_Control_Center/pull/12).
 - Workflow Profiles and Workflow Memory are implemented and merged on `main` through pull request [#13](https://github.com/peppeg/Lemonade_Control_Center/pull/13).
-- Bench Lab workflow comparison is implemented on branch `codex/bench-lab-workflows`; automated and manual validation are the remaining delivery steps.
+- Bench Lab workflow comparison is implemented and merged on `main` through pull request [#14](https://github.com/peppeg/Lemonade_Control_Center/pull/14).
+- Telemetry Providers and Accelerator Evidence are implemented and validated on branch `codex/telemetry-providers`; merge is the remaining delivery step.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
@@ -82,7 +83,7 @@ Done when a profile can be selected, applied, traced into new evidence, and revi
 
 #### 3. Mature Bench Lab On The Shared Foundations
 
-Status: implementation and validation complete, merge pending
+Status: complete
 
 Goal:
 
@@ -104,7 +105,7 @@ Done when two profile/model combinations can run the same workflow suite and pro
 
 #### 4. Add Telemetry Providers And Accelerator Evidence
 
-Status: planned
+Status: implementation and validation complete, merge pending
 
 - formalize the built-in Linux process/sysfs sampler as a provider;
 - add optional `xdna-top` and `amdgpu_top` providers when installed;

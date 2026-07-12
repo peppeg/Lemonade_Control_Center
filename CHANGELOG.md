@@ -28,6 +28,7 @@ The project is under active development, so entries currently describe the evolv
 - Run Evidence identity linkage for the active LCC runtime, normalized server URL, workflow profile, and requested versus observed model names.
 - Workflow Memory metadata for profile intent, operator notes, known caveats, target runtime, and the latest successful Run Evidence reference.
 - Coding-agent Bench Lab suite, runtime/profile/resource evidence, manual quality assessments, and same-suite comparison reports.
+- Typed telemetry providers for Linux process/sysfs, optional `amdgpu_top`, and optional `xdna-top`, with per-metric provenance and quality.
 
 ### Changed
 
@@ -46,6 +47,7 @@ The project is under active development, so entries currently describe the evolv
 - Run Evidence list/detail views and JSON/Markdown exports now expose available runtime, profile, and model identity while diagnostic summaries omit sensitive server URLs and request content.
 - Profile, direct-load, Smoke Test, and Bench Lab surfaces now make the applied workflow profile explicit before actions.
 - Bench Lab results now preserve full prompts, outputs, reasoning, request settings, runtime identity, process/memory evidence, and operator assessments.
+- Run Evidence now correlates provider samples at operation start/end and explicitly labels accelerator ownership as unproven.
 
 ### Fixed
 

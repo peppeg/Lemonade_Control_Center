@@ -251,6 +251,41 @@
           </section>
 
           <section>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h4 class="ops-label">Telemetry Providers</h4>
+              <span class="ops-badge ops-badge-warn">ownership {selected.accelerator_ownership}</span>
+            </div>
+            <p class="mb-3 text-sm text-muted-foreground">{selected.accelerator_ownership_note}</p>
+            {#if selected.telemetry_samples.length > 0}
+              <div class="space-y-3">
+                {#each selected.telemetry_samples as sample}
+                  <div class="border border-[#34382d] bg-[#111312] p-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="ops-value">{sample.provider_label}</span>
+                      <span class="ops-badge">{sample.phase}</span>
+                      <span class="ops-badge {sample.quality === 'measured' ? 'ops-badge-ok' : sample.quality === 'unsupported' ? '' : 'ops-badge-danger'}">{sample.quality}</span>
+                    </div>
+                    {#if sample.error}<p class="mt-2 text-sm text-status-warn">{sample.error}</p>{/if}
+                    {#if sample.metrics.length > 0}
+                      <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                        {#each sample.metrics as metric}
+                          <div>
+                            <dt class="text-muted-foreground">{metric.name} · {metric.quality}</dt>
+                            <dd class="ops-value mt-1">{metric.value ?? 'Unavailable'}{metric.value !== null ? metric.unit ?? '' : ''}</dd>
+                            <dd class="mt-1 text-xs text-muted-foreground">{metric.evidence}</dd>
+                          </div>
+                        {/each}
+                      </dl>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <p class="text-sm text-muted-foreground">Legacy record: no provider samples were captured.</p>
+            {/if}
+          </section>
+
+          <section>
             <h4 class="ops-label mb-3">Runtime</h4>
             <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
               <div><dt class="text-muted-foreground">Backend</dt><dd class="ops-value mt-1">{selected.observed_backend ?? 'Unavailable'}</dd></div>
