@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { capabilities } from '$lib/stores/capabilities';
+  import { api } from '$lib/api/client';
   import { models, refreshModels } from '$lib/stores/models';
   import TestResult from '$lib/components/bench/TestResult.svelte';
   import {
@@ -14,6 +15,7 @@
     loadBenchData,
     runQuickBench,
     runSuiteBench,
+    annotateBenchResult,
   } from '$lib/stores/bench';
   import type { BenchStoredResult } from '$lib/types';
   import { loadWorkflowDefaults, type WorkflowDefaults } from '$lib/utils/workflowDefaults';
@@ -26,6 +28,9 @@
   let maxTokens = 2000;
   let temperature = 0.3;
   let appliedWorkflow: WorkflowDefaults = loadWorkflowDefaults();
+  let selectedComparisonIds: string[] = [];
+  let qualityDrafts: Record<string, number | null> = {};
+  let noteDrafts: Record<string, string> = {};
 
   onMount(() => {
     const defaults = loadWorkflowDefaults();
@@ -37,9 +42,12 @@
   });
 
   $: if (!selectedModel && $models.length > 0) {
-    selectedModel = $models[0].name;
+    selectedModel = $models.find((model) => model.isLoaded)?.name ?? $models[0].name;
   }
+  $: loadedBenchModel = $models.find((model) => model.isLoaded) ?? null;
+  $: if (loadedBenchModel && selectedModel !== loadedBenchModel.name) selectedModel = loadedBenchModel.name;
   $: benchProfileMatches = Boolean(appliedWorkflow.activeProfileId && appliedWorkflow.activeProfileModelName === selectedModel);
+  $: canRunSuite = Boolean(loadedBenchModel && selectedModel === loadedBenchModel.name && benchProfileMatches && !$benchLoading);
 
   function resultName(result: BenchStoredResult): string {
     return 'suite_name' in result ? result.suite_name : result.prompt_name;
@@ -47,6 +55,20 @@
 
   function resultTps(result: BenchStoredResult): string {
     return String('avg_gen_tps' in result ? result.avg_gen_tps : result.generation_tps);
+  }
+
+  function toggleComparison(id: string) {
+    selectedComparisonIds = selectedComparisonIds.includes(id)
+      ? selectedComparisonIds.filter((item) => item !== id)
+      : [...selectedComparisonIds, id];
+  }
+
+  function comparisonCompatible(result: BenchStoredResult): result is import('$lib/types').SuiteResult {
+    if (!('results' in result)) return false;
+    if (!result.workflow_profile_id) return false;
+    if (result.observed_model_name && result.observed_model_name !== (result.requested_model_name ?? result.model)) return false;
+    const selected = $benchResults.find((item) => selectedComparisonIds.includes(item.id));
+    return !selected || ('suite_id' in selected && selected.suite_id === result.suite_id);
   }
 </script>
 
@@ -102,10 +124,11 @@
           <label class="block space-y-2">
             <span class="ops-label">Model</span>
             <select class="ops-select" bind:value={selectedModel}>
-              {#each $models as model}
+              {#each $models.filter((model) => model.isLoaded) as model}
                 <option value={model.name}>{model.name}</option>
               {/each}
             </select>
+            {#if !loadedBenchModel}<p class="text-xs text-status-warn">Load a model before running Bench Lab.</p>{/if}
           </label>
           <label class="block space-y-2">
             <span class="ops-label">max_tokens</span>
@@ -125,7 +148,7 @@
           </label>
         </div>
         <div class="mt-5 flex justify-end">
-          <button class="ops-button ops-button-primary" type="button" disabled={!selectedModel || !prompt.trim() || $benchLoading} on:click={() => runQuickBench({ model: selectedModel, prompt, max_tokens: maxTokens, temperature, system_prompt: systemPrompt })}>
+          <button class="ops-button ops-button-primary" type="button" disabled={!selectedModel || !prompt.trim() || $benchLoading} on:click={() => runQuickBench({ model: selectedModel, prompt, max_tokens: maxTokens, temperature, system_prompt: systemPrompt, workflow_profile_id: benchProfileMatches ? appliedWorkflow.activeProfileId ?? undefined : undefined, workflow_profile_name: benchProfileMatches ? appliedWorkflow.activePreset : undefined })}>
             {$benchLoading ? 'Running' : 'Run Test'}
           </button>
         </div>
@@ -140,7 +163,7 @@
                 <p class="ops-subtitle">{suite.description}</p>
                 <p class="mt-3 text-sm text-muted-foreground">{suite.prompts.length} prompts, about {suite.estimated_minutes} min, temp {suite.recommended_temp}</p>
               </div>
-              <button class="ops-button ops-button-primary" type="button" disabled={!selectedModel || $benchLoading} on:click={() => runSuiteBench(selectedModel, suite.id)}>
+              <button class="ops-button ops-button-primary" type="button" disabled={!canRunSuite} on:click={() => runSuiteBench(selectedModel, suite.id, appliedWorkflow.activeProfileId ?? undefined, appliedWorkflow.activePreset)}>
                 Run All
               </button>
             </div>
@@ -164,17 +187,25 @@
         <div class="overflow-x-auto">
           <table class="ops-table">
             <thead>
-              <tr><th>Timestamp</th><th>Model</th><th>Run</th><th class="text-right">TPS</th><th class="text-right">Tokens</th><th>Status</th></tr>
+              <tr><th>Timestamp</th><th>Model / Profile</th><th>Run</th><th class="text-right">TPS</th><th class="text-right">Tokens</th><th>Quality & Notes</th></tr>
             </thead>
             <tbody>
               {#each $benchResults as result}
                 <tr>
                   <td class="ops-value">{new Date(result.timestamp).toLocaleString()}</td>
-                  <td class="ops-value">{result.model}</td>
+                  <td><span class="ops-value block">{result.model}</span><span class="text-xs text-muted-foreground">{result.workflow_profile_name ?? 'No profile'}</span></td>
                   <td>{resultName(result)}</td>
                   <td class="text-right ops-value">{resultTps(result)}</td>
                   <td class="text-right ops-value">{'total_tokens' in result ? result.total_tokens : result.output_tokens}</td>
-                  <td><span class="ops-badge {('error' in result && result.error) || ('error_count' in result && result.error_count > 0) ? 'ops-badge-danger' : 'ops-badge-ok'}">stored</span></td>
+                  <td class="min-w-[260px]">
+                    <div class="flex gap-2">
+                      <select class="ops-select w-24" value={qualityDrafts[result.id] ?? result.manual_quality_score ?? ''} on:change={(event) => qualityDrafts[result.id] = Number((event.currentTarget as HTMLSelectElement).value) || null}>
+                        <option value="">Score</option>{#each [1,2,3,4,5] as score}<option value={score}>{score}/5</option>{/each}
+                      </select>
+                      <input class="ops-input" value={noteDrafts[result.id] ?? result.manual_notes} on:input={(event) => noteDrafts[result.id] = (event.currentTarget as HTMLInputElement).value} placeholder="Operator notes" />
+                      <button class="ops-button" type="button" on:click={() => annotateBenchResult(result.id, qualityDrafts[result.id] ?? result.manual_quality_score, noteDrafts[result.id] ?? result.manual_notes)}>Save</button>
+                    </div>
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -185,17 +216,25 @@
       <section class="ops-panel p-5">
         <h2 class="ops-title">Compare</h2>
         <p class="ops-subtitle">Comparison uses stored results. Run the same suite on multiple models, then compare average TPS, TTFT, total tokens, and errors here.</p>
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+          <span class="text-sm text-muted-foreground">Select at least two runs of the same suite.</span>
+          {#if selectedComparisonIds.length >= 2}
+            <a class="ops-button" href={api.bench.comparisonMarkdownUrl(selectedComparisonIds)} download>Comparison Markdown</a>
+          {/if}
+        </div>
         <div class="mt-5 overflow-x-auto">
           <table class="ops-table">
-            <thead><tr><th>Model</th><th>Run</th><th class="text-right">TPS</th><th class="text-right">TTFT</th><th class="text-right">Tokens</th></tr></thead>
+            <thead><tr><th>Select</th><th>Model / Profile</th><th>Run</th><th class="text-right">TPS</th><th class="text-right">TTFT</th><th class="text-right">Tokens</th><th>Quality</th></tr></thead>
             <tbody>
-              {#each $benchResults as result}
+              {#each $benchResults.filter(comparisonCompatible) as result}
                 <tr>
-                  <td class="ops-value">{result.model}</td>
+                  <td><input type="checkbox" checked={selectedComparisonIds.includes(result.id)} on:change={() => toggleComparison(result.id)} /></td>
+                  <td><span class="ops-value block">{result.model}</span><span class="text-xs text-muted-foreground">{result.workflow_profile_name ?? 'No profile'}</span></td>
                   <td>{resultName(result)}</td>
                   <td class="text-right ops-value">{resultTps(result)}</td>
-                  <td class="text-right ops-value">{'avg_ttft' in result ? result.avg_ttft : result.ttft_seconds}s</td>
-                  <td class="text-right ops-value">{'total_tokens' in result ? result.total_tokens : result.output_tokens}</td>
+                  <td class="text-right ops-value">{result.avg_ttft}s</td>
+                  <td class="text-right ops-value">{result.total_tokens}</td>
+                  <td>{result.manual_quality_score ? `${result.manual_quality_score}/5` : 'Unscored'}</td>
                 </tr>
               {/each}
             </tbody>

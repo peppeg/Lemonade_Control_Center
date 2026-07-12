@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import uuid
 
 from pydantic import BaseModel, Field
 
@@ -31,9 +32,23 @@ class BenchSuite(BaseModel):
 
 
 class BenchResult(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     prompt_id: str
     prompt_name: str
+    prompt: str = ""
+    system_prompt: str = ""
+    request_max_tokens: int | None = None
+    request_temperature: float | None = None
+    request_timeout_seconds: int | None = None
+    request_stop_sequences: list[str] = Field(default_factory=list)
     model: str
+    requested_model_name: str | None = None
+    observed_model_name: str | None = None
+    runtime_id: str | None = None
+    runtime_label: str | None = None
+    runtime_server_url: str | None = None
+    workflow_profile_id: str | None = None
+    workflow_profile_name: str | None = None
     input_tokens: int = 0
     output_tokens: int = 0
     prompt_eval_tps: float = 0
@@ -50,12 +65,30 @@ class BenchResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     error: str | None = None
+    observed_backend: str | None = None
+    observed_ctx_size: int | None = None
+    observed_pid: int | None = None
+    process_rss_gb: float | None = None
+    ram_used_before_gb: float | None = None
+    ram_used_after_gb: float | None = None
+    swap_used_before_gb: float | None = None
+    swap_used_after_gb: float | None = None
+    manual_quality_score: int | None = Field(default=None, ge=1, le=5)
+    manual_notes: str = ""
 
 
 class SuiteResult(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     suite_id: str
     suite_name: str
     model: str
+    requested_model_name: str | None = None
+    observed_model_name: str | None = None
+    runtime_id: str | None = None
+    runtime_label: str | None = None
+    runtime_server_url: str | None = None
+    workflow_profile_id: str | None = None
+    workflow_profile_name: str | None = None
     results: list[BenchResult]
     avg_gen_tps: float
     avg_ttft: float
@@ -64,6 +97,8 @@ class SuiteResult(BaseModel):
     truncated_count: int
     error_count: int
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    manual_quality_score: int | None = Field(default=None, ge=1, le=5)
+    manual_notes: str = ""
 
 
 class BenchRunRequest(BaseModel):
@@ -73,3 +108,17 @@ class BenchRunRequest(BaseModel):
     max_tokens: int = 4000
     temperature: float = 0.7
     system_prompt: str = ""
+    workflow_profile_id: str | None = None
+    workflow_profile_name: str | None = None
+
+
+class BenchAnnotationRequest(BaseModel):
+    manual_quality_score: int | None = Field(default=None, ge=1, le=5)
+    manual_notes: str = ""
+
+
+class BenchComparison(BaseModel):
+    suite_id: str
+    suite_name: str
+    result_ids: list[str]
+    results: list[SuiteResult]

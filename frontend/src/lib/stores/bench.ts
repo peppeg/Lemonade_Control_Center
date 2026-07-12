@@ -33,6 +33,8 @@ export async function runQuickBench(input: {
   max_tokens: number;
   temperature: number;
   system_prompt?: string;
+  workflow_profile_id?: string;
+  workflow_profile_name?: string;
 }): Promise<void> {
   benchLoading.set(true);
   benchError.set(null);
@@ -48,10 +50,10 @@ export async function runQuickBench(input: {
   benchLoading.set(false);
 }
 
-export async function runSuiteBench(model: string, suiteId: string): Promise<void> {
+export async function runSuiteBench(model: string, suiteId: string, workflowProfileId?: string, workflowProfileName?: string): Promise<void> {
   benchLoading.set(true);
   benchError.set(null);
-  const result = await api.bench.runSuite({ model, suite_id: suiteId });
+  const result = await api.bench.runSuite({ model, suite_id: suiteId, workflow_profile_id: workflowProfileId, workflow_profile_name: workflowProfileName });
   if (result.ok) {
     currentBenchResult.set(result.data);
     notify.success('Suite benchmark completed', `${result.data.suite_name}: ${result.data.avg_gen_tps} t/s`, { href: '/bench' });
@@ -61,6 +63,16 @@ export async function runSuiteBench(model: string, suiteId: string): Promise<voi
     notify.error('Suite benchmark failed', result.error, { href: '/bench' });
   }
   benchLoading.set(false);
+}
+
+export async function annotateBenchResult(resultId: string, quality: number | null, notes: string): Promise<void> {
+  const result = await api.bench.annotate(resultId, { manual_quality_score: quality, manual_notes: notes });
+  if (result.ok) {
+    notify.success('Bench assessment saved', resultId, { toastDuration: 2200 });
+    await loadBenchData();
+  } else {
+    notify.error('Assessment failed', result.error);
+  }
 }
 
 export async function clearBenchResults(): Promise<void> {

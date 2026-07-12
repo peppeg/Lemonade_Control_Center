@@ -671,9 +671,23 @@ export interface BenchSuite {
 }
 
 export interface BenchResult {
+  id: string;
   prompt_id: string;
   prompt_name: string;
+  prompt: string;
+  system_prompt: string;
+  request_max_tokens: number | null;
+  request_temperature: number | null;
+  request_timeout_seconds: number | null;
+  request_stop_sequences: string[];
   model: string;
+  requested_model_name: string | null;
+  observed_model_name: string | null;
+  runtime_id: string | null;
+  runtime_label: string | null;
+  runtime_server_url: string | null;
+  workflow_profile_id: string | null;
+  workflow_profile_name: string | null;
   input_tokens: number;
   output_tokens: number;
   prompt_eval_tps: number;
@@ -690,12 +704,30 @@ export interface BenchResult {
   warnings: string[];
   timestamp: string;
   error: string | null;
+  observed_backend: string | null;
+  observed_ctx_size: number | null;
+  observed_pid: number | null;
+  process_rss_gb: number | null;
+  ram_used_before_gb: number | null;
+  ram_used_after_gb: number | null;
+  swap_used_before_gb: number | null;
+  swap_used_after_gb: number | null;
+  manual_quality_score: number | null;
+  manual_notes: string;
 }
 
 export interface SuiteResult {
+  id: string;
   suite_id: string;
   suite_name: string;
   model: string;
+  requested_model_name: string | null;
+  observed_model_name: string | null;
+  runtime_id: string | null;
+  runtime_label: string | null;
+  runtime_server_url: string | null;
+  workflow_profile_id: string | null;
+  workflow_profile_name: string | null;
   results: BenchResult[];
   avg_gen_tps: number;
   avg_ttft: number;
@@ -704,6 +736,15 @@ export interface SuiteResult {
   truncated_count: number;
   error_count: number;
   timestamp: string;
+  manual_quality_score: number | null;
+  manual_notes: string;
+}
+
+export interface BenchComparison {
+  suite_id: string;
+  suite_name: string;
+  result_ids: string[];
+  results: SuiteResult[];
 }
 
 export type BenchStoredResult = BenchResult | SuiteResult;

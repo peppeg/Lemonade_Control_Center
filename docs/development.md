@@ -127,6 +127,15 @@ Smoke Test and Bench Lab share the core completion transport, but Smoke Test mus
 - Opening the latest evidence link selects that exact record in the Run Evidence workspace.
 - Profile JSON storage contains no evidence payload; the latest evidence reference is computed at read time without copying prompt, response, logs, or full evidence.
 
+## Bench Lab Workflow Comparison Manual Check
+
+- Bench Lab shows the applied profile and the Coding Agent Workflows suite.
+- Running the same suite with two profile/model combinations preserves full prompts, outputs, separate reasoning, request settings, metrics, runtime/profile identity, and process/RAM evidence.
+- Stored results accept a 1–5 manual quality score and operator notes, and retain them after refresh.
+- Compare only permits stored runs from the same suite and distinguishes model/profile combinations.
+- The comparison Markdown report contains both combinations, aggregate metrics, quality scores, and operator notes.
+- Missing process or memory probes remain explicitly unavailable rather than being reported as measured values.
+
 ## Local Data
 
 Runtime data is stored under backend-managed data paths and is intentionally excluded from git. Do not commit secrets, local settings, diagnostic bundles, or private planning documents.

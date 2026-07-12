@@ -20,7 +20,8 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - Backend Readiness V1, LCC Workflow Defaults, and the shared CompletionRunner foundation are implemented on `main`.
 - Run Evidence viewer, detail API, filters, JSON/Markdown export, and operation-window journal correlation are implemented on `main` through merged pull request [#11](https://github.com/peppeg/Lemonade_Control_Center/pull/11).
 - Run Evidence Identity Linkage is implemented and merged on `main` through pull request [#12](https://github.com/peppeg/Lemonade_Control_Center/pull/12).
-- Workflow Profiles and Workflow Memory are being consolidated on branch `codex/workflow-memory`.
+- Workflow Profiles and Workflow Memory are implemented and merged on `main` through pull request [#13](https://github.com/peppeg/Lemonade_Control_Center/pull/13).
+- Bench Lab workflow comparison is implemented on branch `codex/bench-lab-workflows`; automated and manual validation are the remaining delivery steps.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
@@ -61,7 +62,7 @@ Done when backend tests prove persistence, legacy compatibility, filtering/detai
 
 #### 2. Consolidate Workflow Profiles And Workflow Memory
 
-Status: implementation and validation complete, merge pending
+Status: complete
 
 Goal:
 
@@ -81,7 +82,7 @@ Done when a profile can be selected, applied, traced into new evidence, and revi
 
 #### 3. Mature Bench Lab On The Shared Foundations
 
-Status: planned after Workflow Memory
+Status: implementation and validation complete, merge pending
 
 Goal:
 
