@@ -7,6 +7,7 @@ import subprocess
 
 import psutil
 
+from app.config import settings
 from app.models.telemetry import TelemetryMetric, TelemetryQuality, TelemetrySample, TelemetrySnapshot
 from app.services.hardware import get_gpu_info
 from app.services.process import find_llama_server
@@ -15,6 +16,11 @@ class LinuxTelemetryProvider:
     id = "linux_process_sysfs"
     label = "Linux process/sysfs"
 
+    def __init__(self, scope: str | None = None) -> None:
+        self.scope = scope or settings.telemetry_scope
+        if self.scope == "container":
+            self.label = "Container process/sysfs"
+
     def sample(self, phase: str = "point") -> TelemetrySample:
         metrics: list[TelemetryMetric] = []
         try:
@@ -22,9 +28,9 @@ class LinuxTelemetryProvider:
             swap = psutil.swap_memory()
             metrics.extend(
                 [
-                    self._metric("host.ram_used", round(memory.used / 1024**3, 2), "GB", "measured", "/proc via psutil"),
-                    self._metric("host.swap_used", round(swap.used / 1024**3, 2), "GB", "measured", "/proc via psutil"),
-                    self._metric("host.cpu_busy", psutil.cpu_percent(interval=None), "%", "measured", "/proc via psutil"),
+                    self._metric(f"{self.scope}.ram_used", round(memory.used / 1024**3, 2), "GB", "measured", f"{self.scope}-visible /proc via psutil"),
+                    self._metric(f"{self.scope}.swap_used", round(swap.used / 1024**3, 2), "GB", "measured", f"{self.scope}-visible /proc via psutil"),
+                    self._metric(f"{self.scope}.cpu_busy", psutil.cpu_percent(interval=None), "%", "measured", f"{self.scope}-visible /proc via psutil"),
                 ]
             )
         except Exception as exc:
@@ -51,7 +57,7 @@ class LinuxTelemetryProvider:
         except Exception as exc:
             metrics.append(self._metric("llama.rss", None, "GB", "degraded", f"process probe failed: {exc}"))
 
-        gpu = get_gpu_info()
+        gpu = get_gpu_info() if self.scope == "host" else {"gpu_available": False}
         if gpu.get("gpu_available"):
             device = str(gpu.get("gpu_name") or "AMDGPU")
             if gpu.get("gpu_load_percent") is not None:
@@ -59,7 +65,12 @@ class LinuxTelemetryProvider:
             if gpu.get("gpu_temp_c") is not None:
                 metrics.append(self._metric("gpu.temperature", gpu["gpu_temp_c"], "C", "measured", "AMDGPU hwmon sysfs", device))
         else:
-            metrics.append(self._metric("gpu.busy", None, "%", "unsupported", "No readable AMDGPU sysfs counters"))
+            evidence = (
+                "Host accelerator telemetry is not enabled for container scope"
+                if self.scope == "container"
+                else "No readable AMDGPU sysfs counters"
+            )
+            metrics.append(self._metric("gpu.busy", None, "%", "unsupported", evidence))
 
         quality: TelemetryQuality = "measured" if any(metric.quality == "measured" for metric in metrics) else "unavailable"
         return TelemetrySample(

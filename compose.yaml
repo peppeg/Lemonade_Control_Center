@@ -1,0 +1,29 @@
+services:
+  lcc:
+    build:
+      context: .
+    image: lemonade-control-center:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${LCC_PORT:-17600}:17600"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 17600
+      SERVE_FRONTEND: "true"
+      LAN_MODE: "true"
+      REQUIRE_AUTH: "true"
+      LCC_API_KEY: "${LCC_API_KEY:?Set LCC_API_KEY in the environment or Compose .env}"
+      LEMONADE_URL: "${LEMONADE_URL:-http://host.docker.internal:13305}"
+      LEMONADE_ADMIN_API_KEY: "${LEMONADE_ADMIN_API_KEY:-}"
+      ENABLE_DELETE: "${ENABLE_DELETE:-false}"
+      ENABLE_RESTART: "false"
+      ENABLE_BENCH_LAB: "${ENABLE_BENCH_LAB:-false}"
+      TELEMETRY_SCOPE: container
+      CAPABILITIES_MODE: safe_runtime
+    volumes:
+      - lcc-data:/app/backend/app/data
+
+volumes:
+  lcc-data:

@@ -157,6 +157,15 @@ Smoke Test and Bench Lab share the core completion transport, but Smoke Test mus
 - After pull, Models, Run Evidence, and Bench Lab are offered as follow-up workflows; a real load and Smoke Test remain required for runtime evidence.
 - Gated/private repository metadata may be partially unavailable; the UI reports which inspection sources succeeded and does not expose tokens.
 
+## Container Packaging Manual Check
+
+- The default Compose deployment starts with a required LCC key, loopback-only published port, persistent `lcc-data` volume, and reachable host or remote Lemonade URL.
+- The default Hardware Monitor reports container-scoped or unavailable host telemetry without implying access to host processes or accelerators.
+- The host-telemetry override is opt-in, Linux-only, joins the host PID namespace, and mounts sysfs/Lemonade cache read-only.
+- Missing `/dev/dri` or `/dev/accel` mappings remain unsupported rather than preventing the default container from starting.
+- The container healthcheck succeeds with authentication enabled, and profile/evidence data survives a container recreation.
+- `systemctl`, `journalctl`, process ownership, and accelerator ownership remain unavailable/unproven unless their exact prerequisites are deliberately exposed and verified.
+
 ## Local Data
 
 Runtime data is stored under backend-managed data paths and is intentionally excluded from git. Do not commit secrets, local settings, diagnostic bundles, or private planning documents.
