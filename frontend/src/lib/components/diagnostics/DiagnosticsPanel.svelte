@@ -12,6 +12,7 @@
   import AlertCard from './AlertCard.svelte';
 
   export let autoPoll = false;
+  export let excludedRuleIds: string[] = [];
 
   onMount(() => {
     if (autoPoll) {
@@ -25,7 +26,7 @@
     if (autoPoll) stopDiagnosticsPolling();
   });
 
-  $: alerts = $diagnosticReport?.alerts ?? [];
+  $: alerts = ($diagnosticReport?.alerts ?? []).filter((alert) => !excludedRuleIds.includes(alert.rule_id));
   $: topAlerts = alerts.slice(0, 3);
 </script>
 

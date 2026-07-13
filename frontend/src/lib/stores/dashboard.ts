@@ -185,7 +185,7 @@ export async function refreshDashboard(): Promise<void> {
 
   // ── Generate Alerts ──
   const alerts = generateAlerts(
-    serverStatus, loadedModel, lastTask, hardware, globalTimeout, configMaxTokens
+    loadedModel, lastTask, hardware, globalTimeout, configMaxTokens
   );
 
   // ── Determine overall loading state ──
@@ -235,7 +235,6 @@ export function stopDashboardPolling(): void {
 // ═══════════════════════════════════════════════
 
 function generateAlerts(
-  server: ServerStatus | null,
   model: LoadedModelInfo | null,
   task: LastTaskInfo | null,
   hw: HardwareInfo | null,
@@ -321,18 +320,6 @@ function generateAlerts(
         suggestion: 'Increase ctx_size or reduce max_tokens to leave more room for input.',
       });
     }
-  }
-
-  // ── Alert 7: No model loaded (idle) ──
-  if (server?.status === 'running' && !model) {
-    alerts.push({
-      id: 'no-model',
-      level: 'info',
-      title: 'No model loaded',
-      icon: '💤',
-      description: 'Lemonade is running but no model is loaded.',
-      suggestion: 'Go to Models to load one.',
-    });
   }
 
   return alerts;
