@@ -25,6 +25,8 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - Telemetry Providers and Accelerator Evidence are implemented and merged on `main` through pull request [#15](https://github.com/peppeg/Lemonade_Control_Center/pull/15).
 - Guided Hugging Face Intake is implemented and merged on `main` through pull request [#16](https://github.com/peppeg/Lemonade_Control_Center/pull/16).
 - LCC container packaging is implemented and merged on `main` through pull request [#17](https://github.com/peppeg/Lemonade_Control_Center/pull/17). The image was built and exercised with Podman on the development host; native Docker Compose validation remains welcome on systems with Docker and the Compose plugin installed.
+- The 0.3.0 UI and operations closeout is implemented and merged on `main` through pull request [#18](https://github.com/peppeg/Lemonade_Control_Center/pull/18). It includes the cross-page UI review, clearer diagnostics, guarded backend install/update operations, documentation refresh, and final validation against Lemonade Server 10.9.0.
+- [LCC 0.3.0](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.0) was released on 2026-07-13. Steps 0–6 below describe the delivered 0.3.0 foundation; step 7 is the next ordered product block.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
