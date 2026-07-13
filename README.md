@@ -5,6 +5,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 ![Status](https://img.shields.io/badge/status-active%20development-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux-blue.svg)
+[![Release](https://img.shields.io/github/v/release/peppeg/Lemonade_Control_Center?display_name=tag)](https://github.com/peppeg/Lemonade_Control_Center/releases/latest)
 
 Lemonade Control Center is an independent, unofficial project. It is not affiliated with, endorsed by, or maintained by the Lemonade project or AMD.
 
@@ -51,6 +52,19 @@ By default, LCC remains local to the Linux host and can be opened there at `http
 | Diagnostics | Hardware Monitor |
 |---|---|
 | ![Diagnostics](screenshot/lemonadecc_003.jpg) | ![Hardware monitor](screenshot/lemonadecc_004.jpg) |
+
+## What's New In 0.3.0
+
+Version 0.3.0 adds the first complete evidence-and-workflow layer on top of LCC's operator foundation:
+
+- **Guided Hugging Face Intake** accepts a repository or simple model search, shows relevant GGUF variants and memory estimates, creates an optional workflow profile, and asks Lemonade to perform the pull.
+- **Smoke Test and Run Evidence** verify the active model with a real completion and retain inspectable timing, token, runtime, profile, process, memory, and correlated-log evidence. Metric provenance is shown when a value is measured, reported, or estimated.
+- **More useful Logs & Stats** expose TTFT, prompt and generation throughput, token counts, duration, finish reason, recent tasks, and parsed operational events.
+- **Workflow Profiles and Workflow Memory** make successful model/runtime configurations repeatable and traceable into later smoke tests and comparisons.
+- **Bench Lab** can compare the same coding-agent workflow across model/profile combinations and export the results. It is a working early-stage prototype whose suites, analysis, and presentation will continue to evolve.
+- **Backend and deployment operations** add telemetry-provider visibility, guarded backend install/update actions, and container packaging for local or remote Lemonade targets.
+
+See the [0.3.0 release notes](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.0) and [Changelog](CHANGELOG.md) for the complete list. Hugging Face pulls currently notify when the download finishes; persistent progress and reconnectable download state are planned follow-up work.
 
 ## What You Can Do
 
@@ -128,6 +142,10 @@ On unified-memory systems such as AMD Strix Halo, system RAM is the primary capa
 Diagnostics combines runtime, service, hardware, and configuration checks into one report. It includes warning classification, dismissible findings, diagnostic history, and a downloadable support bundle.
 
 Run Evidence keeps inspectable records for smoke tests and model-load attempts, including request/result metrics, runtime and profile identity, observed process and memory state, and correlated Lemonade logs when available. Individual records can be filtered, inspected, and exported as JSON or Markdown.
+
+### Verify the active model with a smoke test
+
+Smoke Test sends a small real completion through the active Lemonade runtime, displays the response and key latency/throughput values, and saves the result as Run Evidence. When a workflow profile is applied, that identity follows the test so the result records not just what ran, but the configuration intent behind it.
 
 ### Inspect and pull Hugging Face models
 
