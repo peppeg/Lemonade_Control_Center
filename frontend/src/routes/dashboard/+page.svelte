@@ -272,7 +272,7 @@
     </div>
   </section>
 
-  <DiagnosticsPanel />
+  <DiagnosticsPanel excludedRuleIds={['no_model']} />
 
   {#if data.alerts.length > 0}
     <section class="ops-section space-y-3">
