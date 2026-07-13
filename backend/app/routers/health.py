@@ -4,6 +4,9 @@ Health and capabilities endpoints.
 These are the first endpoints to be implemented (M1) and serve as
 the foundation for the frontend to understand what's available.
 """
+import platform
+from pathlib import Path
+
 import httpx
 from fastapi import APIRouter
 
@@ -12,6 +15,25 @@ from app.capabilities import capabilities
 from app.models.schemas import HealthResponse, CapabilitiesResponse
 
 router = APIRouter(prefix="/api", tags=["health"])
+
+
+def detect_runtime_environment() -> str:
+    """Describe the environment hosting LCC, not the remote Lemonade target."""
+    if (
+        settings.telemetry_scope == "container"
+        or Path("/.dockerenv").exists()
+        or Path("/run/.containerenv").exists()
+    ):
+        return "container"
+
+    system_name = platform.system().lower()
+    if system_name == "linux":
+        return "linux_systemd" if capabilities.cmd_systemctl else "linux"
+    if system_name == "darwin":
+        return "macos"
+    if system_name == "windows":
+        return "windows"
+    return "other"
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -89,6 +111,8 @@ async def get_capabilities():
         cmd_sensors=capabilities.cmd_sensors,
         restart_enabled=capabilities.cmd_systemctl and settings.enable_restart,
         bench_lab=settings.enable_bench_lab,
+        runtime_environment=detect_runtime_environment(),
+        telemetry_scope=settings.telemetry_scope,
 
         # Meta
         lemonade_version=capabilities.lemonade_version,

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { notify } from '$lib/stores/notifications';
+  import { capabilities } from '$lib/stores/capabilities';
   import { clearLccKey, loadSecurityStatus, securityStatus } from '$lib/stores/security';
   import { healthData } from '$lib/stores/connection';
   import type {
@@ -78,6 +79,14 @@
   $: activeRuntime = config?.runtimes.find((runtime) => runtime.id === config?.active_runtime_id) ?? null;
   $: discoveryIssues = discoveryResult?.checks.filter((check) => check.status === 'warning' || check.status === 'error') ?? [];
   $: discoverySkipped = discoveryResult?.checks.filter((check) => check.status === 'skip') ?? [];
+  $: runtimeEnvironmentLabel = {
+    linux_systemd: 'Linux + systemd',
+    linux: 'Linux',
+    macos: 'macOS',
+    windows: 'Windows',
+    container: 'Container',
+    other: 'Other',
+  }[$capabilities.runtime_environment];
 
   onMount(() => {
     loadSettings();
@@ -692,16 +701,20 @@
           <span class="ops-badge">Backend-owned</span>
         </div>
         <div class="ops-card-body max-w-3xl space-y-5">
-          <label class="block space-y-2">
-            <span class="ops-label">OS type</span>
-            <select class="ops-select" bind:value={systemForm.os_type}>
-              <option value="linux_systemd">linux_systemd</option>
-              <option value="windows">windows</option>
-              <option value="macos">macos</option>
-              <option value="docker">docker</option>
-              <option value="other">other</option>
-            </select>
-          </label>
+          <div class="border border-[#30342b] bg-[#101211] p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="ops-label">Detected LCC environment</p>
+                <p class="ops-value mt-1">{runtimeEnvironmentLabel}</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <span class="ops-badge">telemetry {$capabilities.telemetry_scope}</span>
+                <span class="ops-badge {$capabilities.cmd_systemctl ? 'ops-badge-ok' : ''}">systemd {$capabilities.cmd_systemctl ? 'available' : 'unavailable'}</span>
+                <span class="ops-badge {$capabilities.cmd_journalctl ? 'ops-badge-ok' : ''}">journal {$capabilities.cmd_journalctl ? 'available' : 'unavailable'}</span>
+              </div>
+            </div>
+            <p class="ops-subtitle mt-3">Detected by the LCC backend. This describes the machine or container running LCC, not the selected Lemonade runtime.</p>
+          </div>
           <label class="block space-y-2">
             <span class="ops-label">service name</span>
             <input class="ops-input" bind:value={systemForm.service_name} />

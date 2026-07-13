@@ -20,6 +20,8 @@ const DEFAULTS: Capabilities = {
   cmd_systemctl: false, cmd_journalctl: false, cmd_sensors: false,
   restart_enabled: false,
   bench_lab: false,
+  runtime_environment: 'other',
+  telemetry_scope: 'host',
   lemonade_version: null, probe_timestamp: null,
 };
 

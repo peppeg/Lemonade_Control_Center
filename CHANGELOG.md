@@ -6,6 +6,10 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+### Changed
+
+- Settings and Setup now show the LCC host environment and telemetry scope detected by the backend instead of presenting an unused manual OS-type selector. Existing `os_type` configuration remains readable for backward compatibility.
+
 ## 0.3.0 - 2026-07-13
 
 ### Added
