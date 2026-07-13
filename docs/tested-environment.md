@@ -13,7 +13,7 @@ This is not a minimum requirement.
 | Kernel | 7.0.9-202.fc44.x86_64 |
 | Processor | AMD Ryzen AI Max+ 395 with Radeon 8060S |
 | Memory | 128 GB unified memory |
-| Lemonade Server | 10.7.0 |
+| Lemonade Server | 10.9.0 |
 | Runtime backend used most often | Lemonade llama.cpp backend |
 | Main development workflow | LCC unified FastAPI runtime on localhost, browser from local machine or SSH tunnel |
 
@@ -52,12 +52,23 @@ Lemonade `10.9.0` upgrade checks passed on 2026-07-09 for:
 - LCC Lemonade health proxy
 - LCC downloaded model inventory via `/api/lemonade/models`
 
+Manual workflow validation completed on 2026-07-11 through 2026-07-13 for:
+
+- model load/unload and profile-linked Smoke Test;
+- Run Evidence filtering, identity, detail, and export workflows;
+- Workflow Profile apply, Apply & Load, and evidence linkage;
+- same-suite Bench Lab comparison with manual quality notes and Markdown export;
+- telemetry-provider presentation and accelerator-ownership caveats;
+- guided Hugging Face inspection, profile creation, pull, model discovery, load, and Smoke Test;
+- backend update confirmation through LCC's `/v1/install` integration: `llamacpp:rocm` changed from `update_required` to `installed`;
+- post-update model reload and Smoke Test on `llamacpp:vulkan` (`LCC_SMOKE_OK`, TTFT 0.549 s, 4.2 tok/s, context 16,384).
+
 Observed `10.9.0` API notes:
 
 - `/api/v1/health` adds `pinned_models`, `telemetry`, and `update_check_done`.
 - `/api/v1/health` still exposes `all_models_loaded`, `model_loaded`, `max_models`, `status`, `version`, and `websocket_port`.
 - Startup logs report Hugging Face model update availability when detected.
-- Full load/unload and Bench Lab smoke tests are still pending after the upgrade.
+- The `llamacpp:rocm` package update path is validated, but inference with the updated ROCm backend is not claimed: the post-update model reload and Smoke Test used Vulkan.
 
 ## Notes
 

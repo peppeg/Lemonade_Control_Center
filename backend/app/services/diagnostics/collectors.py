@@ -4,9 +4,8 @@ from __future__ import annotations
 import psutil
 
 from app.capabilities import capabilities
-from app.config import settings
+from app.dependencies import get_provider
 from app.models.schemas import FinishReasonConfidence
-from app.providers.lemonade import LemonadeProvider
 from app.services.diagnostics.engine import SystemState
 from app.services.log_parser import parse_last_task
 from app.services.process import find_llama_server
@@ -14,7 +13,7 @@ from app.services.process import find_llama_server
 
 async def collect_full_state() -> SystemState:
     state = SystemState()
-    provider = LemonadeProvider()
+    provider = get_provider()
 
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
@@ -24,7 +23,7 @@ async def collect_full_state() -> SystemState:
     state.cpu_percent = psutil.cpu_percent(interval=0.1)
     state.disk_percent = disk.percent
     state.disk_free_gb = disk.free / (1024**3)
-    state.has_admin_key = bool(settings.lemonade_admin_api_key)
+    state.has_admin_key = bool(provider.admin_headers)
     state.has_internal_config = capabilities.internal_config
     state.has_internal_set = capabilities.internal_set
 

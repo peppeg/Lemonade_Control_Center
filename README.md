@@ -12,7 +12,7 @@ LCC is an unofficial guided operator console for Lemonade. It is not a replaceme
 
 Running local models is the enjoyable part. Operating the server behind them often is not.
 
-I started **Lemonade Control Center (LCC)** because my Lemonade server runs on a Linux AI workstation that I frequently access from another computer. I wanted one place to see what was loaded, understand the settings in use, monitor memory and GPU pressure, inspect failures, and perform routine operations without rebuilding the right terminal command every time.
+I started **Lemonade Control Center (LCC)** because my Lemonade server runs on a Linux AI workstation that I frequently access from another computer through an SSH tunnel. I wanted one place to see what was loaded, understand the settings in use, monitor memory and GPU pressure, inspect failures, and perform routine operations without rebuilding the right terminal command every time. That remote setup is only my own workflow: LCC can be opened directly on the Linux machine that runs it, used through an SSH tunnel, or exposed deliberately on a trusted local network.
 
 LCC is that place: a local graphical operator console for Lemonade.
 
@@ -38,7 +38,7 @@ The goal is a low-floor, high-ceiling interface:
 - explicit enough for an operator to inspect processes, logs, memory pressure, profiles, and diagnostics
 - structured enough to make good configurations repeatable
 
-By default, LCC remains local to the Linux host. It can be reached remotely through SSH port forwarding. Direct access from a trusted local network requires an explicit bind-address configuration and appropriate host security.
+By default, LCC remains local to the Linux host and can be opened there at `http://127.0.0.1:17600`. Remote users can keep that safe default and reach it through SSH port forwarding. Direct access from a trusted local network is also supported, but requires an explicit bind address, authentication, and appropriate host security.
 
 ## Screenshots
 
@@ -90,6 +90,12 @@ Workflow defaults do not reconfigure external clients such as Open WebUI or codi
 
 Built-in profiles provide practical starting points such as Safe, Coding, Long Context, Stress, and Executor Strict. Risky settings remain explicit, and Lemonade-managed arguments are not silently duplicated.
 
+### Compare workflows in Bench Lab
+
+Bench Lab can run coding-agent-oriented suites against different model/profile combinations, retain prompts, outputs, reasoning, runtime and resource evidence, add operator quality scores, and export comparison reports.
+
+Bench Lab is functional but still an early-stage surface. Its evidence foundation and comparison workflow work today, while its presentation, suite library, analysis tools, and overall shape are expected to evolve substantially. Test feedback is especially useful here; it should not yet be read as a finished benchmarking product or as a replacement for `lemonade bench`.
+
 ### Read logs as operational information
 
 Logs & Stats turns server output into useful signals:
@@ -121,6 +127,12 @@ On unified-memory systems such as AMD Strix Halo, system RAM is the primary capa
 
 Diagnostics combines runtime, service, hardware, and configuration checks into one report. It includes warning classification, dismissible findings, diagnostic history, and a downloadable support bundle.
 
+Run Evidence keeps inspectable records for smoke tests and model-load attempts, including request/result metrics, runtime and profile identity, observed process and memory state, and correlated Lemonade logs when available. Individual records can be filtered, inspected, and exported as JSON or Markdown.
+
+### Inspect and pull Hugging Face models
+
+Guided Hugging Face Intake can inspect a repository or a simple search term, present relevant GGUF variants and memory estimates, create a workflow profile, and hand an explicit pull to Lemonade. Lemonade remains responsible for downloading, registering, importing, and updating the model.
+
 ### Configure the connection
 
 Settings manages the Lemonade runtime URL, discovery checks, optional admin API key, local preferences, and project information. Secrets are stored by the backend and redacted from Settings responses.
@@ -133,7 +145,7 @@ LCC is guided by three product pillars:
 - **Operator Evidence**: correlate Lemonade state with Linux host state, service logs, process data, memory pressure, and hardware signals when available.
 - **Workflow Memory**: keep profiles, saved options, benchmark results, notes, and diagnostics tied to the workflows they support.
 
-The current priority is P0: sharpen the public positioning, document overlap with official Lemonade tools, improve Connection Doctor/discovery, strengthen guided model operations, and keep compatibility testing disciplined as Lemonade evolves.
+The initial operator foundation and the first evidence/workflow delivery sequence are complete: Connection Doctor and guided loading, Run Evidence, workflow profiles, Bench Lab comparisons, telemetry providers, guided Hugging Face intake, and container packaging are all available on `main`. The next product phase focuses on multi-host operation and agent-readiness checks, while compatibility work and download-progress improvements continue in the maintenance lane.
 
 See [Overlap Matrix](docs/overlap-matrix.md) and the [Roadmap Current Execution Plan](docs/roadmap.md#current-execution-plan) for product boundaries, current delivery state, implementation references, and the ordered remaining work.
 
@@ -242,6 +254,8 @@ FastAPI serves both `/api/*` and the built dashboard. Vite is not needed for thi
 ### Container deployment
 
 The repository includes a multi-stage LCC image and Compose examples for an API-only deployment or an explicit Linux host-telemetry override. The default container does not claim access to host processes, sysfs, accelerators, systemd, or journals.
+
+The image has been built and runtime-tested with Podman on the primary development host. Native Docker and Docker Compose testers are welcome: the deployment is ready for testing, but has not yet been exercised with the Docker Compose plugin on that host.
 
 See [Container Deployment](docs/deployment.md) for authentication, Lemonade networking, persistence, device mapping, and telemetry limitations.
 
@@ -441,6 +455,8 @@ For a generic example, see [capabilities/CAPABILITIES.example.md](capabilities/C
 ## Project Status
 
 Lemonade Control Center is under active development. The core application surfaces are operational, but behavior can vary with the installed Lemonade version, available Linux facilities, enabled safety flags, and local hardware.
+
+Container deployment, guided model intake, workflow profiles, Run Evidence, telemetry providers, and Bench Lab workflow comparisons are available for testing. Some newer surfaces—especially Bench Lab—are intentionally still evolving and do not yet represent their final product shape.
 
 Feedback and carefully scoped contributions are welcome.
 

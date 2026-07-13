@@ -3,6 +3,7 @@
   import { api } from '$lib/api/client';
   import { notify } from '$lib/stores/notifications';
   import { clearLccKey, loadSecurityStatus, securityStatus } from '$lib/stores/security';
+  import { healthData } from '$lib/stores/connection';
   import type {
     AccessMode,
     AppearanceConfig,
@@ -562,7 +563,7 @@
                       type="button"
                       on:click={() => activateRuntime(runtime)}
                       disabled={runtime.is_active || runtime.type !== 'lemonade'}
-                      title={runtime.type !== 'lemonade' ? 'Only Lemonade runtimes can be activated in M14.' : 'Activate runtime'}
+                      title={runtime.type !== 'lemonade' ? 'Only Lemonade runtimes can currently be activated.' : 'Activate runtime'}
                     >
                       Activate
                     </button>
@@ -815,28 +816,33 @@
             <SlidersHorizontal class="h-5 w-5 text-lemon" />
             <h2 class="ops-title">About</h2>
           </div>
-          <span class="ops-badge">M14</span>
+          <a class="text-sm text-lemon hover:text-lemon-light" href="https://github.com/peppeg/Lemonade_Control_Center/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer">Changelog</a>
         </div>
-        <div class="ops-card-body grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div class="ops-card-body grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div class="border border-[#30342b] bg-[#111312] p-4">
+            <p class="ops-label">LCC version</p>
+            <p class="ops-value mt-1">{$healthData?.app_version ?? 'unknown'}</p>
+          </div>
           <div class="border border-[#30342b] bg-[#111312] p-4">
             <p class="ops-label">setup</p>
             <p class="ops-value mt-1">{config.setup_complete ? 'complete' : 'not complete'}</p>
           </div>
           <div class="border border-[#30342b] bg-[#111312] p-4">
-            <p class="ops-label">config version</p>
+            <p class="ops-label">configuration schema</p>
             <p class="ops-value mt-1">{config.version}</p>
           </div>
           <div class="border border-[#30342b] bg-[#111312] p-4">
             <p class="ops-label">active runtime</p>
             <p class="ops-value mt-1">{config.active_runtime_id ?? 'none'}</p>
           </div>
-          <div class="ops-banner ops-banner-muted md:col-span-3">
-            <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0" />
-            <p class="text-sm">
-              M14 backend settings are active. Existing app API routes now use the active Lemonade runtime URL. Non-Lemonade runtimes are prepared but not routable yet.
-            </p>
+          <div class="ops-banner ops-banner-muted md:col-span-2 xl:col-span-4">
+            <SlidersHorizontal class="mt-0.5 h-5 w-5 shrink-0" />
+            <div class="text-sm">
+              <p>The configuration schema identifies the format of LCC's saved settings; it is separate from the application version.</p>
+              <p class="mt-1 text-muted-foreground">Lemonade runtimes are fully routable. Other runtime types remain prepared for future support.</p>
+            </div>
           </div>
-          <div class="border border-[#30342b] bg-[#111312] p-4 md:col-span-3">
+          <div class="border border-[#30342b] bg-[#111312] p-4 md:col-span-2 xl:col-span-4">
             <p class="ops-label">Credits</p>
             <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
               <div>

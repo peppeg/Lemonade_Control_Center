@@ -1,7 +1,9 @@
 import pytest
+from fastapi import HTTPException
 
-from app.routers.lemonade import backend_readiness
-from app.services.backend_readiness import normalize_backend_readiness
+from app.models.backend_readiness import BackendInstallRequest
+from app.routers.lemonade import backend_readiness, install_backend
+from app.services.backend_readiness import install_ready_backend, normalize_backend_readiness
 
 
 SYSTEM_INFO = {
@@ -92,8 +94,14 @@ def test_normalize_backend_readiness_accepts_empty_recipes():
 
 
 class FakeProvider:
+    installed: tuple[str, str] | None = None
+
     async def get_system_info(self):
         return SYSTEM_INFO
+
+    async def install_backend(self, recipe_key: str, backend_key: str):
+        self.installed = (recipe_key, backend_key)
+        return {"status": "success", "recipe": recipe_key, "backend": backend_key}
 
 
 @pytest.mark.asyncio
@@ -102,3 +110,41 @@ async def test_backend_readiness_endpoint_uses_provider():
 
     assert result.status == "ready"
     assert result.counts.update_required == 1
+
+
+@pytest.mark.asyncio
+async def test_install_ready_backend_allows_advertised_update_without_force_or_shell():
+    provider = FakeProvider()
+
+    result = await install_ready_backend(provider, "llamacpp", "rocm")
+
+    assert result.success is True
+    assert result.previous_state == "update_required"
+    assert provider.installed == ("llamacpp", "rocm")
+
+
+@pytest.mark.asyncio
+async def test_install_ready_backend_rejects_installed_or_unknown_backend():
+    provider = FakeProvider()
+
+    with pytest.raises(HTTPException) as installed_error:
+        await install_ready_backend(provider, "llamacpp", "vulkan")
+    assert installed_error.value.status_code == 409
+
+    with pytest.raises(HTTPException) as missing_error:
+        await install_ready_backend(provider, "missing", "cpu")
+    assert missing_error.value.status_code == 404
+    assert provider.installed is None
+
+
+@pytest.mark.asyncio
+async def test_install_backend_endpoint_uses_typed_request():
+    provider = FakeProvider()
+
+    result = await install_backend(
+        BackendInstallRequest(recipe_key="llamacpp", backend_key="cpu"),
+        provider=provider,
+    )
+
+    assert result.previous_state == "installable"
+    assert provider.installed == ("llamacpp", "cpu")

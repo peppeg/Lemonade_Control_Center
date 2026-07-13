@@ -340,6 +340,26 @@ class LemonadeProvider(LLMProvider):
             raise HTTPException(resp.status_code, f"Delete failed: {resp.text[:300]}")
         return True
 
+    async def install_backend(self, recipe: str, backend: str) -> dict:
+        """Install or update one local backend through Lemonade's public API."""
+        resp = await self._post(
+            "/v1/install",
+            {"recipe": recipe, "backend": backend, "stream": False, "force": False},
+            headers=self.admin_headers,
+            timeout=3600.0,
+        )
+        try:
+            result = resp.json()
+        except ValueError:
+            result = {"error": resp.text[:500]}
+        if resp.status_code < 200 or resp.status_code >= 300:
+            detail = result.get("error") or result.get("message") or f"HTTP {resp.status_code}"
+            raise HTTPException(resp.status_code, f"Backend install failed: {detail}")
+        if result.get("status") == "error" or result.get("error"):
+            detail = result.get("error") or result.get("message") or "Lemonade rejected the backend install."
+            raise HTTPException(409, f"Backend install failed: {detail}")
+        return result
+
     async def get_config(self) -> LemonadeConfigResponse:
         if not self.admin_headers:
             raise HTTPException(

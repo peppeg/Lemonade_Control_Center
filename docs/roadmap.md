@@ -10,7 +10,7 @@ Make Lemonade easier to operate, then make the runtime behavior easier to prove.
 
 ## Current Execution Plan
 
-Last reviewed: 2026-07-12
+Last reviewed: 2026-07-13
 
 This section is the canonical handoff for ongoing implementation. The P0/P1/P2 sections below explain product direction and scope; this section defines the order in which the remaining work should be completed.
 
@@ -24,7 +24,7 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - Bench Lab workflow comparison is implemented and merged on `main` through pull request [#14](https://github.com/peppeg/Lemonade_Control_Center/pull/14).
 - Telemetry Providers and Accelerator Evidence are implemented and merged on `main` through pull request [#15](https://github.com/peppeg/Lemonade_Control_Center/pull/15).
 - Guided Hugging Face Intake is implemented and merged on `main` through pull request [#16](https://github.com/peppeg/Lemonade_Control_Center/pull/16).
-- LCC container packaging is implemented and validated on branch `codex/container-packaging`; merge is the remaining delivery step.
+- LCC container packaging is implemented and merged on `main` through pull request [#17](https://github.com/peppeg/Lemonade_Control_Center/pull/17). The image was built and exercised with Podman on the development host; native Docker Compose validation remains welcome on systems with Docker and the Compose plugin installed.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
@@ -127,7 +127,7 @@ Status: complete
 
 #### 6. Package LCC For Easier Deployment
 
-Status: implementation and validation complete, merge pending
+Status: complete
 
 - provide an LCC web/API container image;
 - provide a compose example for host or remote Lemonade;
@@ -442,6 +442,7 @@ V1 includes:
 - clear separation between authoritative readiness data and historical backend/update events in logs;
 - release links, download filenames, and copied operator commands when Lemonade provides them;
 - a best-effort `backend_readiness.json` entry in diagnostic bundles.
+- confirmed install/update actions for authoritative `installable` and `update_required` entries through Lemonade's public `/v1/install` API, always with `force=false` and without shell execution.
 
 Follow-up scope:
 
@@ -450,11 +451,11 @@ Follow-up scope:
 
 Out of initial scope:
 
-- automatic backend updates;
-- unattended backend install/uninstall;
+- automatic or unattended backend updates;
+- backend uninstall;
 - replacing the official backend installer UI.
 
-Future mutating actions may use Lemonade `/v1/install` and `/v1/uninstall`, but they must be gated, explicit, and treated as operator actions.
+Any future uninstall action may use Lemonade `/v1/uninstall`, but it must be gated, explicit, and treated as a potentially disruptive operator action.
 
 ### Telemetry Provider Abstraction
 

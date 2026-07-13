@@ -17,9 +17,19 @@
     '/system': 'System',
     '/backends': 'Backends',
     '/evidence': 'Run Evidence',
+    '/diagnostics': 'Diagnostics',
+    '/hardware': 'Hardware Monitor',
+    '/bench': 'Bench Lab',
+    '/intake': 'HF Intake',
+    '/settings': 'Settings',
   };
 
-  $: currentLabel = routeLabels[$page.url.pathname] || 'Dashboard';
+  function pageLabel(pathname: string): string {
+    if (pathname.startsWith('/models/')) return 'Model Profiles';
+    return routeLabels[pathname] ?? 'Dashboard';
+  }
+
+  $: currentLabel = pageLabel($page.url.pathname);
 </script>
 
 <header class="flex min-h-[60px] items-center justify-between border-b border-[#34392d] bg-[#0f1111] px-5">
@@ -36,10 +46,7 @@
       <Menu class="h-4 w-4" />
     </Button>
 
-    <h1 class="text-lg font-bold text-foreground">Lemonade Control Center</h1>
-    <span class="hidden border-l border-[#34392d] pl-3 text-xs text-muted-foreground md:inline">
-      {currentLabel}
-    </span>
+    <h1 class="text-lg font-bold text-foreground">{currentLabel}</h1>
   </div>
 
   <!-- Right: Connection indicator -->

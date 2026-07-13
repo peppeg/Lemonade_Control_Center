@@ -78,6 +78,12 @@ After changing backend readiness collection or presentation, verify:
 - A response with no backend entries is described as empty.
 - Search and state filters work on the Backends page.
 - Operator actions can be copied, and provided release links open separately.
+- Install and Update appear only for authoritative `installable` or `update_required` states, require confirmation, show a busy/error state, and refresh readiness after success.
+- Backend table actions remain visually compact; messages, CLI fallback, release links, and filenames are available under collapsed Technical details.
+- Technical actions containing an HTTP URL render and copy only the URL; CLI actions continue to copy the complete command.
+- Update confirmation recommends unloading models using that backend, followed by reload and Smoke Test.
+- Backend actions call Lemonade's public install API with `force=false`; they do not execute the human-readable CLI action returned by system-info.
+- Installed, unsupported, unknown, and stale/missing recipe/backend pairs cannot be submitted through the LCC backend action endpoint.
 - Desktop and mobile navigation reach the Backends page.
 - A diagnostic bundle contains `backend_readiness.json` even when Lemonade is unavailable.
 
@@ -116,6 +122,20 @@ Smoke Test and Bench Lab share the core completion transport, but Smoke Test mus
 - Requested and observed model names are distinct when Lemonade exposes a canonical loaded name.
 - Legacy records show unavailable identity fields without disappearing from the list.
 - Diagnostic `run_evidence_summary.json` omits server URLs, prompts, responses, reasoning, stop sequences, and llama.cpp arguments.
+
+## Operator UI Consistency Manual Check
+
+- Every top header shows only the current page name, including model-profile detail routes.
+- Dashboard keeps Readiness, Model, and Runtime in the summary without duplicating Hardware pressure.
+- Dashboard section icons use the Lemon accent while green, warning, and danger colors remain reserved for state.
+- Active-model Model Details opens the matching model workspace; inventory Profile and Load/In Use actions align across rows.
+- Profile cards keep labels on Apply and Apply & Load, use the Rocket icon for loading, and expose accessible tooltips for compact secondary actions. Text-button icons remain 20px; 40px square icon buttons remove inherited horizontal padding and use non-shrinking 16px icons for optical balance.
+- Configuration presets remain on one line at desktop widths and become a select control on small screens.
+- System opens llama-server Command Line by default.
+- Run Evidence shows its list without horizontal or nested vertical scrollbars at the normal desktop layout width; date and time remain readable and the page owns scrolling.
+- Settings About shows LCC version, configuration schema, active runtime, and Changelog without historical milestone labels.
+- The footer shows Lemonade identity, active URL, and LCC version without presenting the capability snapshot timestamp as a generic probe date.
+- With an admin key saved on the active runtime, Diagnostics does not instruct the operator to add a missing key; it distinguishes rejected, stale, and partial capability evidence.
 
 ## Workflow Memory Manual Check
 

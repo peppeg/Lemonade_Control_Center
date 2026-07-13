@@ -165,15 +165,24 @@
 
 <div class="space-y-4">
   <section class="ops-panel p-5">
-    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
       <div>
         <h2 class="ops-title">Configuration Presets</h2>
-        <p class="ops-subtitle">Presets fill LCC workflow defaults and visible runtime fields. Server-side writes still require admin capability.</p>
+        <p class="ops-subtitle">
+          <span class="block">Presets fill LCC workflow defaults and visible runtime fields.</span>
+          <span class="block">Server-side writes still require admin capability.</span>
+        </p>
       </div>
-      <div class="flex flex-wrap gap-2 rounded border border-[#444936] bg-[#2b2d2a] p-1">
+      <label class="block md:hidden">
+        <span class="sr-only">Configuration preset</span>
+        <select class="ops-select" bind:value={activePreset} on:change={() => applyPreset(activePreset as PresetName)}>
+          {#each presets as preset}<option value={preset}>{preset}</option>{/each}
+        </select>
+      </label>
+      <div class="hidden min-w-0 grid-cols-5 gap-1 rounded border border-[#444936] bg-[#2b2d2a] p-1 md:grid">
         {#each presets as preset}
           <button
-            class="rounded px-4 py-2 ops-mono text-sm {activePreset === preset ? 'bg-[#4a4d49] text-lemon' : 'text-[#e3e5d3] hover:bg-[#363935]'}"
+            class="min-w-0 whitespace-nowrap rounded px-2 py-2 ops-mono text-xs {activePreset === preset ? 'bg-[#4a4d49] text-lemon' : 'text-[#e3e5d3] hover:bg-[#363935]'}"
             type="button"
             on:click={() => applyPreset(preset)}
           >
