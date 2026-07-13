@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { api } from '$lib/api/client';
   import { notify } from '$lib/stores/notifications';
+  import { capabilities } from '$lib/stores/capabilities';
   import type {
     AccessMode,
     AppearanceConfig,
@@ -81,6 +82,14 @@
 
   $: currentStep = steps[stepIndex];
   $: runtimeId = `${runtimeType}-${slugify(runtimeName || runtimeType)}`;
+  $: runtimeEnvironmentLabel = {
+    linux_systemd: 'Linux + systemd',
+    linux: 'Linux',
+    macos: 'macOS',
+    windows: 'Windows',
+    container: 'Container',
+    other: 'Other',
+  }[$capabilities.runtime_environment];
   $: canGoNext =
     currentStep.id === 'welcome'
       || currentStep.id === 'system'
@@ -424,16 +433,16 @@
         </div>
       {:else if currentStep.id === 'system'}
         <div class="max-w-3xl space-y-5">
-          <label class="block space-y-2">
-            <span class="ops-label">OS type</span>
-            <select class="ops-select" bind:value={systemForm.os_type}>
-              <option value="linux_systemd">linux_systemd</option>
-              <option value="windows">windows</option>
-              <option value="macos">macos</option>
-              <option value="docker">docker</option>
-              <option value="other">other</option>
-            </select>
-          </label>
+          <div class="border border-[#30342b] bg-[#101211] p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="ops-label">Detected LCC environment</p>
+                <p class="ops-value mt-1">{runtimeEnvironmentLabel}</p>
+              </div>
+              <span class="ops-badge">telemetry {$capabilities.telemetry_scope}</span>
+            </div>
+            <p class="ops-subtitle mt-3">Detected automatically on the machine or container running LCC. Runtime checks determine which host operations are actually available.</p>
+          </div>
 
           <label class="block space-y-2">
             <span class="ops-label">service name</span>

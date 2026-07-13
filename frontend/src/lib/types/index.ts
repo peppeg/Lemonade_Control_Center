@@ -41,6 +41,8 @@ export interface Capabilities {
   cmd_sensors: boolean;
   restart_enabled: boolean;
   bench_lab: boolean;
+  runtime_environment: 'linux_systemd' | 'linux' | 'macos' | 'windows' | 'container' | 'other';
+  telemetry_scope: 'host' | 'container';
   lemonade_version: string | null;
   probe_timestamp: string | null;
 }

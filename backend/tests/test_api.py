@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from app.models.schemas import ModelInfo, ModelsListResponse, RunEvidenceSeed
 from app.dependencies import get_completion_runner
 from app.routers.lemonade import export_run_evidence, list_models, run_evidence, run_evidence_detail
+from app.routers.health import detect_runtime_environment
 from app.services.security import security_status
 
 
@@ -19,6 +20,25 @@ class FakeProvider:
             ],
             source="merged_catalog" if include_catalog else "ollama_tags",
         )
+
+
+def test_runtime_environment_detection_prefers_container_scope(monkeypatch):
+    monkeypatch.setattr("app.routers.health.settings.telemetry_scope", "container")
+    monkeypatch.setattr("app.routers.health.platform.system", lambda: "Linux")
+
+    assert detect_runtime_environment() == "container"
+
+
+def test_runtime_environment_detection_reports_linux_capability(monkeypatch):
+    monkeypatch.setattr("app.routers.health.settings.telemetry_scope", "host")
+    monkeypatch.setattr("app.routers.health.Path.exists", lambda _path: False)
+    monkeypatch.setattr("app.routers.health.platform.system", lambda: "Linux")
+    monkeypatch.setattr("app.routers.health.capabilities.cmd_systemctl", True)
+
+    assert detect_runtime_environment() == "linux_systemd"
+
+    monkeypatch.setattr("app.routers.health.capabilities.cmd_systemctl", False)
+    assert detect_runtime_environment() == "linux"
 
 
 @pytest.mark.asyncio

@@ -52,6 +52,8 @@ class CapabilitiesResponse(BaseModel):
     cmd_sensors: bool
     restart_enabled: bool
     bench_lab: bool
+    runtime_environment: Literal["linux_systemd", "linux", "macos", "windows", "container", "other"]
+    telemetry_scope: Literal["host", "container"]
     lemonade_version: str | None
     probe_timestamp: str | None
 
