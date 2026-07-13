@@ -76,6 +76,15 @@ export interface BackendReadinessResponse {
   items: BackendReadinessItem[];
 }
 
+export interface BackendInstallResponse {
+  success: boolean;
+  recipe_key: string;
+  backend_key: string;
+  previous_state: string;
+  message: string;
+  raw: Record<string, unknown>;
+}
+
 // ── Navigation ──
 
 export interface NavItem {

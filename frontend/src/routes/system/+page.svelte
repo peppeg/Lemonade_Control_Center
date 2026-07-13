@@ -173,7 +173,7 @@
   <section class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_2fr]">
     <article class="ops-panel">
       <div class="ops-card-header justify-start gap-3">
-        <Thermometer class="h-5 w-5" />
+        <Thermometer class="h-5 w-5 text-lemon" />
         <h2 class="ops-title">Thermals</h2>
       </div>
       <div class="p-5">
@@ -223,7 +223,7 @@
         </div>
       </div>
 
-      <details class="p-5">
+      <details class="p-5" open>
         <summary class="cursor-pointer ops-label">Command Line</summary>
         <pre class="ops-terminal mt-4 max-h-36 overflow-auto p-3 whitespace-pre-wrap">{commandLine(llamaServer?.params)}</pre>
       </details>

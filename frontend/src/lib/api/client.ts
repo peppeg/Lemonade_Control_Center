@@ -29,6 +29,7 @@ import type {
   BenchResult,
   BenchComparison,
   BackendReadinessResponse,
+  BackendInstallResponse,
   BenchStoredResult,
   BenchSuite,
   DiagnosticReport,
@@ -179,6 +180,8 @@ export const api = {
     stats: () => get<Record<string, unknown>>('/lemonade/stats'),
     systemInfo: () => get<Record<string, unknown>>('/lemonade/system-info'),
     backendReadiness: () => get<BackendReadinessResponse>('/lemonade/backend-readiness'),
+    installBackend: (recipeKey: string, backendKey: string) =>
+      post<BackendInstallResponse>('/lemonade/backends/install', { recipe_key: recipeKey, backend_key: backendKey }),
     models: (catalog = false) => get<{ models: unknown[]; source: string }>(`/lemonade/models${catalog ? '?catalog=true' : ''}`),
     running: () => get<{ models: unknown[] }>('/lemonade/running'),
     savedOptions: (modelName?: string) =>

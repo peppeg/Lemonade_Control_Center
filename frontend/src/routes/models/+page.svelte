@@ -173,9 +173,13 @@
             <Clipboard class="h-4 w-4" />
             CLI
           </button>
-          <a class="ops-button" href="/system" title="Inspect runtime process details">
+          <a
+            class="ops-button"
+            href={`/models/${encodeURIComponent($loadedModel.name)}`}
+            title="Open model profiles and details"
+          >
             <Info class="h-4 w-4" />
-            Details
+            Model Details
           </a>
           <button class="ops-button ops-button-primary" type="button" on:click={runSmokeTest} disabled={smokeRunning}>
             <Activity class="h-4 w-4 {smokeRunning ? 'animate-pulse' : ''}" />
@@ -422,13 +426,13 @@
                         {$pullAction.loading && $pullAction.modelName === model.name ? 'Downloading' : 'Download'}
                       </button>
                     {:else}
-                      <a class="ops-button" href={`/models/${encodeURIComponent(model.name)}${model.size ? `?size=${model.size}` : ''}`}>
+                      <a class="ops-button min-w-[92px]" href={`/models/${encodeURIComponent(model.name)}${model.size ? `?size=${model.size}` : ''}`}>
                         Profiles
                       </a>
                       {#if model.isLoaded}
-                        <button class="ops-button" type="button" disabled>In Use</button>
+                        <button class="ops-button min-w-[72px]" type="button" disabled>In Use</button>
                       {:else}
-                        <button class="ops-button ops-button-primary" type="button" on:click={() => openLoad(model)}>
+                        <button class="ops-button ops-button-primary min-w-[72px]" type="button" on:click={() => openLoad(model)}>
                           Load
                         </button>
                       {/if}

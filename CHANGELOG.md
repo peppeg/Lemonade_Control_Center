@@ -6,8 +6,11 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+## 0.3.0 - 2026-07-13
+
 ### Added
 
+- Confirmed backend install/update actions on the Backends page, using Lemonade's public `/v1/install` API with `force=false`, authoritative readiness revalidation, busy/error feedback, and no shell-command execution.
 - Post-load smoke test action for the active model, using Lemonade's OpenAI-compatible chat endpoint.
 - First Run Evidence seed records with prompt, response, TTFT, token speed, token counts, finish reason, RAM/swap snapshots, and observed process/backend/context details.
 - Local rolling Run Evidence storage and API endpoints for smoke-test evidence retrieval.
@@ -30,10 +33,19 @@ The project is under active development, so entries currently describe the evolv
 - Coding-agent Bench Lab suite, runtime/profile/resource evidence, manual quality assessments, and same-suite comparison reports.
 - Typed telemetry providers for Linux process/sysfs, optional `amdgpu_top`, and optional `xdna-top`, with per-metric provenance and quality.
 - Guided Hugging Face repository intake with Lemonade-backed GGUF variants, ONNX relevance checks, memory estimates, and workflow-profile creation.
-- Multi-stage LCC container image, API-only Compose deployment, opt-in Linux host-telemetry override, and persistent local-data volume.
+- Multi-stage non-root LCC container image, loopback-bound authenticated Compose deployment, opt-in Linux host-telemetry override, and persistent local-data volume.
 
 ### Changed
 
+- The application header now shows only the current page name, the footer keeps operational identity concise, and primary card icons follow a consistent accent/status color rule.
+- Backend rows keep the primary Install/Update action visible while CLI fallback, status message, release link, and filename remain available in collapsed technical details.
+- Backend technical actions recognize embedded HTTP links, render them as links, and copy only the URL instead of surrounding instructional text.
+- Dashboard hardware pressure no longer duplicates the Hardware card; model details route to the active model workspace instead of the generic System page.
+- Model inventory actions align consistently, profile secondary actions use compact accessible icon buttons, and Apply & Load now uses a launch-oriented Rocket icon.
+- Configuration presets adapt between a compact mobile selector and a single-line desktop control with a deliberately two-line description; llama-server command-line details are open by default.
+- Run Evidence uses a narrower fixed-layout run list with split date/time cells and page-level scrolling instead of nested scrollbars.
+- Settings About now distinguishes the LCC version from the configuration schema, links to the changelog, and removes obsolete M14 milestone language.
+- Diagnostics now reads admin-key presence from the active runtime and distinguishes a missing key from stale, rejected, or partially available internal capabilities.
 - Diagnostic bundles now redact common secrets, bearer tokens, Hugging Face tokens, private LAN IPs, hostnames, local usernames, and home paths before writing archive entries.
 - Lemonade provider HTTP calls no longer inherit proxy environment settings when contacting the configured Lemonade server.
 - Roadmap P0 statuses updated to reflect implemented scope and remaining maintenance tasks.
@@ -52,6 +64,9 @@ The project is under active development, so entries currently describe the evolv
 - Run Evidence now correlates provider samples at operation start/end and explicitly labels accelerator ownership as unproven.
 - Hugging Face inspection, profile creation, and explicit pull are separate steps; Lemonade remains responsible for registration, download, import, and updates.
 - Container documentation distinguishes API reachability from host telemetry and keeps PID/sysfs/device exposure explicit and opt-in.
+- Public documentation now clarifies that LCC can be used directly on its Linux host, through an SSH tunnel, or deliberately over a trusted LAN; the maintainer's remote workflow is not a deployment requirement.
+- Project-status documentation now identifies Bench Lab as functional but still early-stage, with its presentation, suite library, and analysis workflow expected to evolve.
+- Container delivery status now records the merged packaging work and the current Podman validation boundary without claiming native Docker Compose testing on the development host.
 
 ### Fixed
 

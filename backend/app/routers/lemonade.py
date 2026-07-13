@@ -12,7 +12,7 @@ from fastapi.responses import PlainTextResponse
 from app.dependencies import get_active_runtime_config, get_completion_runner, get_provider
 from app.models.setup import RuntimeConfig
 from app.providers.lemonade import LemonadeProvider
-from app.models.backend_readiness import BackendReadinessResponse
+from app.models.backend_readiness import BackendInstallRequest, BackendInstallResponse, BackendReadinessResponse
 from app.models.schemas import (
     LemonadeHealthResponse,
     LemonadeStatsResponse,
@@ -33,7 +33,7 @@ from app.models.schemas import (
     ConfigUpdateRequest,
 )
 from app.services.lemonade_options import read_saved_options
-from app.services.backend_readiness import collect_backend_readiness
+from app.services.backend_readiness import collect_backend_readiness, install_ready_backend
 from app.services.completion_runner import CompletionRunner
 from app.services.run_evidence import (
     LoadEvidenceRecorder,
@@ -68,6 +68,15 @@ async def lemonade_system_info(provider: LemonadeProvider = Depends(get_provider
 async def backend_readiness(provider: LemonadeProvider = Depends(get_provider)):
     """Return normalized authoritative backend state from Lemonade system-info."""
     return await collect_backend_readiness(provider)
+
+
+@router.post("/backends/install", response_model=BackendInstallResponse)
+async def install_backend(
+    request: BackendInstallRequest,
+    provider: LemonadeProvider = Depends(get_provider),
+):
+    """Install or update a Lemonade-advertised backend without force or shell execution."""
+    return await install_ready_backend(provider, request.recipe_key, request.backend_key)
 
 
 @router.get("/models", response_model=ModelsListResponse)

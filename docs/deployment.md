@@ -13,6 +13,14 @@ docker compose up --build -d
 
 Open `http://127.0.0.1:17600` and enter the same LCC key when prompted. The port binds to loopback by default. Set `LCC_PORT` to change the host port.
 
+You can open that address directly in a browser on the Linux host. If LCC runs on another machine, keep the loopback binding and forward it safely from the client:
+
+```bash
+ssh -N -L 17600:127.0.0.1:17600 USER@LCC_HOST
+```
+
+The SSH tunnel reflects the maintainer's usual remote setup, but it is not required for local use. A deliberately exposed trusted-LAN or reverse-proxy deployment is also possible; follow the authentication and network guidance in the README and security documentation rather than publishing the default service directly to the internet.
+
 For Lemonade on the Docker host, the default URL is `http://host.docker.internal:13305`. For a remote server:
 
 ```bash
@@ -21,6 +29,8 @@ docker compose up -d
 ```
 
 The default deployment sets `TELEMETRY_SCOPE=container` and `CAPABILITIES_MODE=safe_runtime`. At startup LCC probes only non-mutating Lemonade GET endpoints; it does not run the full host probe or any administrative POST. It can prove Lemonade API reachability, API-returned model/runtime state, and explicitly container-visible process counters. It suppresses accelerator sysfs claims even if the container engine happens to expose part of host sysfs. It cannot be treated as trusted host process, accelerator, systemd, or journal evidence.
+
+The image and runtime behavior were validated with Podman on the primary development host because Docker CLI and the Docker Compose plugin were not installed there. The Compose files were parsed and their critical merged settings checked, but native `docker compose` testing remains a useful community validation target.
 
 ## Optional Linux host telemetry
 

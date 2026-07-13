@@ -129,14 +129,27 @@ async def context_headroom(state: SystemState):
 async def capability_gap(state: SystemState):
     if state.has_admin_key and state.has_internal_config and state.has_internal_set:
         return None
+    if not state.has_admin_key:
+        description = "No admin key is configured for the active Lemonade runtime."
+        impact = "Runtime configuration and profile application may be partial."
+        suggestion = "Add the Lemonade admin API key to the active runtime in Settings, then run Connection Doctor."
+    elif not state.has_internal_config and not state.has_internal_set:
+        description = "An admin key is configured, but the capability snapshot did not confirm Lemonade's internal config endpoints."
+        impact = "The key may not match Lemonade, the endpoints may be unavailable, or the capability snapshot may be stale."
+        suggestion = "Run Connection Doctor. If the key is accepted, refresh the capability probe with that same key."
+    else:
+        missing = "/internal/config" if not state.has_internal_config else "/internal/set"
+        description = f"An admin key is configured, but the capability snapshot did not confirm {missing}."
+        impact = "Runtime configuration is only partially available."
+        suggestion = "Run Connection Doctor and refresh the capability probe; verify that Lemonade accepts the active runtime's admin key."
     return _result(
         "capability_gap",
         "Capability Gap",
         Severity.info,
         "Admin config endpoints are not fully available",
-        "LCC cannot read or write every Lemonade internal config endpoint.",
-        "Runtime config and profile apply may be partial.",
-        "Set LEMONADE_ADMIN_API_KEY and re-run the capability probe.",
+        description,
+        impact,
+        suggestion,
         {
             "has_admin_key": state.has_admin_key,
             "internal_config": state.has_internal_config,

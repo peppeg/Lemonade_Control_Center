@@ -2,6 +2,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.providers.lemonade import (
+    LemonadeProvider,
     _canonical_model_name,
     _size_to_bytes,
     _validate_llamacpp_args,
@@ -73,3 +74,34 @@ def test_parse_cmdline_extracts_runtime_parameters():
     assert result.ngl == 999
     assert result.mmap is False
     assert result.reasoning_format == "none"
+
+
+@pytest.mark.asyncio
+async def test_install_backend_calls_public_api_without_force(monkeypatch):
+    provider = LemonadeProvider(url="http://lemonade.test", use_settings_admin_key=False)
+    captured = {}
+
+    class Response:
+        status_code = 200
+        text = ""
+
+        @staticmethod
+        def json():
+            return {"status": "success", "recipe": "llamacpp", "backend": "vulkan"}
+
+    async def fake_post(path, body, **kwargs):
+        captured.update(path=path, body=body, kwargs=kwargs)
+        return Response()
+
+    monkeypatch.setattr(provider, "_post", fake_post)
+
+    result = await provider.install_backend("llamacpp", "vulkan")
+
+    assert result["status"] == "success"
+    assert captured["path"] == "/v1/install"
+    assert captured["body"] == {
+        "recipe": "llamacpp",
+        "backend": "vulkan",
+        "stream": False,
+        "force": False,
+    }

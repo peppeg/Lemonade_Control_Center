@@ -37,3 +37,17 @@ class BackendReadinessResponse(BaseModel):
     message: str = ""
     counts: BackendReadinessCounts = Field(default_factory=BackendReadinessCounts)
     items: list[BackendReadinessItem] = Field(default_factory=list)
+
+
+class BackendInstallRequest(BaseModel):
+    recipe_key: str
+    backend_key: str
+
+
+class BackendInstallResponse(BaseModel):
+    success: bool
+    recipe_key: str
+    backend_key: str
+    previous_state: str
+    message: str
+    raw: dict = Field(default_factory=dict)

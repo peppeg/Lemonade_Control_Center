@@ -27,11 +27,5 @@
     {/if}
   </div>
 
-  <!-- Right: LCC version + probe date -->
-  <div class="flex items-center gap-3">
-    {#if $capabilities.probe_timestamp}
-      <span class="hidden md:inline">Probe: {new Date($capabilities.probe_timestamp).toLocaleString()}</span>
-    {/if}
-    <span>LCC v{$healthData?.app_version ?? '0.2.0'}</span>
-  </div>
+  <span>LCC v{$healthData?.app_version ?? '0.3.0'}</span>
 </footer>

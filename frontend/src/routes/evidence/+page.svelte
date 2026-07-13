@@ -90,6 +90,14 @@
     return new Date(value).toLocaleString();
   }
 
+  function formatDate(value: string): string {
+    return new Date(value).toLocaleDateString();
+  }
+
+  function formatTime(value: string): string {
+    return new Date(value).toLocaleTimeString();
+  }
+
   function formatKind(kind: RunEvidenceSeed['kind']): string {
     return kind === 'smoke_test' ? 'Smoke test' : 'Load attempt';
   }
@@ -134,7 +142,7 @@
     <section class="ops-banner ops-banner-danger">{error}</section>
   {/if}
 
-  <section class="grid min-h-[620px] gap-5 2xl:grid-cols-[minmax(430px,0.85fr)_minmax(0,1.4fr)]">
+  <section class="grid min-h-[620px] gap-5 2xl:grid-cols-[minmax(360px,0.78fr)_minmax(0,1.5fr)]">
     <div class="ops-panel min-w-0 overflow-hidden">
       <div class="space-y-3 border-b border-[#34382d] p-3">
         <div class="flex flex-wrap gap-2">
@@ -161,8 +169,13 @@
         </div>
       </div>
 
-      <div class="max-h-[700px] overflow-auto">
-        <table class="ops-table">
+      <div class="overflow-x-hidden">
+        <table class="ops-table table-fixed">
+          <colgroup>
+            <col class="w-[58%]" />
+            <col class="w-[18%]" />
+            <col class="w-[24%]" />
+          </colgroup>
           <thead>
             <tr>
               <th>Run</th>
@@ -178,7 +191,7 @@
             {:else}
               {#each filteredEvidence as item}
                 <tr class={selected?.id === item.id ? 'bg-[#222522]' : ''}>
-                  <td class="max-w-[240px]">
+                  <td class="min-w-0 pr-2">
                     <button class="block w-full text-left" type="button" on:click={() => selectEvidence(item.id)}>
                       <span class="ops-value block truncate">{item.model_name}</span>
                       <span class="mt-1 block text-xs text-muted-foreground">{formatKind(item.kind)}</span>
@@ -191,12 +204,15 @@
                       {/if}
                     </button>
                   </td>
-                  <td>
+                  <td class="px-2">
                     <span class="ops-badge {item.success ? 'ops-badge-ok' : 'ops-badge-danger'}">
                       {item.success ? 'passed' : 'failed'}
                     </span>
                   </td>
-                  <td class="whitespace-nowrap text-xs text-muted-foreground">{formatTimestamp(item.timestamp)}</td>
+                  <td class="px-2 text-xs text-muted-foreground">
+                    <span class="block whitespace-nowrap">{formatDate(item.timestamp)}</span>
+                    <span class="mt-1 block whitespace-nowrap">{formatTime(item.timestamp)}</span>
+                  </td>
                 </tr>
               {/each}
             {/if}

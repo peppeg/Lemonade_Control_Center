@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from typing import Any
+from fastapi import HTTPException
 
 from app.models.backend_readiness import (
+    BackendInstallResponse,
     BackendReadinessCounts,
     BackendReadinessItem,
     BackendReadinessResponse,
@@ -90,6 +92,37 @@ def normalize_backend_readiness(system_info: Any) -> BackendReadinessResponse:
 async def collect_backend_readiness(provider: Any) -> BackendReadinessResponse:
     """Fetch authoritative system info through the active Lemonade provider."""
     return normalize_backend_readiness(await provider.get_system_info())
+
+
+async def install_ready_backend(provider: Any, recipe_key: str, backend_key: str) -> BackendInstallResponse:
+    """Install/update only a backend currently advertised as actionable by Lemonade."""
+    readiness = await collect_backend_readiness(provider)
+    item = next(
+        (
+            candidate
+            for candidate in readiness.items
+            if candidate.recipe_key == recipe_key and candidate.backend_key == backend_key
+        ),
+        None,
+    )
+    if item is None:
+        raise HTTPException(404, "Lemonade did not advertise this recipe/backend pair.")
+    if item.state not in {"installable", "update_required"}:
+        raise HTTPException(409, f"Backend state '{item.state}' is not installable or updateable.")
+
+    raw = await provider.install_backend(recipe_key, backend_key)
+    return BackendInstallResponse(
+        success=True,
+        recipe_key=recipe_key,
+        backend_key=backend_key,
+        previous_state=item.state,
+        message=(
+            f"Updated {recipe_key}:{backend_key}."
+            if item.state == "update_required"
+            else f"Installed {recipe_key}:{backend_key}."
+        ),
+        raw=raw,
+    )
 
 
 def unavailable_backend_readiness(

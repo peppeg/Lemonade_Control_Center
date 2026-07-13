@@ -8,7 +8,7 @@
   import { connectionStatus } from '$lib/stores/connection';
   import { AlertTriangle, Check, Clock3, Cpu, HardDrive, Info, PackageCheck, RefreshCw, Server, TimerReset } from 'lucide-svelte';
   import DiagnosticsPanel from '$lib/components/diagnostics/DiagnosticsPanel.svelte';
-  import type { BackendReadinessResponse, HardwareInfo, LastTaskInfo, LoadedModelInfo, ServerStatus } from '$lib/types';
+  import type { BackendReadinessResponse, LastTaskInfo, LoadedModelInfo, ServerStatus } from '$lib/types';
   import {
     backendStateBadgeClass,
     backendStateLabel,
@@ -40,13 +40,6 @@
   function value(value: string | number | null | undefined): string {
     if (value === null || value === undefined || value === '') return 'Unavailable';
     return String(value);
-  }
-
-  function hardwarePressure(hw: HardwareInfo | null): string {
-    if (!hw) return 'Unavailable';
-    const cpu = hw.cpu_percent < 35 ? 'low' : hw.cpu_percent < 75 ? 'medium' : 'high';
-    const gpu = typeof hw.gpu_load_percent === 'number' ? `, GPU ${formatPercent(hw.gpu_load_percent)}` : '';
-    return `RAM ${formatPercent(hw.ram_percent)} (${hw.ram_used_gb.toFixed(1)}/${hw.ram_total_gb.toFixed(1)} GB)${gpu}, CPU ${cpu}`;
   }
 
   function runtimeLabel(serverStatus: ServerStatus | null, loaded: LoadedModelInfo | null): string {
@@ -98,10 +91,6 @@
         <span class="ops-muted">Runtime:</span>
         <span class="ops-value ml-2">{runtimeLabel(server, model)}</span>
       </div>
-      <div class="basis-full">
-        <span class="ops-muted">HW Pressure:</span>
-        <span class="ops-value ml-2">{hardwarePressure(hardware)}</span>
-      </div>
     </div>
   </section>
 
@@ -128,7 +117,7 @@
     <article class="ops-card p-4">
       <div class="flex items-center justify-between">
         <span class="ops-label">Server Status</span>
-        <Server class="h-5 w-5 text-muted-foreground" />
+        <Server class="h-5 w-5 text-lemon" />
       </div>
       <div class="mt-8 flex flex-col items-center">
         <div class="flex h-20 w-20 items-center justify-center rounded-full border-2 {$connectionStatus === 'connected' ? 'border-status-ok text-status-ok' : 'border-status-warn text-status-warn'}">
@@ -151,7 +140,7 @@
     <article class="ops-card p-4">
       <div class="flex items-center justify-between">
         <span class="ops-label">Loaded Model</span>
-        <Cpu class="h-5 w-5 text-muted-foreground" />
+        <Cpu class="h-5 w-5 text-lemon" />
       </div>
       <h2 class="mt-6 break-words text-xl font-bold text-lemon">{model?.name ?? 'No model loaded'}</h2>
       <p class="mt-2 ops-value text-sm">{model?.backend ?? 'backend unknown'}</p>
@@ -170,7 +159,7 @@
     <article class="ops-card p-4">
       <div class="flex items-center justify-between">
         <span class="ops-label">Hardware</span>
-        <HardDrive class="h-5 w-5 text-muted-foreground" />
+        <HardDrive class="h-5 w-5 text-lemon" />
       </div>
       <div class="mt-8 space-y-5">
         <div>
@@ -206,7 +195,7 @@
     <article class="ops-card p-4">
       <div class="flex items-center justify-between">
         <span class="ops-label">Last Task</span>
-        <TimerReset class="h-5 w-5 text-muted-foreground" />
+        <TimerReset class="h-5 w-5 text-lemon" />
       </div>
       {#if lastTask?.available}
         <div class="mt-7 grid grid-cols-2 gap-3">

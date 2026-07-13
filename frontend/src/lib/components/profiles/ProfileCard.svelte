@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import { Copy, Database, Download, Pencil, Play, Power, Star, Trash2 } from 'lucide-svelte';
+  import { Copy, Database, Download, Pencil, Play, Rocket, Star, Trash2 } from 'lucide-svelte';
   import type { Profile } from '$lib/types';
 
   export let profile: Profile;
@@ -62,36 +62,30 @@
 
     <div class="flex flex-wrap gap-2">
       <button class="ops-button ops-button-primary" type="button" on:click={() => dispatch('apply', profile)}>
-        <Play class="h-4 w-4" />
+        <Play class="shrink-0" size={20} strokeWidth={2.25} />
         Apply
       </button>
       <button class="ops-button" type="button" on:click={() => dispatch('applyLoad', profile)}>
-        <Power class="h-4 w-4" />
+        <Rocket class="shrink-0" size={20} strokeWidth={2.25} />
         Apply & Load
       </button>
-      <button class="ops-button" type="button" on:click={() => dispatch('saveLemonade', profile)}>
-        <Database class="h-4 w-4" />
-        Save to Lemonade
+      <button class="ops-button ops-icon-button" type="button" on:click={() => dispatch('saveLemonade', profile)} title="Save to Lemonade defaults" aria-label="Save to Lemonade defaults">
+        <Database size={16} strokeWidth={2.25} />
       </button>
-      <button class="ops-button" type="button" on:click={() => dispatch('edit', profile)}>
-        <Pencil class="h-4 w-4" />
-        Edit
+      <button class="ops-button ops-icon-button" type="button" on:click={() => dispatch('edit', profile)} title="Edit profile" aria-label="Edit profile">
+        <Pencil size={16} strokeWidth={2.25} />
       </button>
-      <button class="ops-button" type="button" on:click={() => dispatch('clone', profile)}>
-        <Copy class="h-4 w-4" />
-        Clone
+      <button class="ops-button ops-icon-button" type="button" on:click={() => dispatch('clone', profile)} title="Clone profile" aria-label="Clone profile">
+        <Copy size={16} strokeWidth={2.25} />
       </button>
-      <button class="ops-button" type="button" on:click={() => dispatch('export', profile)}>
-        <Download class="h-4 w-4" />
-        Export
+      <button class="ops-button ops-icon-button" type="button" on:click={() => dispatch('export', profile)} title="Export profile" aria-label="Export profile">
+        <Download size={16} strokeWidth={2.25} />
       </button>
-      <button class="ops-button" type="button" on:click={() => dispatch('default', profile)} disabled={profile.is_default}>
-        <Star class="h-4 w-4" />
-        Default
+      <button class="ops-button ops-icon-button" type="button" on:click={() => dispatch('default', profile)} disabled={profile.is_default} title={profile.is_default ? 'Default profile' : 'Set as default'} aria-label={profile.is_default ? 'Default profile' : 'Set as default'}>
+        <Star size={16} strokeWidth={2.25} />
       </button>
-      <button class="ops-button ops-button-danger" type="button" on:click={() => dispatch('delete', profile)} disabled={profile.is_builtin}>
-        <Trash2 class="h-4 w-4" />
-        Delete
+      <button class="ops-button ops-button-danger ops-icon-button" type="button" on:click={() => dispatch('delete', profile)} disabled={profile.is_builtin} title={profile.is_builtin ? 'Built-in profiles cannot be deleted' : 'Delete profile'} aria-label="Delete profile">
+        <Trash2 size={16} strokeWidth={2.25} />
       </button>
     </div>
   </div>
