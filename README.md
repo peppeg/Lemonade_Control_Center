@@ -484,6 +484,10 @@ Created by [Peppe / peppeg](https://github.com/peppeg), creator of [yourfuture.m
 
 Project repository: [peppeg/Lemonade_Control_Center](https://github.com/peppeg/Lemonade_Control_Center)
 
+### Contributors
+
+- [@dolaresko](https://github.com/dolaresko) (Dmitry Olaresko) — Lemonade 11.7 single-line telemetry parsing ([#22](https://github.com/peppeg/Lemonade_Control_Center/pull/22))
+
 Built with FastAPI, SvelteKit, Tailwind CSS, Lucide, and the Lemonade ecosystem.
 
 Development assistance included OpenAI Codex, Qwen3-Coder-Next-GGUF, and Google Stitch for UI exploration.
