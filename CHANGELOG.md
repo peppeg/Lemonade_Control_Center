@@ -11,6 +11,10 @@ The project is under active development, so entries currently describe the evolv
 - Settings and Setup now show the LCC host environment and telemetry scope detected by the backend instead of presenting an unused manual OS-type selector. Existing `os_type` configuration remains readable for backward compatibility.
 - The Dashboard no longer repeats the normal no-model idle state as both a smart alert and a diagnostic preview; the status strip and Loaded Model card remain the two intentional status/action surfaces.
 
+### Fixed
+
+- Parsed Lemonade 11.7 single-line telemetry (`in=`, `out=`, `ttft=`, `tps=`) so Dashboard and Logs & Stats no longer show "Unavailable" for current-generation logs; legacy per-line telemetry is still supported. (Contributed by @dolaresko, PR #22)
+
 ## 0.3.0 - 2026-07-13
 
 ### Added
