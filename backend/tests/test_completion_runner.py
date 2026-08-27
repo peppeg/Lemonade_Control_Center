@@ -244,3 +244,26 @@ async def test_runner_returns_structured_timeout_error():
     assert result.error is not None
     assert result.error.kind == "timeout"
     assert result.error.message == "Completion request timed out."
+
+
+@pytest.mark.asyncio
+async def test_runner_sends_authorization_header_when_api_key_configured():
+    recorded_headers: list[httpx.Headers] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded_headers.append(request.headers)
+        return _sse_response(
+            '{"choices":[{"delta":{"content":"OK"},"finish_reason":"stop"}]}',
+            "[DONE]",
+        )
+
+    runner = CompletionRunner(
+        "http://lemonade.test",
+        api_key="secret-key-123",
+        transport=httpx.MockTransport(handler),
+    )
+    result = await runner.run(_request())
+
+    assert result.success is True
+    assert len(recorded_headers) == 1
+    assert recorded_headers[0]["authorization"] == "Bearer secret-key-123"

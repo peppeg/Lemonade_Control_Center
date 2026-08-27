@@ -67,6 +67,15 @@ class LemonadeProvider(LLMProvider):
                        f"Re-run 'python capabilities/probe.py' after verifying Lemonade config."
             )
 
+    def _headers(self, headers: dict | None = None) -> dict | None:
+        """Merge custom headers with default Authorization header if configured."""
+        if not self.admin_headers:
+            return headers
+        merged = dict(self.admin_headers)
+        if headers:
+            merged.update(headers)
+        return merged
+
     async def _get(self, path: str, *, headers: dict | None = None,
                    timeout: float | None = None) -> httpx.Response:
         """GET request to Lemonade with error handling."""
@@ -74,7 +83,7 @@ class LemonadeProvider(LLMProvider):
             async with httpx.AsyncClient(timeout=timeout or self.timeout, trust_env=False) as client:
                 return await client.get(
                     f"{self.base_url}{path}",
-                    headers=headers
+                    headers=self._headers(headers),
                 )
         except httpx.ConnectError:
             raise HTTPException(503, f"Lemonade not reachable at {self.base_url}")
@@ -90,7 +99,7 @@ class LemonadeProvider(LLMProvider):
                 return await client.post(
                     f"{self.base_url}{path}",
                     json=body or {},
-                    headers=headers
+                    headers=self._headers(headers),
                 )
         except httpx.ConnectError:
             raise HTTPException(503, f"Lemonade not reachable at {self.base_url}")

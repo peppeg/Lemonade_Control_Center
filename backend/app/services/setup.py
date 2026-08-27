@@ -200,9 +200,10 @@ class SetupService:
 
         start = time.monotonic()
         health_data: dict = {}
+        headers = self._admin_headers(runtime.admin_key)
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-                health = await client.get(f"{normalized_url}/api/v1/health")
+                health = await client.get(f"{normalized_url}/api/v1/health", headers=headers)
                 health.raise_for_status()
                 health_data = health.json()
             response.reachable = True

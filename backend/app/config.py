@@ -9,19 +9,24 @@ Hierarchy (highest priority first):
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env", str(Path(__file__).parent.parent / ".env")),
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # ── Lemonade Server ──
     lemonade_url: str = "http://localhost:13305"
-    lemonade_admin_api_key: str | None = None
+    lemonade_admin_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("lemonade_admin_api_key", "lemonade_api_key"),
+    )
     lemonade_recipe_options_file: str = "/opt/var/lib/lemonade/.cache/lemonade/recipe_options.json"
 
     # ── Safety Flags ──

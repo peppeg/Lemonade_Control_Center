@@ -37,9 +37,11 @@ class CompletionRunner:
         self,
         base_url: str,
         *,
+        api_key: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
         self.transport = transport
 
     async def run(self, request: CompletionRequest) -> CompletionResult:
@@ -134,9 +136,10 @@ class CompletionRunner:
         failures: list[str] = []
         last_status: int | None = None
         last_endpoint: str | None = None
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else None
         for path in COMPLETION_PATHS:
             last_endpoint = path
-            request = client.build_request("POST", f"{self.base_url}{path}", json=payload)
+            request = client.build_request("POST", f"{self.base_url}{path}", json=payload, headers=headers)
             response = await client.send(request, stream=True)
             if response.status_code < 400:
                 return response, path, None

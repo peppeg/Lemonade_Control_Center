@@ -96,3 +96,46 @@ def test_connection_doctor_next_action_prioritizes_reachability_and_locality():
 
     loaded = unreachable.model_copy(update={"reachable": True, "local_target": True, "loaded_model": "qwen"})
     assert "smoke test" in _connection_doctor_next_action(loaded)
+
+
+import httpx
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_connection_doctor_includes_auth_header_for_health(monkeypatch):
+    recorded_headers: list[httpx.Headers] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        recorded_headers.append(request.headers)
+        if request.url.path == "/api/v1/health":
+            return httpx.Response(200, json={"status": "ok", "version": "10.9.0", "loaded_models": []})
+        if request.url.path == "/internal/config":
+            return httpx.Response(200, json={})
+        return httpx.Response(404)
+
+    service = SetupService()
+    runtime = RuntimeConfig(
+        id="lemonade-local",
+        type="lemonade",
+        name="Local Lemonade",
+        url="http://127.0.0.1:13305",
+        admin_key="my-admin-key",
+        is_active=True,
+    )
+
+    original_client_init = httpx.AsyncClient.__init__
+
+    def patched_init(self, *args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        original_client_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", patched_init)
+
+    report = await service.connection_doctor(runtime)
+
+    assert report.reachable is True
+    assert report.status == "ok"
+    health_headers = [h for h in recorded_headers if "authorization" in h]
+    assert len(health_headers) >= 1
+    assert health_headers[0]["authorization"] == "Bearer my-admin-key"
