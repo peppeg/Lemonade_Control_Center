@@ -12,6 +12,7 @@ from fastapi import APIRouter
 
 from app.capabilities import capabilities
 from app.config import settings
+from app.dependencies import get_active_runtime_config
 from app.models.schemas import CapabilitiesResponse, HealthResponse
 
 router = APIRouter(prefix="/api", tags=["health"])
@@ -46,10 +47,14 @@ async def health_check():
     """
     lemonade_reachable = False
     lemonade_version = capabilities.lemonade_version
+    active = get_active_runtime_config()
+    target_url = (active.url if active and active.url else settings.lemonade_url).rstrip("/")
+    admin_key = active.admin_key if active and active.admin_key else settings.lemonade_admin_api_key
+    headers = {"Authorization": f"Bearer {admin_key}"} if admin_key else None
 
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{settings.lemonade_url}/api/v1/health")
+            resp = await client.get(f"{target_url}/api/v1/health", headers=headers)
             if resp.status_code == 200:
                 lemonade_reachable = True
                 data = resp.json()
@@ -63,7 +68,7 @@ async def health_check():
         status=status,
         app_name=settings.app_name,
         app_version=settings.app_version,
-        lemonade_url=settings.lemonade_url,
+        lemonade_url=target_url,
         lemonade_reachable=lemonade_reachable,
         lemonade_version=lemonade_version,
     )
