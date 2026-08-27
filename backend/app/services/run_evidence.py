@@ -4,14 +4,20 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import ValidationError
 
 from app.models.completions import CompletionRequest
-from app.models.schemas import LoadModelRequest, LoadModelResponse, RunEvidenceSeed, SmokeTestRequest, SmokeTestResponse
+from app.models.schemas import (
+    LoadModelRequest,
+    LoadModelResponse,
+    RunEvidenceSeed,
+    SmokeTestRequest,
+    SmokeTestResponse,
+)
 from app.models.setup import RuntimeConfig
 from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
@@ -252,7 +258,7 @@ class SmokeTestRunner:
         self.telemetry_manager = telemetry_manager or TelemetryManager()
 
     async def run(self, request: SmokeTestRequest, observed_model_name: str | None = None) -> SmokeTestResponse:
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         telemetry_start = self.telemetry_manager.snapshot("start")
         before_hardware = _safe_hardware_snapshot()
         before_process = _safe_process_snapshot()
@@ -270,7 +276,7 @@ class SmokeTestRunner:
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
         telemetry_end = self.telemetry_manager.snapshot("end")
-        ended_at = datetime.now(timezone.utc)
+        ended_at = datetime.now(UTC)
         log_capture = self.log_collector(started_at, ended_at)
         process = after_process or before_process
         warnings: list[str] = []
@@ -354,7 +360,7 @@ class LoadEvidenceRecorder:
     def start(self) -> dict:
         return {
             "started_at": time.monotonic(),
-            "wall_started_at": datetime.now(timezone.utc),
+            "wall_started_at": datetime.now(UTC),
             "hardware": _safe_hardware_snapshot(),
             "process": _safe_process_snapshot(),
             "telemetry": self.telemetry_manager.snapshot("start"),
@@ -370,7 +376,7 @@ class LoadEvidenceRecorder:
         after_hardware = _safe_hardware_snapshot()
         after_process = _safe_process_snapshot()
         telemetry_end = self.telemetry_manager.snapshot("end")
-        ended_at = datetime.now(timezone.utc)
+        ended_at = datetime.now(UTC)
         log_capture = self.log_collector(started["wall_started_at"], ended_at)
         process = after_process or started.get("process")
         warnings = _load_warnings(request, response, process)

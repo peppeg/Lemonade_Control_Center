@@ -8,8 +8,8 @@ Usage in routers:
 """
 from fastapi import Depends
 
-from app.providers.lemonade import LemonadeProvider
 from app.models.setup import RuntimeConfig
+from app.providers.lemonade import LemonadeProvider
 from app.services.completion_runner import CompletionRunner
 from app.services.setup import SetupService
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 from fastapi import HTTPException
 
 from app.models.backend_readiness import (
@@ -10,7 +11,6 @@ from app.models.backend_readiness import (
     BackendReadinessItem,
     BackendReadinessResponse,
 )
-
 
 STATE_RANK = {
     "update_required": 0,

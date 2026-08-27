@@ -1,6 +1,10 @@
 import json
 
-from app.models.profiles import ProfileConfig, ProfileCreateRequest, ProfileUpdateRequest
+from app.models.profiles import (
+    ProfileConfig,
+    ProfileCreateRequest,
+    ProfileUpdateRequest,
+)
 from app.models.schemas import RunEvidenceSeed
 from app.services.profile_service import ProfileService
 from app.services.run_evidence import RunEvidenceStorage

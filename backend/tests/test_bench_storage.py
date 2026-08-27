@@ -1,13 +1,18 @@
 import json
+from typing import ClassVar
 
 import pytest
 from fastapi import HTTPException
 
-from app.services.bench.models import BenchAnnotationRequest, BenchResult, SuiteResult
-from app.services.bench.storage import BenchStorage
-from app.routers import bench as bench_router
 from app.models.setup import RuntimeConfig
-from app.services.bench.models import BenchRunRequest
+from app.routers import bench as bench_router
+from app.services.bench.models import (
+    BenchAnnotationRequest,
+    BenchResult,
+    BenchRunRequest,
+    SuiteResult,
+)
+from app.services.bench.storage import BenchStorage
 
 
 def _suite(id_: str, model: str, profile_id: str, tps: float) -> SuiteResult:
@@ -164,7 +169,7 @@ async def test_bench_run_rejects_requested_observed_model_mismatch(monkeypatch):
                 name = "observed-model"
 
             class Running:
-                models = [Model()]
+                models: ClassVar[list] = [Model()]
 
             return Running()
 

@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 CompletionErrorKind = Literal["connection", "timeout", "http", "protocol", "empty_response"]
 MetricSource = Literal["api", "estimated", "mixed", "unavailable"]
 

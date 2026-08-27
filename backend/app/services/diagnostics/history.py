@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from app.services.diagnostics.models import AlertHistoryEntry, DiagnosticReport, Severity
+from app.services.diagnostics.models import (
+    AlertHistoryEntry,
+    DiagnosticReport,
+    Severity,
+)
 
 HISTORY_FILE = Path(__file__).parent.parent.parent / "data" / "diagnostic_history.json"
 
@@ -46,7 +50,7 @@ class AlertHistory:
             if alert.rule_id not in self._active_rules and alert.rule_id not in self._dismissed:
                 self._entries.append(
                     AlertHistoryEntry(
-                        timestamp=datetime.now(timezone.utc),
+                        timestamp=datetime.now(UTC),
                         rule_id=alert.rule_id,
                         rule_name=alert.rule_name,
                         severity=alert.severity,
@@ -58,7 +62,7 @@ class AlertHistory:
         for rule_id in self._active_rules - current_alert_ids:
             self._entries.append(
                 AlertHistoryEntry(
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                     rule_id=rule_id,
                     rule_name=rule_id,
                     severity=Severity.info,
@@ -86,7 +90,7 @@ class AlertHistory:
         self._dismissed.add(rule_id)
         self._entries.append(
             AlertHistoryEntry(
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 rule_id=rule_id,
                 rule_name=rule_id,
                 severity=Severity.info,

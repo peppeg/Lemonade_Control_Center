@@ -1,8 +1,8 @@
 """Pydantic schemas for Bench Lab."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import uuid
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -63,7 +63,7 @@ class BenchResult(BaseModel):
     token_count_source: str = "unavailable"
     completion_endpoint: str | None = None
     warnings: list[str] = Field(default_factory=list)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     error: str | None = None
     observed_backend: str | None = None
     observed_ctx_size: int | None = None
@@ -96,7 +96,7 @@ class SuiteResult(BaseModel):
     total_seconds: float
     truncated_count: int
     error_count: int
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     manual_quality_score: int | None = Field(default=None, ge=1, le=5)
     manual_notes: str = ""
 

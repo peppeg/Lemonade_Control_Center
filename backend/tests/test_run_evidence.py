@@ -3,7 +3,12 @@ import json
 import pytest
 
 from app.models.completions import CompletionError, CompletionResult
-from app.models.schemas import LoadModelRequest, LoadModelResponse, LogEntry, SmokeTestRequest
+from app.models.schemas import (
+    LoadModelRequest,
+    LoadModelResponse,
+    LogEntry,
+    SmokeTestRequest,
+)
 from app.models.setup import RuntimeConfig
 from app.models.telemetry import TelemetryMetric, TelemetrySample, TelemetrySnapshot
 from app.services.run_evidence import (

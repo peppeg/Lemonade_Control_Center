@@ -6,16 +6,17 @@ systemd service status, and (gated) restart.
 """
 from fastapi import APIRouter, HTTPException
 
-from app.config import settings
 from app.capabilities import capabilities
+from app.config import settings
 from app.models.schemas import (
     HardwareInfo,
+    LlamaServerInfoResponse,
+    RestartServiceResponse,
+    ServiceStatusResponse,
     TemperaturesResponse,
     TopProcessesResponse,
-    LlamaServerInfoResponse,
-    ServiceStatusResponse,
-    RestartServiceResponse,
 )
+from app.models.telemetry import TelemetrySnapshot
 from app.services.hardware import (
     get_hardware_info,
     get_temperatures,
@@ -26,7 +27,6 @@ from app.services.process import (
     get_service_status,
     restart_service,
 )
-from app.models.telemetry import TelemetrySnapshot
 from app.services.telemetry import TelemetryManager
 
 router = APIRouter(prefix="/api/system", tags=["system"])

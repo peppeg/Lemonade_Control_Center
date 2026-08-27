@@ -3,11 +3,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+import app.services.diagnostics.rules  # noqa: F401
 from app.services.diagnostics.engine import DiagnosticEngine
 from app.services.diagnostics.history import AlertHistory
 from app.services.diagnostics.models import DiagnosticReport
-
-import app.services.diagnostics.rules  # noqa: F401
 
 router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
 

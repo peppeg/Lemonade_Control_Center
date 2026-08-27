@@ -10,9 +10,9 @@ from pathlib import Path
 import httpx
 from fastapi import APIRouter
 
-from app.config import settings
 from app.capabilities import capabilities
-from app.models.schemas import HealthResponse, CapabilitiesResponse
+from app.config import settings
+from app.models.schemas import CapabilitiesResponse, HealthResponse
 
 router = APIRouter(prefix="/api", tags=["health"])
 

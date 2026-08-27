@@ -8,9 +8,15 @@ import subprocess
 import psutil
 
 from app.config import settings
-from app.models.telemetry import TelemetryMetric, TelemetryQuality, TelemetrySample, TelemetrySnapshot
+from app.models.telemetry import (
+    TelemetryMetric,
+    TelemetryQuality,
+    TelemetrySample,
+    TelemetrySnapshot,
+)
 from app.services.hardware import get_gpu_info
 from app.services.process import find_llama_server
+
 
 class LinuxTelemetryProvider:
     id = "linux_process_sysfs"
@@ -113,7 +119,7 @@ class JsonCommandTelemetryProvider:
                 error=f"{self.executable} is not installed.",
             )
         try:
-            result = subprocess.run([command, *self.args], capture_output=True, text=True, timeout=3)
+            result = subprocess.run([command, *self.args], capture_output=True, text=True, timeout=3, check=False)
         except (OSError, subprocess.TimeoutExpired) as exc:
             return self._degraded(phase, f"command failed: {exc}")
         if result.returncode != 0:

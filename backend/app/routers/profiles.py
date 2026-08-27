@@ -1,8 +1,9 @@
 """Profile CRUD endpoints."""
 from __future__ import annotations
 
-import psutil
 from pathlib import Path
+
+import psutil
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import get_provider

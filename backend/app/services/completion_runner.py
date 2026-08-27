@@ -11,7 +11,6 @@ import httpx
 
 from app.models.completions import CompletionError, CompletionRequest, CompletionResult
 
-
 COMPLETION_PATHS = ("/api/v1/chat/completions", "/v1/chat/completions")
 MAX_ERROR_BODY_CHARS = 500
 

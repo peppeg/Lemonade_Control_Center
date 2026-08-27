@@ -18,8 +18,8 @@ def test_safe_runtime_capability_probe_uses_only_get_and_enables_observed_endpoi
             if path == "/api/v1/health":
                 return SimpleNamespace(status_code=200, json=lambda: {"version": "10.9.0"})
             if path in {"/api/tags", "/api/v1/models"}:
-                return SimpleNamespace(status_code=200, json=lambda: {})
-            return SimpleNamespace(status_code=404, json=lambda: {})
+                return SimpleNamespace(status_code=200, json=dict)
+            return SimpleNamespace(status_code=404, json=dict)
 
     client = Client()
     caps = probe_safe_runtime_capabilities(client)

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Lemonade Control Center — Capabilities Probe
 
@@ -16,14 +15,14 @@ Usage:
 import argparse
 import asyncio
 import json
+import os
 import subprocess
 import sys
-import os
 import time
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
-from dataclasses import dataclass, field, asdict
 from enum import Enum
+from pathlib import Path
 
 # Only external dependency; install httpx separately or via requirements.txt.
 try:
@@ -184,7 +183,8 @@ def probe_command(command: str, *, timeout: float = 10.0) -> CommandResult:
         result = subprocess.run(
             command, shell=True,
             capture_output=True, text=True,
-            timeout=timeout
+            timeout=timeout,
+        check=False,
         )
 
         preview = "\n".join(result.stdout.strip().split("\n")[:5])
@@ -216,7 +216,8 @@ def find_llama_server_pid() -> int | None:
     try:
         result = subprocess.run(
             "pgrep -f llama-server | head -1",
-            shell=True, capture_output=True, text=True, timeout=5
+            shell=True, capture_output=True, text=True, timeout=5,
+        check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             return int(result.stdout.strip())
@@ -253,7 +254,7 @@ async def probe_websocket(base_url: str, ws_port: int) -> dict:
             "status": "skipped",
             "notes": "websockets library non installata (pip install websockets)"
         }
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {
             "status": "error",
             "port": ws_port,
@@ -611,7 +612,7 @@ def print_summary(summary: ProbeSummary):
         if r.status in (ProbeStatus.ERROR, ProbeStatus.NOT_FOUND):
             print(f"  ⚠  {path}: {r.status.value} ({r.status_code}) {r.notes}")
 
-    for key, r in summary.system_commands.items():
+    for r in summary.system_commands.values():
         if not r.works:
             print(f"  ⚠  {r.command}: {r.notes}")
 

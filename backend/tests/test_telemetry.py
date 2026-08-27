@@ -1,13 +1,13 @@
 import json
 from types import SimpleNamespace
 
+from app.models.telemetry import TelemetrySample
 from app.services.telemetry import (
     JsonCommandTelemetryProvider,
     LinuxTelemetryProvider,
     TelemetryManager,
     _last_json_value,
 )
-from app.models.telemetry import TelemetrySample
 
 
 def test_linux_provider_labels_measured_and_unsupported_metrics(monkeypatch):

@@ -1,6 +1,6 @@
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from app.models.schemas import LogEntryLevel
@@ -78,8 +78,8 @@ def test_get_logs_for_window_uses_journal_timestamp_and_parses_messages(monkeypa
         )
 
     monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
-    started_at = datetime(2026, 7, 10, 12, 0, tzinfo=timezone.utc)
-    ended_at = datetime(2026, 7, 10, 12, 1, tzinfo=timezone.utc)
+    started_at = datetime(2026, 7, 10, 12, 0, tzinfo=UTC)
+    ended_at = datetime(2026, 7, 10, 12, 1, tzinfo=UTC)
 
     response = get_logs_for_window(started_at, ended_at, max_lines=1)
 
@@ -108,7 +108,7 @@ def test_get_logs_for_window_reports_unavailable_on_timeout(monkeypatch):
         raise subprocess.TimeoutExpired(cmd="journalctl", timeout=3)
 
     monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     response = get_logs_for_window(now, now)
 

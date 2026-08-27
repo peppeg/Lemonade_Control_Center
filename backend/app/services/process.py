@@ -5,14 +5,14 @@ Reads /proc/PID/cmdline to extract runtime parameters like ctx_size,
 backend, ngl, mmap, MTP, reasoning format, etc.
 """
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import psutil
 
 from app.models.schemas import (
-    ProcessInfo,
-    LlamaServerParams,
     LlamaServerInfoResponse,
+    LlamaServerParams,
+    ProcessInfo,
     ServiceStatusResponse,
 )
 
@@ -32,7 +32,7 @@ def find_llama_server() -> LlamaServerInfoResponse:
 
                 mem = proc.info.get("memory_info") or proc.memory_info()
                 create_time = proc.info.get("create_time")
-                now = datetime.now(timezone.utc).timestamp()
+                now = datetime.now(UTC).timestamp()
 
                 process_info = ProcessInfo(
                     pid=proc.info["pid"],
@@ -41,7 +41,7 @@ def find_llama_server() -> LlamaServerInfoResponse:
                     rss_gb=round(mem.rss / (1024**3), 2),
                     vms_gb=round(mem.vms / (1024**3), 2),
                     status=proc.info.get("status", "unknown"),
-                    create_time=datetime.fromtimestamp(create_time, tz=timezone.utc) if create_time else None,
+                    create_time=datetime.fromtimestamp(create_time, tz=UTC) if create_time else None,
                     uptime_seconds=round(now - create_time, 0) if create_time else None,
                 )
 
@@ -138,7 +138,8 @@ def get_service_status(service_name: str = "lemond.service", timeout: float = 5)
     try:
         result = subprocess.run(
             ["systemctl", "status", service_name, "--no-pager"],
-            capture_output=True, text=True, timeout=timeout
+            capture_output=True, text=True, timeout=timeout,
+        check=False,
         )
 
         output = result.stdout + result.stderr
@@ -175,7 +176,8 @@ def restart_service(service_name: str = "lemond.service") -> tuple[bool, str]:
     try:
         result = subprocess.run(
             ["sudo", "systemctl", "restart", service_name],
-            capture_output=True, text=True, timeout=30
+            capture_output=True, text=True, timeout=30,
+        check=False,
         )
         if result.returncode == 0:
             return True, f"Service {service_name} restarted successfully."

@@ -4,10 +4,18 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 
-from app.dependencies import get_active_runtime_config, get_completion_runner, get_provider
+from app.dependencies import (
+    get_active_runtime_config,
+    get_completion_runner,
+    get_provider,
+)
 from app.models.setup import RuntimeConfig
 from app.providers.lemonade import LemonadeProvider
-from app.services.bench.models import BenchAnnotationRequest, BenchPrompt, BenchRunRequest
+from app.services.bench.models import (
+    BenchAnnotationRequest,
+    BenchPrompt,
+    BenchRunRequest,
+)
 from app.services.bench.runner import BenchRunner
 from app.services.bench.storage import BenchStorage
 from app.services.bench.suites import SUITES

@@ -9,10 +9,10 @@ Provides:
 import asyncio
 import subprocess
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.capabilities import capabilities
-from app.models.schemas import RecentLogsResponse, LastTaskStats
+from app.models.schemas import LastTaskStats, RecentLogsResponse
 from app.services.log_parser import get_recent_logs, parse_last_task
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
@@ -49,7 +49,7 @@ async def stream_logs(websocket: WebSocket):
 
     process = None
     try:
-        process = subprocess.Popen(
+        process = subprocess.Popen(  # noqa: ASYNC220
             ["journalctl", "-u", "lemond.service", "-f", "-o", "cat",
              "--no-pager", "-n", "0"],
             stdout=subprocess.PIPE,

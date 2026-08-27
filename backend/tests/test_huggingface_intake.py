@@ -4,7 +4,11 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from app.models.intake import IntakeInspectRequest, IntakeProfileRequest, IntakePullRequest
+from app.models.intake import (
+    IntakeInspectRequest,
+    IntakeProfileRequest,
+    IntakePullRequest,
+)
 from app.providers.lemonade import LemonadeProvider
 from app.routers.intake import create_intake_profile
 from app.services.huggingface_intake import HuggingFaceIntakeService
@@ -208,3 +212,41 @@ async def test_provider_delegates_variant_and_custom_pull_contracts(monkeypatch)
         "mmproj": "mmproj.gguf",
     }
     assert result.success is True
+
+
+@pytest.mark.asyncio
+async def test_intake_search_raises_type_error_on_invalid_payload():
+    class InvalidSearchClient:
+        async def get(self, url):
+            request = httpx.Request("GET", url)
+            return httpx.Response(200, request=request, json={"error": "rate limit"})
+
+    with pytest.raises(TypeError, match="unexpected response"):
+        await HuggingFaceIntakeService(FakeProvider(), InvalidSearchClient()).search("Gemma")
+
+
+@pytest.mark.asyncio
+async def test_intake_router_handles_type_error_and_returns_502(monkeypatch):
+    from fastapi import HTTPException
+
+    from app.models.intake import IntakeSearchRequest
+    from app.routers import intake as intake_router
+
+    class FailingService:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def search(self, query):
+            raise TypeError("unexpected payload type")
+
+    monkeypatch.setattr(intake_router, "HuggingFaceIntakeService", FailingService)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await intake_router.search_repositories(
+            IntakeSearchRequest(query="Gemma"),
+            provider=FakeProvider(),
+        )
+
+    assert exc_info.value.status_code == 502
+    assert "Repository search failed" in str(exc_info.value.detail)
+

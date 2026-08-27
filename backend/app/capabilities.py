@@ -5,8 +5,9 @@ If probe_summary.json doesn't exist or is malformed, all capabilities
 default to False (safe degradation).
 """
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
 import httpx
 from pydantic import BaseModel
 
@@ -104,7 +105,7 @@ def load_capabilities() -> Capabilities:
     try:
         with open(probe_path) as f:
             data = json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         print(f"⚠ Error reading capabilities file: {e}")
         return caps
 
@@ -137,7 +138,7 @@ def load_capabilities() -> Capabilities:
 
 def probe_safe_runtime_capabilities(client: httpx.Client | None = None) -> Capabilities:
     """Probe only non-mutating Lemonade GET endpoints for container startup."""
-    caps = Capabilities(probe_timestamp=datetime.now(timezone.utc).isoformat())
+    caps = Capabilities(probe_timestamp=datetime.now(UTC).isoformat())
     owned_client = client is None
     active_client = client or httpx.Client(timeout=2.0, trust_env=False)
     safe_endpoints = {

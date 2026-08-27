@@ -32,7 +32,7 @@ async def search_repositories(
 ):
     try:
         results = await HuggingFaceIntakeService(provider).search(request.query)
-    except (httpx.HTTPError, ValueError) as exc:
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
         raise HTTPException(502, f"Repository search failed: {exc}") from exc
     return IntakeSearchResponse(query=request.query, results=results)
 
@@ -44,7 +44,7 @@ async def inspect_repository(
 ):
     try:
         return await HuggingFaceIntakeService(provider).inspect(request.repo_id)
-    except ValueError as exc:
+    except (ValueError, TypeError) as exc:
         raise HTTPException(502, str(exc)) from exc
 
 

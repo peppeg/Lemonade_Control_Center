@@ -6,7 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 RuntimeType = Literal["lemonade", "ollama", "llamacpp", "custom"]
 AccessMode = Literal["local", "ssh_tunnel", "tailscale", "remote"]
 RuntimeTestStatus = Literal["untested", "ok", "error"]

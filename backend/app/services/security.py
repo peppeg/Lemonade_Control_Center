@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hmac
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from ipaddress import ip_address
 from pathlib import Path
 
@@ -84,7 +84,7 @@ def audit_write(
 
     AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
     record = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "method": request.method,
         "path": request.url.path,
         "status_code": status_code,

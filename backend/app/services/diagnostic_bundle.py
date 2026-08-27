@@ -9,19 +9,21 @@ import re
 import socket
 import zipfile
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from app.capabilities import capabilities
 from app.config import settings
+from app.services.backend_readiness import (
+    collect_backend_readiness,
+    unavailable_backend_readiness,
+)
 from app.services.hardware import get_hardware_info, get_temperatures
 from app.services.log_parser import get_recent_logs, parse_last_task
 from app.services.process import find_llama_server, get_service_status
 from app.services.run_evidence import RunEvidenceStorage
-from app.services.backend_readiness import collect_backend_readiness, unavailable_backend_readiness
 from app.services.setup import SetupService
-
 
 SENSITIVE_KEY_RE = re.compile(
     r"(api[_-]?key|admin[_-]?key|authorization|bearer|token|secret|password|passwd|credential)",
@@ -141,7 +143,7 @@ class DiagnosticBundleBuilder:
         self.add_text("README.txt", _bundle_readme())
         self.add_json("manifest.json", self._manifest())
 
-        timestamp = datetime.now().strftime("%Y-%m-%dT%H-%M")
+        timestamp = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H-%M")
         filename = f"lcc-diagnostic-{timestamp}.zip"
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -177,7 +179,7 @@ class DiagnosticBundleBuilder:
 
     def _manifest(self) -> dict[str, Any]:
         return {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "app_name": settings.app_name,
             "app_version": settings.app_version,
             "lemonade_url": settings.lemonade_url,

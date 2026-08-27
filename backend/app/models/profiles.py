@@ -1,7 +1,7 @@
 """Pydantic schemas for per-model profiles."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -45,8 +45,8 @@ class Profile(BaseModel):
     config: ProfileConfig
     is_builtin: bool = False
     is_default: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     latest_evidence: ProfileEvidenceRef | None = None
 
 

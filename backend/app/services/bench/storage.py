@@ -8,7 +8,12 @@ import uuid
 from collections import deque
 from pathlib import Path
 
-from app.services.bench.models import BenchAnnotationRequest, BenchComparison, BenchResult, SuiteResult
+from app.services.bench.models import (
+    BenchAnnotationRequest,
+    BenchComparison,
+    BenchResult,
+    SuiteResult,
+)
 
 RESULTS_FILE = Path(__file__).parent.parent.parent / "data" / "bench_results.json"
 

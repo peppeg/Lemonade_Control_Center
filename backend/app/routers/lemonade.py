@@ -9,32 +9,43 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
-from app.dependencies import get_active_runtime_config, get_completion_runner, get_provider
-from app.models.setup import RuntimeConfig
-from app.providers.lemonade import LemonadeProvider
-from app.models.backend_readiness import BackendInstallRequest, BackendInstallResponse, BackendReadinessResponse
+from app.dependencies import (
+    get_active_runtime_config,
+    get_completion_runner,
+    get_provider,
+)
+from app.models.backend_readiness import (
+    BackendInstallRequest,
+    BackendInstallResponse,
+    BackendReadinessResponse,
+)
 from app.models.schemas import (
+    ConfigUpdateRequest,
+    LemonadeConfigResponse,
     LemonadeHealthResponse,
+    LemonadeSavedOptionsResponse,
     LemonadeStatsResponse,
-    ModelsListResponse,
-    RunningModelsResponse,
-    ModelShowResponse,
     LoadModelRequest,
     LoadModelResponse,
-    RunEvidenceSeed,
-    RunEvidenceListResponse,
+    ModelShowResponse,
+    ModelsListResponse,
     PullModelRequest,
     PullModelResponse,
+    RunEvidenceListResponse,
+    RunEvidenceSeed,
+    RunningModelsResponse,
     SmokeTestRequest,
     SmokeTestResponse,
     UnloadModelRequest,
-    LemonadeConfigResponse,
-    LemonadeSavedOptionsResponse,
-    ConfigUpdateRequest,
 )
-from app.services.lemonade_options import read_saved_options
-from app.services.backend_readiness import collect_backend_readiness, install_ready_backend
+from app.models.setup import RuntimeConfig
+from app.providers.lemonade import LemonadeProvider
+from app.services.backend_readiness import (
+    collect_backend_readiness,
+    install_ready_backend,
+)
 from app.services.completion_runner import CompletionRunner
+from app.services.lemonade_options import read_saved_options
 from app.services.run_evidence import (
     LoadEvidenceRecorder,
     RunEvidenceStorage,

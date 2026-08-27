@@ -2,13 +2,27 @@
 Lemonade Control Center — Backend API
 """
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import settings
 from app.capabilities import capabilities
+from app.config import settings
 from app.middleware.access_control import LccAccessControlMiddleware
-from app.routers import health, intake, lemonade, system, logs, diagnostic, diagnostics, metrics, profiles, security, setup, settings as settings_router
+from app.routers import (
+    diagnostic,
+    diagnostics,
+    health,
+    intake,
+    lemonade,
+    logs,
+    metrics,
+    profiles,
+    security,
+    setup,
+    system,
+)
+from app.routers import settings as settings_router
 from app.services.metrics.collector import start_collector, stop_collector
 from app.services.security import is_loopback_host
 

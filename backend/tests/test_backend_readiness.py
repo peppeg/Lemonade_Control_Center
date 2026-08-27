@@ -3,8 +3,10 @@ from fastapi import HTTPException
 
 from app.models.backend_readiness import BackendInstallRequest
 from app.routers.lemonade import backend_readiness, install_backend
-from app.services.backend_readiness import install_ready_backend, normalize_backend_readiness
-
+from app.services.backend_readiness import (
+    install_ready_backend,
+    normalize_backend_readiness,
+)
 
 SYSTEM_INFO = {
     "recipes": {

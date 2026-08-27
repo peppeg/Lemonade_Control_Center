@@ -1,7 +1,7 @@
 """Typed telemetry contracts shared by providers, evidence, and API responses."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -23,7 +23,7 @@ class TelemetrySample(BaseModel):
     provider_id: str
     provider_label: str
     phase: Literal["point", "start", "end"] = "point"
-    captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     quality: TelemetryQuality
     available: bool = False
     metrics: list[TelemetryMetric] = Field(default_factory=list)

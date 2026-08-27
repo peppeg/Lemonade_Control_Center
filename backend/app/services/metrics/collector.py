@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import psutil
 
@@ -32,7 +32,7 @@ async def collect_once() -> dict:
     point = _sample()
     buffer.append(point)
     latest = buffer.get_latest()
-    for queue in list(_subscribers):
+    for queue in _subscribers:
         try:
             queue.put_nowait(latest)
         except asyncio.QueueFull:
@@ -76,7 +76,7 @@ def _sample() -> DataPoint:
         pass
 
     return DataPoint(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         ram_used_gb=memory.used / (1024**3),
         ram_total_gb=memory.total / (1024**3),
         ram_percent=memory.percent,

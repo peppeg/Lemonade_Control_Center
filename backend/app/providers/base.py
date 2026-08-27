@@ -8,15 +8,15 @@ from abc import ABC, abstractmethod
 
 from app.capabilities import Capabilities
 from app.models.schemas import (
+    ConfigUpdateRequest,
+    LemonadeConfigResponse,
     LemonadeHealthResponse,
     LemonadeStatsResponse,
-    ModelsListResponse,
-    RunningModelsResponse,
-    ModelShowResponse,
     LoadModelRequest,
     LoadModelResponse,
-    LemonadeConfigResponse,
-    ConfigUpdateRequest,
+    ModelShowResponse,
+    ModelsListResponse,
+    RunningModelsResponse,
 )
 
 

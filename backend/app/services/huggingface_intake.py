@@ -6,7 +6,12 @@ from urllib.parse import quote, urlencode
 import httpx
 import psutil
 
-from app.models.intake import FormatAssessment, IntakeReport, IntakeSearchResult, IntakeVariant
+from app.models.intake import (
+    FormatAssessment,
+    IntakeReport,
+    IntakeSearchResult,
+    IntakeVariant,
+)
 
 
 class HuggingFaceIntakeService:
@@ -100,7 +105,7 @@ class HuggingFaceIntakeService:
         })
         payload = await self._hub_get(f"https://huggingface.co/api/models?{params}")
         if not isinstance(payload, list):
-            raise ValueError("Hugging Face search returned an unexpected response.")
+            raise TypeError("Hugging Face search returned an unexpected response.")
         results = []
         for item in payload[:5]:
             if not isinstance(item, dict) or not item.get("id"):
@@ -118,7 +123,7 @@ class HuggingFaceIntakeService:
         url = f"https://huggingface.co/api/models/{quote(repo_id, safe='/')}?blobs=true"
         payload = await self._hub_get(url)
         if not isinstance(payload, dict):
-            raise ValueError("Hugging Face metadata returned an unexpected response.")
+            raise TypeError("Hugging Face metadata returned an unexpected response.")
         return payload
 
     async def _hub_get(self, url: str):

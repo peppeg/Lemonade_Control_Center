@@ -10,10 +10,10 @@ import psutil
 
 from app.models.schemas import (
     HardwareInfo,
-    TemperaturesResponse,
     TemperatureReading,
-    TopProcessInfo,
+    TemperaturesResponse,
     TopProcessesResponse,
+    TopProcessInfo,
 )
 
 
@@ -134,7 +134,8 @@ def get_temperatures(timeout: float = 5) -> TemperaturesResponse:
 
     try:
         result = subprocess.run(
-            ["sensors"], capture_output=True, text=True, timeout=timeout
+            ["sensors"], capture_output=True, text=True, timeout=timeout,
+        check=False,
         )
         if result.returncode == 0:
             readings = _parse_sensors_output(result.stdout)

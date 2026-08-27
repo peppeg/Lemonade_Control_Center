@@ -3,7 +3,11 @@ import json
 import pytest
 
 from app.models.schemas import RunEvidenceSeed
-from app.services.diagnostic_bundle import DiagnosticBundleBuilder, DiagnosticBundleSanitizer, _run_evidence_summary
+from app.services.diagnostic_bundle import (
+    DiagnosticBundleBuilder,
+    DiagnosticBundleSanitizer,
+    _run_evidence_summary,
+)
 
 
 def test_sanitizer_redacts_structured_secrets_and_host_details():

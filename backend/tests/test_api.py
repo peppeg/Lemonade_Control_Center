@@ -1,10 +1,15 @@
 import pytest
 from fastapi import HTTPException
 
-from app.models.schemas import ModelInfo, ModelsListResponse, RunEvidenceSeed
 from app.dependencies import get_completion_runner
-from app.routers.lemonade import export_run_evidence, list_models, run_evidence, run_evidence_detail
+from app.models.schemas import ModelInfo, ModelsListResponse, RunEvidenceSeed
 from app.routers.health import detect_runtime_environment
+from app.routers.lemonade import (
+    export_run_evidence,
+    list_models,
+    run_evidence,
+    run_evidence_detail,
+)
 from app.services.security import security_status
 
 
