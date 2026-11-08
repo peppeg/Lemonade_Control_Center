@@ -63,6 +63,7 @@ async def test_runner_handles_fallback_stream_and_closes_responses():
     assert payload["max_tokens"] == 64
     assert payload["temperature"] == 0.25
     assert payload["stop"] == ["DONE"]
+    assert payload["stream_options"] == {"include_usage": True}
 
 
 @pytest.mark.asyncio
@@ -104,6 +105,27 @@ async def test_runner_marks_partial_api_usage_as_mixed():
     assert result.input_tokens == 7
     assert result.output_tokens > 0
     assert result.token_count_source == "mixed"
+
+
+@pytest.mark.asyncio
+async def test_runner_prefers_server_timings_for_throughput():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _sse_response(
+            '{"choices":[{"delta":{"content":"LCC_SMOKE_OK"},"finish_reason":"stop"}],"timings":{"prompt_per_second":155.87,"predicted_per_second":33.55}}',
+            '{"choices":[],"usage":{"prompt_tokens":17,"completion_tokens":2}}',
+            "[DONE]",
+        )
+
+    result = await CompletionRunner(
+        "http://lemonade.test",
+        transport=httpx.MockTransport(handler),
+    ).run(_request())
+
+    assert result.input_tokens == 17
+    assert result.output_tokens == 2
+    assert result.token_count_source == "api"
+    assert result.prompt_eval_tps == 155.87
+    assert result.generation_tps == 33.55
 
 
 @pytest.mark.asyncio
