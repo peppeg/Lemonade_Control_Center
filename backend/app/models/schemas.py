@@ -413,6 +413,8 @@ class FinishReason(BaseModel):
 class LastTaskStats(BaseModel):
     """Parsed statistics from the last completed task."""
     available: bool = False
+    model: str | None = None
+    completed_at: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
     prompt_eval_tps: float | None = None

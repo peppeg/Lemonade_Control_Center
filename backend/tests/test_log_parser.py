@@ -141,6 +141,8 @@ def test_parse_last_task_reads_single_line_telemetry(monkeypatch):
     assert stats.output_tokens == 61
     assert stats.ttft_seconds == 1.24
     assert stats.generation_tps == 13.84
+    assert stats.model == "Gemma-4-12B-it-MTP-GGUF"
+    assert stats.completed_at == datetime(2026, 8, 22, 10, 11, 15, 874000).astimezone(UTC).isoformat()
 
 
 def test_parse_last_task_still_reads_legacy_per_field_telemetry(monkeypatch):
@@ -157,6 +159,8 @@ def test_parse_last_task_still_reads_legacy_per_field_telemetry(monkeypatch):
     assert stats.output_tokens == 12
     assert stats.ttft_seconds == 0.55
     assert stats.generation_tps == 22.5
+    assert stats.model is None
+    assert stats.completed_at is None
 
 
 def test_parse_last_task_derives_rate_and_duration_when_absent(monkeypatch):

@@ -17,6 +17,7 @@ The project is under active development, so entries currently describe the evolv
 
 ### Fixed
 
+- Task history (Hardware charts, `/api/metrics/tasks` and its CSV export) now records the model name and completion time from Lemonade's telemetry line instead of `model: "current"` and the time LCC happened to read the log. Identical back-to-back requests are no longer collapsed into one entry. `finish_confidence` is stored as `inferred`/`confirmed` instead of the enum repr.
 - Parsed Lemonade 11.7 single-line telemetry (`in=`, `out=`, `ttft=`, `tps=`) so Dashboard and Logs & Stats no longer show "Unavailable" for current-generation logs; legacy per-line telemetry is still supported. (Contributed by @dolaresko, PR #22)
 
 ## 0.3.0 - 2026-07-13
