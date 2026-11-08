@@ -51,6 +51,8 @@ RE_TELEMETRY_TTFT = re.compile(
     r"(?:\bTTFT\s*\(s\):\s*|\bttft=)([\d.]+)", re.IGNORECASE)
 RE_TELEMETRY_TPS = re.compile(
     r"(?:\bTPS:\s*|\btps=)([\d.]+)", re.IGNORECASE)
+RE_TELEMETRY_MODEL = re.compile(
+    r"Inference completed:.*?\bmodel=([^,\s]+)", re.IGNORECASE)
 
 RE_MODEL_LOADED = re.compile(r"model\s+loaded|all\s+slots\s+are\s+idle", re.IGNORECASE)
 
@@ -207,6 +209,11 @@ def parse_last_task(
     stats = LastTaskStats(available=True, raw_log_lines=lines[-50:])
 
     for line in reversed(lines):
+        m = RE_TELEMETRY_MODEL.search(line)
+        if m and stats.model is None and stats.input_tokens is None:
+            stats.model = m.group(1)
+            stats.completed_at = _lemonade_timestamp_iso(line)
+
         m = RE_TELEMETRY_INPUT.search(line)
         if m and stats.input_tokens is None:
             stats.input_tokens = int(m.group(1))
@@ -264,6 +271,17 @@ def parse_last_task(
     stats.finish_reason = _infer_finish_reason(stats, configured_max_tokens)
 
     return stats
+
+
+def _lemonade_timestamp_iso(line: str) -> str | None:
+    """Convert Lemonade's local, zone-less log timestamp to an aware ISO string."""
+    m = RE_LEMONADE_TIMESTAMP.match(line)
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S.%f").astimezone(UTC).isoformat()
+    except ValueError:
+        return None
 
 
 def _infer_finish_reason(

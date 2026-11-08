@@ -41,19 +41,9 @@ class TaskHistory:
         task = parse_last_task()
         if not task.available or not task.output_tokens:
             return
-        key = "|".join(
-            [
-                str(task.input_tokens),
-                str(task.output_tokens),
-                str(task.generation_tps),
-                str(task.total_duration_seconds),
-            ]
-        )
-        if key in self._seen_keys:
-            return
         record = TaskRecord(
-            timestamp=datetime.now(UTC).isoformat(),
-            model="current",
+            timestamp=task.completed_at or datetime.now(UTC).isoformat(),
+            model=task.model or "unknown",
             input_tokens=task.input_tokens or 0,
             output_tokens=task.output_tokens or 0,
             prompt_tps=task.prompt_eval_tps or 0,
@@ -61,8 +51,13 @@ class TaskHistory:
             ttft_seconds=task.ttft_seconds or 0,
             total_seconds=task.total_duration_seconds or 0,
             finish_reason=task.finish_reason.reason,
-            finish_confidence=str(task.finish_reason.confidence),
+            finish_confidence=task.finish_reason.confidence.value,
         )
+        # The log timestamp tells repeated identical requests apart; older logs
+        # without one fall back to the metrics alone.
+        key = _task_key(record, with_timestamp=task.completed_at is not None)
+        if key in self._seen_keys:
+            return
         self._tasks.append(record)
         self._seen_keys.add(key)
         self._save()
@@ -93,7 +88,8 @@ class TaskHistory:
             for item in data.get("tasks", []):
                 task = TaskRecord(**item)
                 self._tasks.append(task)
-                self._seen_keys.add(f"{task.input_tokens}|{task.output_tokens}|{task.gen_tps}|{task.total_seconds}")
+                self._seen_keys.add(_task_key(task, with_timestamp=False))
+                self._seen_keys.add(_task_key(task, with_timestamp=True))
         except (OSError, TypeError, ValueError):
             pass
 
@@ -103,3 +99,10 @@ class TaskHistory:
             json.dumps({"tasks": [asdict(task) for task in self._tasks]}, indent=2),
             encoding="utf-8",
         )
+
+
+def _task_key(task: TaskRecord, *, with_timestamp: bool) -> str:
+    parts = [str(task.input_tokens), str(task.output_tokens), str(task.gen_tps), str(task.total_seconds)]
+    if with_timestamp:
+        parts.insert(0, task.timestamp)
+    return "|".join(parts)
