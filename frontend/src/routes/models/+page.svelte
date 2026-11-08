@@ -97,7 +97,7 @@
       const defaults = loadWorkflowDefaults();
       const result = await api.lemonade.smokeTest({
         model_name: modelName,
-        max_tokens: Math.min(defaults.maxOutputTokens, 256),
+        max_tokens: Math.min(defaults.maxOutputTokens, 4096),
         temperature: defaults.temperature,
         app_timeout_seconds: defaults.appTimeoutSeconds,
         stop_sequences: defaults.stopSequences,

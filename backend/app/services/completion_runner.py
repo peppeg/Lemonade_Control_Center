@@ -115,6 +115,7 @@ class CompletionRunner:
                 CompletionError(kind="protocol", message=state.protocol_error, endpoint=endpoint),
             )
         if not state.response_text:
+            _finalize_token_counts(state, request)
             return _result_from_state(
                 request,
                 state,
@@ -122,7 +123,7 @@ class CompletionRunner:
                 endpoint,
                 CompletionError(
                     kind="empty_response",
-                    message="Completion stream ended without assistant response text.",
+                    message=_empty_response_message(state, request),
                     endpoint=endpoint,
                 ),
             )
@@ -310,6 +311,17 @@ def _collect_timings(state: _StreamState, timings: Any) -> None:
         state.server_prompt_tps = float(prompt_tps)
     if isinstance(generation_tps, (int, float)) and generation_tps > 0:
         state.server_generation_tps = float(generation_tps)
+
+
+def _empty_response_message(state: _StreamState, request: CompletionRequest) -> str:
+    if state.reasoning_text and state.finish_reason == "length":
+        return (
+            f"The model spent all {request.max_tokens} output tokens reasoning and never started "
+            "its answer. Raise max_tokens or lower the model's reasoning effort."
+        )
+    if state.reasoning_text:
+        return "Completion stream ended with reasoning but no assistant response text."
+    return "Completion stream ended without assistant response text."
 
 
 def _finalize_metrics(state: _StreamState, request: CompletionRequest, total_seconds: float) -> None:

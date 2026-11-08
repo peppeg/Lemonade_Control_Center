@@ -199,6 +199,29 @@ async def test_runner_returns_empty_response_error_for_metadata_only_stream():
 
 
 @pytest.mark.asyncio
+async def test_runner_explains_when_reasoning_exhausts_max_tokens():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _sse_response(
+            '{"choices":[{"delta":{"reasoning_content":"Let me think about this carefully..."}}]}',
+            '{"choices":[{"delta":{},"finish_reason":"length"}]}',
+            '{"choices":[],"usage":{"prompt_tokens":464,"completion_tokens":64}}',
+            "[DONE]",
+        )
+
+    result = await CompletionRunner(
+        "http://lemonade.test",
+        transport=httpx.MockTransport(handler),
+    ).run(_request())
+
+    assert result.error is not None
+    assert result.error.kind == "empty_response"
+    assert "spent all 64 output tokens reasoning" in result.error.message
+    assert result.input_tokens == 464
+    assert result.output_tokens == 64
+    assert result.token_count_source == "api"
+
+
+@pytest.mark.asyncio
 async def test_runner_returns_structured_http_error_and_closes_rejections():
     responses: list[httpx.Response] = []
 

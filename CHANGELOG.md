@@ -18,6 +18,7 @@ The project is under active development, so entries currently describe the evolv
 
 ### Fixed
 
+- Smoke Test works with reasoning models: the token budget defaults to 1024 (up to 4096, previously capped at 256), token counts are kept when the model produces no answer, and the error says when reasoning used the whole budget.
 - Saved model options are read from Lemonade's `/api/v1/models` (`recipe_options`), falling back to `recipe_options.json`. Current Lemonade moved that file into its private config directory, so the Load dialog showed no saved options.
 - Config updates send dotted keys (e.g. `llamacpp.backend`) as nested sections, as Lemonade 11+ expects.
 - Smoke Test and Bench Lab request `stream_options.include_usage` and use llama.cpp `timings` for throughput, instead of word-count estimates (e.g. 5.4 tok/s reported vs ~33 tok/s real).

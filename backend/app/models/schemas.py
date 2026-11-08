@@ -141,7 +141,9 @@ class SmokeTestRequest(BaseModel):
     """Small post-load request used to verify a loaded model."""
     model_name: str
     prompt: str = "Reply with exactly: LCC_SMOKE_OK"
-    max_tokens: int = Field(default=32, ge=1, le=256)
+    # Reasoning models can spend hundreds of tokens thinking before a one-word
+    # answer; non-reasoning models stop early, so a larger budget costs nothing.
+    max_tokens: int = Field(default=1024, ge=1, le=4096)
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     app_timeout_seconds: int = Field(default=300, ge=1, le=3600)
     stop_sequences: list[str] = Field(default_factory=list)
