@@ -23,7 +23,14 @@ def test_linux_provider_labels_measured_and_unsupported_metrics(monkeypatch):
     )
     monkeypatch.setattr(
         "app.services.telemetry.get_gpu_info",
-        lambda: {"gpu_available": True, "gpu_name": "card0", "gpu_load_percent": 73, "gpu_temp_c": 61.5},
+        lambda: {
+            "gpu_available": True,
+            "gpu_name": "card0",
+            "gpu_load_percent": 73,
+            "gpu_temp_c": 61.5,
+            "gpu_vram_used_gb": 0.15,
+            "gpu_gtt_used_gb": 8.58,
+        },
     )
 
     sample = LinuxTelemetryProvider().sample("start")
@@ -33,6 +40,8 @@ def test_linux_provider_labels_measured_and_unsupported_metrics(monkeypatch):
     assert {metric.name for metric in sample.metrics} >= {"host.ram_used", "llama.rss", "gpu.busy"}
     assert all(metric.quality == "measured" for metric in sample.metrics)
     assert next(metric for metric in sample.metrics if metric.name == "gpu.busy").evidence == "AMDGPU sysfs gpu_busy_percent"
+    gtt = next(metric for metric in sample.metrics if metric.name == "gpu.gtt_used")
+    assert (gtt.value, gtt.unit, gtt.evidence) == (8.58, "GB", "AMDGPU sysfs mem_info_gtt_used")
 
 
 def test_optional_command_provider_reports_unsupported_when_missing(monkeypatch):

@@ -14,6 +14,7 @@
     backendStateLabel,
   } from '$lib/utils/backendReadiness';
   import { formatDuration, formatNumber, formatPercent, formatTPS } from '$lib/utils/format';
+  import { gpuMemory } from '$lib/utils/gpu';
 
   $: data = $dashboardData;
   $: server = data.serverStatus;
@@ -53,6 +54,8 @@
     if (typeof raw !== 'number') return 'Unavailable';
     return `${raw}${suffix}`;
   }
+
+  $: gpuMem = gpuMemory(hardware);
 
   function percentWidth(value: number | null | undefined): string {
     if (typeof value !== 'number') return '0%';
@@ -189,6 +192,19 @@
             {hardware?.gpu_available && typeof hardware.gpu_temp_c === 'number' ? `${hardware.gpu_temp_c.toFixed(1)} C` : 'Temp unavailable'}
           </p>
         </div>
+        {#if gpuMem}
+          <div>
+            <div class="mb-2 flex justify-between text-sm">
+              <span>GPU Memory</span>
+              <span class="text-status-warn">{gpuMem.percent !== null ? formatPercent(gpuMem.percent) : `${gpuMem.usedGb.toFixed(1)} GB`}</span>
+            </div>
+            <div class="ops-progress"><span class="!bg-status-warn" style:width={percentWidth(gpuMem.percent)}></span></div>
+            <p class="mt-2 text-right ops-value text-sm">
+              {gpuMem.totalGb !== null ? `${gpuMem.usedGb.toFixed(1)} / ${gpuMem.totalGb.toFixed(1)} GB` : `${gpuMem.usedGb.toFixed(1)} GB`}
+            </p>
+            <p class="text-right text-xs text-muted-foreground">{gpuMem.detail}</p>
+          </div>
+        {/if}
       </div>
     </article>
 

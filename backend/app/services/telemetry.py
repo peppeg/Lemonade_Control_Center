@@ -70,6 +70,10 @@ class LinuxTelemetryProvider:
                 metrics.append(self._metric("gpu.busy", gpu["gpu_load_percent"], "%", "measured", "AMDGPU sysfs gpu_busy_percent", device))
             if gpu.get("gpu_temp_c") is not None:
                 metrics.append(self._metric("gpu.temperature", gpu["gpu_temp_c"], "C", "measured", "AMDGPU hwmon sysfs", device))
+            if gpu.get("gpu_vram_used_gb") is not None:
+                metrics.append(self._metric("gpu.vram_used", gpu["gpu_vram_used_gb"], "GB", "measured", "AMDGPU sysfs mem_info_vram_used", device))
+            if gpu.get("gpu_gtt_used_gb") is not None:
+                metrics.append(self._metric("gpu.gtt_used", gpu["gpu_gtt_used_gb"], "GB", "measured", "AMDGPU sysfs mem_info_gtt_used", device))
         else:
             evidence = (
                 "Host accelerator telemetry is not enabled for container scope"

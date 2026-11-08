@@ -84,5 +84,7 @@ def _sample() -> DataPoint:
         swap_used_gb=swap.used / (1024**3),
         gpu_load_percent=gpu_info["gpu_load_percent"],
         gpu_temp_c=gpu_info["gpu_temp_c"],
+        gpu_vram_used_gb=gpu_info["gpu_vram_used_gb"],
+        gpu_gtt_used_gb=gpu_info["gpu_gtt_used_gb"],
         temperatures=temperatures,
     )

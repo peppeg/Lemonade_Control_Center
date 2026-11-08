@@ -17,6 +17,8 @@ class DataPoint:
     swap_used_gb: float
     gpu_load_percent: float | None = None
     gpu_temp_c: float | None = None
+    gpu_vram_used_gb: float | None = None
+    gpu_gtt_used_gb: float | None = None
     temperatures: dict[str, float] = field(default_factory=dict)
 
 
@@ -67,6 +69,8 @@ class TimeSeriesBuffer:
             "swap_used": round(point.swap_used_gb, 2),
             "gpu_load_pct": round(point.gpu_load_percent, 1) if point.gpu_load_percent is not None else None,
             "gpu_temp_c": round(point.gpu_temp_c, 1) if point.gpu_temp_c is not None else None,
+            "gpu_vram_used": round(point.gpu_vram_used_gb, 2) if point.gpu_vram_used_gb is not None else None,
+            "gpu_gtt_used": round(point.gpu_gtt_used_gb, 2) if point.gpu_gtt_used_gb is not None else None,
             "temps": {key: round(value, 1) for key, value in point.temperatures.items()},
         }
 
