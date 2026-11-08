@@ -392,6 +392,18 @@ class LemonadeProvider(LLMProvider):
         if "llamacpp_backend" in updates and "llamacpp.backend" not in updates:
             updates["llamacpp.backend"] = updates.pop("llamacpp_backend")
 
+        # Transform dotted keys (e.g. "llamacpp.backend") into nested dicts for Lemonade 11+
+        nested_updates: dict = {}
+        for k, v in updates.items():
+            if "." in k:
+                section, subkey = k.split(".", 1)
+                if section not in nested_updates or not isinstance(nested_updates[section], dict):
+                    nested_updates[section] = {}
+                nested_updates[section][subkey] = v
+            else:
+                nested_updates[k] = v
+        updates = nested_updates
+
         resp = await self._post("/internal/set", updates, headers=self.admin_headers)
         if resp.status_code != 200:
             raise HTTPException(resp.status_code, f"Config update failed: {resp.text[:300]}")
