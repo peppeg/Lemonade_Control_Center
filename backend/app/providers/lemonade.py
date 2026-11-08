@@ -106,6 +106,28 @@ class LemonadeProvider(LLMProvider):
         except httpx.TimeoutException:
             raise HTTPException(504, f"Lemonade request timed out: {path}")
 
+    async def probe_anonymous_access(self) -> dict:
+        """Check which Lemonade endpoint groups answer without credentials.
+
+        Returns None for a group when the probe could not tell (unreachable or an
+        unexpected status), so callers never report exposure they did not observe.
+        """
+        result: dict = {"internal_open": None, "api_open": None, "host": None}
+        try:
+            async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
+                internal = await client.get(f"{self.base_url}/internal/config")
+                api = await client.get(f"{self.base_url}/api/v1/models")
+        except httpx.HTTPError:
+            return result
+        result["internal_open"] = _access_state(internal.status_code)
+        result["api_open"] = _access_state(api.status_code)
+        if internal.status_code == 200:
+            try:
+                result["host"] = internal.json().get("host")
+            except ValueError:
+                pass
+        return result
+
     async def get_health(self) -> LemonadeHealthResponse:
         resp = await self._get("/api/v1/health")
         if resp.status_code != 200:
@@ -470,3 +492,11 @@ def _validate_llamacpp_args(value: str | None) -> None:
             "Blocked llamacpp_args managed by Lemonade: "
             f"{joined}. Use dedicated Lemonade fields instead of manual args.",
         )
+
+
+def _access_state(status_code: int) -> bool | None:
+    if status_code == 200:
+        return True
+    if status_code in {401, 403}:
+        return False
+    return None
