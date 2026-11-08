@@ -20,7 +20,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -242,7 +242,7 @@ async def probe_websocket(base_url: str, ws_port: int) -> dict:
                     "sample_message_type": type(msg).__name__,
                     "sample_message_preview": str(msg)[:200]
                 }
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return {
                     "status": "ok_no_data",
                     "port": ws_port,
@@ -266,7 +266,7 @@ async def run_probe(config: ProbeConfig) -> ProbeSummary:
     """Esegue il probe completo."""
 
     summary = ProbeSummary(
-        probe_timestamp=datetime.now(timezone.utc).isoformat(),
+        probe_timestamp=datetime.now(UTC).isoformat(),
         lemonade_url=config.lemonade_url,
         admin_key_configured=config.admin_key is not None
     )
