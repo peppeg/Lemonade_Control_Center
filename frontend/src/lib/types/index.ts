@@ -280,6 +280,10 @@ export interface HardwareInfo {
   gpu_name: string | null;
   gpu_load_percent: number | null;
   gpu_temp_c: number | null;
+  gpu_vram_used_gb?: number | null;
+  gpu_vram_total_gb?: number | null;
+  gpu_gtt_used_gb?: number | null;
+  gpu_gtt_total_gb?: number | null;
   disk_total_gb: number | null;
   disk_used_gb: number | null;
   disk_free_gb: number | null;
@@ -710,6 +714,8 @@ export interface MetricPoint {
   swap_used: number;
   gpu_load_pct: number | null;
   gpu_temp_c: number | null;
+  gpu_vram_used?: number | null;
+  gpu_gtt_used?: number | null;
   temps: Record<string, number>;
 }
 

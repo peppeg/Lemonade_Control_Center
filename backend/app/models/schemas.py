@@ -300,6 +300,10 @@ class HardwareInfo(BaseModel):
     gpu_name: str | None = None
     gpu_load_percent: float | None = None
     gpu_temp_c: float | None = None
+    gpu_vram_used_gb: float | None = None
+    gpu_vram_total_gb: float | None = None
+    gpu_gtt_used_gb: float | None = None
+    gpu_gtt_total_gb: float | None = None
     disk_total_gb: float | None = None
     disk_used_gb: float | None = None
     disk_free_gb: float | None = None

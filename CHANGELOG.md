@@ -6,6 +6,10 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+### Added
+
+- AMD GPU memory telemetry: Dashboard, System, Hardware and run telemetry now show GTT and VRAM usage from amdgpu sysfs. On APUs such as Strix Halo model weights live mostly in GTT, which `llama-server` RSS and dedicated VRAM do not reflect.
+
 ### Changed
 
 - Settings and Setup now show the LCC host environment and telemetry scope detected by the backend instead of presenting an unused manual OS-type selector. Existing `os_type` configuration remains readable for backward compatibility.

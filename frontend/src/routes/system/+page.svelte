@@ -7,6 +7,7 @@
   import { AlertTriangle, Bug, Cpu, Download, HardDrive, RefreshCw, Server, Thermometer } from 'lucide-svelte';
   import type { HardwareInfo } from '$lib/types';
   import { formatDuration, formatGB, formatPercent } from '$lib/utils/format';
+  import { gpuMemory } from '$lib/utils/gpu';
 
   interface TemperatureReading {
     label: string;
@@ -82,6 +83,8 @@
 
     loading = false;
   }
+
+  $: gpuMem = gpuMemory(hardware);
 
   function percentWidth(value: number | null | undefined): string {
     if (typeof value !== 'number') return '0%';
@@ -167,6 +170,13 @@
       <p class="mt-4 text-right ops-value">
         {hardware?.gpu_available && typeof hardware.gpu_temp_c === 'number' ? `${hardware.gpu_temp_c.toFixed(1)} C` : 'Temp unavailable'}
       </p>
+      {#if gpuMem}
+        <div class="mt-3 flex justify-between text-xs text-muted-foreground">
+          <span>Memory</span>
+          <span class="ops-value">{bytesLabel(gpuMem.usedGb, gpuMem.totalGb)}</span>
+        </div>
+        <p class="mt-1 text-right text-xs text-muted-foreground">{gpuMem.detail}</p>
+      {/if}
     </article>
   </section>
 

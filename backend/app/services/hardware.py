@@ -60,9 +60,9 @@ def get_hardware_info(model_cache_path: str | None = None) -> HardwareInfo:
     )
 
 
-def get_gpu_info() -> dict:
+def get_gpu_info(drm_root: Path = Path("/sys/class/drm")) -> dict:
     """Read lightweight AMDGPU telemetry from sysfs when available."""
-    for card in sorted(Path("/sys/class/drm").glob("card[0-9]*")):
+    for card in sorted(drm_root.glob("card[0-9]*")):
         device = card / "device"
         vendor = _read_text(device / "vendor")
         if vendor and vendor.lower() != "0x1002":
@@ -78,6 +78,12 @@ def get_gpu_info() -> dict:
             "gpu_name": card.name,
             "gpu_load_percent": load,
             "gpu_temp_c": temp,
+            # APUs such as Strix Halo keep most model weights in GTT (shared system
+            # memory), so dedicated VRAM alone badly understates GPU memory use.
+            "gpu_vram_used_gb": _read_gb(device / "mem_info_vram_used"),
+            "gpu_vram_total_gb": _read_gb(device / "mem_info_vram_total"),
+            "gpu_gtt_used_gb": _read_gb(device / "mem_info_gtt_used"),
+            "gpu_gtt_total_gb": _read_gb(device / "mem_info_gtt_total"),
         }
 
     return {
@@ -85,6 +91,10 @@ def get_gpu_info() -> dict:
         "gpu_name": None,
         "gpu_load_percent": None,
         "gpu_temp_c": None,
+        "gpu_vram_used_gb": None,
+        "gpu_vram_total_gb": None,
+        "gpu_gtt_used_gb": None,
+        "gpu_gtt_total_gb": None,
     }
 
 
@@ -94,6 +104,13 @@ def _read_amdgpu_temp_c(device: Path) -> float | None:
         if value is not None:
             return round(value / 1000, 1)
     return None
+
+
+def _read_gb(path: Path) -> float | None:
+    value = _read_float(path)
+    if value is None:
+        return None
+    return round(value / (1024**3), 2)
 
 
 def _read_text(path: Path) -> str | None:
