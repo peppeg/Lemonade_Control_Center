@@ -9,6 +9,7 @@ The project is under active development, so entries currently describe the evolv
 ### Added
 
 - AMD GPU memory telemetry: Dashboard, System, Hardware and run telemetry now show GTT and VRAM usage from amdgpu sysfs. On APUs such as Strix Halo model weights live mostly in GTT, which `llama-server` RSS and dedicated VRAM do not reflect.
+- Diagnostics rule `lemonade_exposed`: warns when Lemonade listens on a non-loopback address and answers `/internal/config` (high) or `/api/v1` (medium) without credentials, with the exact key to set.
 
 ### Changed
 

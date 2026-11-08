@@ -45,6 +45,10 @@ class SystemState:
         self.has_internal_config = False
         self.has_internal_set = False
         self.has_admin_key = False
+        self.lemonade_url: str | None = None
+        self.lemonade_host: str | None = None
+        self.anonymous_internal_access: bool | None = None
+        self.anonymous_api_access: bool | None = None
 
 
 RuleFunc = Callable[[SystemState], Awaitable[RuleResult | None]]

@@ -27,6 +27,15 @@ async def collect_full_state() -> SystemState:
     state.has_internal_config = capabilities.internal_config
     state.has_internal_set = capabilities.internal_set
 
+    state.lemonade_url = provider.base_url
+    try:
+        access = await provider.probe_anonymous_access()
+        state.anonymous_internal_access = access["internal_open"]
+        state.anonymous_api_access = access["api_open"]
+        state.lemonade_host = access["host"]
+    except Exception:
+        pass
+
     try:
         health = await provider.get_health()
         state.server_healthy = health.status in {"ok", "running"}
@@ -52,6 +61,7 @@ async def collect_full_state() -> SystemState:
         state.llamacpp_backend = _str(raw.get("llamacpp_backend") or raw.get("backend"))
         state.max_tokens = _int(raw.get("max_tokens"))
         state.temperature = _float(raw.get("temperature"))
+        state.lemonade_host = state.lemonade_host or _str(raw.get("host"))
     except Exception:
         pass
 

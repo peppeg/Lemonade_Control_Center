@@ -1,6 +1,9 @@
 """Diagnostic rules for Lemonade Control Center."""
 from __future__ import annotations
 
+from ipaddress import ip_address
+from urllib.parse import urlsplit
+
 from app.services.diagnostics.engine import SystemState, diagnostic_rule
 from app.services.diagnostics.models import DiagnosticAlert, RuleResult, Severity
 
@@ -254,3 +257,52 @@ async def no_model(state: SystemState):
         "Load a model from the Models page.",
         {"server_healthy": state.server_healthy, "loaded_model": state.loaded_model},
     )
+
+
+@diagnostic_rule("lemonade_exposed", "Lemonade Exposed", "Detects Lemonade reachable from the network without authentication.")
+async def lemonade_exposed(state: SystemState):
+    url_host = urlsplit(state.lemonade_url or "").hostname
+    if _is_loopback(state.lemonade_host) and _is_loopback(url_host):
+        return None
+
+    evidence = {
+        "lemonade_host": state.lemonade_host,
+        "lemonade_url": state.lemonade_url,
+        "anonymous_internal_access": state.anonymous_internal_access,
+        "anonymous_api_access": state.anonymous_api_access,
+    }
+    if state.anonymous_internal_access:
+        return _result(
+            "lemonade_exposed",
+            "Lemonade Exposed",
+            Severity.high,
+            "Lemonade is reachable from the network without an API key",
+            "Lemonade listens on a non-loopback address and answered /internal/config without credentials.",
+            "Anyone on the network can load, delete or pull models and change Lemonade's configuration.",
+            "Set LEMONADE_API_KEY (secures every endpoint) in Lemonade's environment, e.g. /etc/default/lemond, restart lemond, "
+            "and add the same key to the LCC runtime. Alternatively bind Lemonade to 127.0.0.1.",
+            evidence,
+        )
+    if state.anonymous_api_access:
+        return _result(
+            "lemonade_exposed",
+            "Lemonade Exposed",
+            Severity.medium,
+            "Lemonade inference endpoints are open to the network",
+            "The /internal/* endpoints are protected, but /api/v1 answered without credentials.",
+            "Anyone on the network can run inference and manage models; only configuration changes are protected.",
+            "Set LEMONADE_API_KEY in addition to LEMONADE_ADMIN_API_KEY, restart lemond, and add the key to the LCC runtime.",
+            evidence,
+        )
+    return None
+
+
+def _is_loopback(host: str | None) -> bool:
+    if host is None:
+        return True
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
