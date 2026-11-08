@@ -109,6 +109,7 @@ export interface LemonadeHealth {
 
 export interface LemonadeSavedOptions {
   available: boolean;
+  source?: 'api' | 'file';
   path: string;
   options: Record<string, Record<string, unknown>>;
   model_name: string | null;

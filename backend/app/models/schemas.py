@@ -272,8 +272,13 @@ class LemonadeConfigResponse(BaseModel):
 
 
 class LemonadeSavedOptionsResponse(BaseModel):
-    """Saved per-model Lemonade load options from recipe_options.json."""
+    """Saved per-model Lemonade load options.
+
+    source="api": /api/v1/models (Lemonade merges model defaults with saved
+    options); source="file": a readable recipe_options.json (older Lemonade).
+    """
     available: bool = False
+    source: Literal["api", "file"] = "file"
     path: str
     options: dict[str, dict] = Field(default_factory=dict)
     model_name: str | None = None

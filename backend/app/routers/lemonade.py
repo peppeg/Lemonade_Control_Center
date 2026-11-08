@@ -45,7 +45,7 @@ from app.services.backend_readiness import (
     install_ready_backend,
 )
 from app.services.completion_runner import CompletionRunner
-from app.services.lemonade_options import read_saved_options
+from app.services.lemonade_options import read_saved_options, saved_options_from_api
 from app.services.run_evidence import (
     LoadEvidenceRecorder,
     RunEvidenceStorage,
@@ -106,8 +106,14 @@ async def running_models(provider: LemonadeProvider = Depends(get_provider)):
 
 
 @router.get("/saved-options", response_model=LemonadeSavedOptionsResponse)
-async def saved_options(model_name: str | None = None):
-    """Read Lemonade's official saved per-model load options."""
+async def saved_options(
+    model_name: str | None = None,
+    provider: LemonadeProvider = Depends(get_provider),
+):
+    """Read Lemonade's per-model load options, preferring the API over the file."""
+    options = await provider.get_recipe_options()
+    if options is not None:
+        return saved_options_from_api(options, f"{provider.base_url}/api/v1/models", model_name)
     return read_saved_options(model_name)
 
 

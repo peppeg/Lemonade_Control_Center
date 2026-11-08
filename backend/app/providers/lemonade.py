@@ -158,6 +158,31 @@ class LemonadeProvider(LLMProvider):
             raise HTTPException(resp.status_code, resp.text)
         return resp.json()
 
+    async def get_recipe_options(self) -> dict[str, dict] | None:
+        """Per-model load options as reported by /api/v1/models.
+
+        Newer Lemonade keeps recipe_options.json in its private config directory
+        and exposes each model's options here instead. Returns None when the
+        server does not report them (older Lemonade) or cannot be queried.
+        """
+        try:
+            resp = await asyncio.wait_for(self._get("/api/v1/models", timeout=5.0), timeout=5.5)
+        except Exception:
+            return None
+        if resp.status_code != 200:
+            return None
+        try:
+            models = resp.json().get("data", [])
+        except ValueError:
+            return None
+        if not any(isinstance(m, dict) and "recipe_options" in m for m in models):
+            return None
+        return {
+            str(m["id"]): m["recipe_options"]
+            for m in models
+            if isinstance(m, dict) and m.get("id") and isinstance(m.get("recipe_options"), dict) and m["recipe_options"]
+        }
+
     async def list_models(self, include_catalog: bool = False) -> ModelsListResponse:
         """List local and catalog models, marking which ones are already downloaded."""
 

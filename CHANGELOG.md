@@ -18,6 +18,9 @@ The project is under active development, so entries currently describe the evolv
 
 ### Fixed
 
+- Saved model options are read from Lemonade's `/api/v1/models` (`recipe_options`), falling back to `recipe_options.json`. Current Lemonade moved that file into its private config directory, so the Load dialog showed no saved options.
+- Config updates send dotted keys (e.g. `llamacpp.backend`) as nested sections, as Lemonade 11+ expects.
+- Smoke Test and Bench Lab request `stream_options.include_usage` and use llama.cpp `timings` for throughput, instead of word-count estimates (e.g. 5.4 tok/s reported vs ~33 tok/s real).
 - Task history (Hardware charts, `/api/metrics/tasks` and its CSV export) now records the model name and completion time from Lemonade's telemetry line instead of `model: "current"` and the time LCC happened to read the log. Identical back-to-back requests are no longer collapsed into one entry. `finish_confidence` is stored as `inferred`/`confirmed` instead of the enum repr.
 - Parsed Lemonade 11.7 single-line telemetry (`in=`, `out=`, `ttft=`, `tps=`) so Dashboard and Logs & Stats no longer show "Unavailable" for current-generation logs; legacy per-line telemetry is still supported. (Contributed by @dolaresko, PR #22)
 
