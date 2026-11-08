@@ -8,6 +8,24 @@ from app.config import settings
 from app.models.schemas import LemonadeSavedOptionsResponse
 
 
+def saved_options_from_api(
+    options: dict[str, dict],
+    source_url: str,
+    model_name: str | None = None,
+) -> LemonadeSavedOptionsResponse:
+    """Build the saved-options response from Lemonade's per-model API data."""
+    selected_key = _find_model_key(options, model_name) if model_name else None
+    return LemonadeSavedOptionsResponse(
+        available=True,
+        source="api",
+        path=source_url,
+        options=options,
+        model_name=model_name,
+        selected_key=selected_key,
+        selected_options=options.get(selected_key) if selected_key else None,
+    )
+
+
 def read_saved_options(model_name: str | None = None) -> LemonadeSavedOptionsResponse:
     """Read recipe_options.json and optionally select the entry for one model."""
     path = Path(settings.lemonade_recipe_options_file)
