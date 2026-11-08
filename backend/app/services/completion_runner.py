@@ -24,6 +24,8 @@ class _StreamState:
     token_count_source: str = "unavailable"
     input_tokens_from_api: bool = False
     output_tokens_from_api: bool = False
+    server_prompt_tps: float | None = None
+    server_generation_tps: float | None = None
     finish_reason: str = "unknown"
     finish_confidence: str = "unknown"
     ttft_seconds: float | None = None
@@ -209,6 +211,7 @@ async def _consume_stream(
             break
 
         _collect_usage(state, chunk.get("usage"))
+        _collect_timings(state, chunk.get("timings"))
         choices = chunk.get("choices")
         if not isinstance(choices, list):
             continue
@@ -262,6 +265,7 @@ def _payload(request: CompletionRequest) -> dict[str, Any]:
         "max_tokens": request.max_tokens,
         "temperature": request.temperature,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
     if request.stop_sequences:
         payload["stop"] = request.stop_sequences
@@ -296,6 +300,18 @@ def _collect_usage(state: _StreamState, usage: Any) -> None:
         state.output_tokens_from_api = True
 
 
+def _collect_timings(state: _StreamState, timings: Any) -> None:
+    # llama.cpp reports server-side throughput, which excludes HTTP and streaming overhead.
+    if not isinstance(timings, dict):
+        return
+    prompt_tps = timings.get("prompt_per_second")
+    generation_tps = timings.get("predicted_per_second")
+    if isinstance(prompt_tps, (int, float)) and prompt_tps > 0:
+        state.server_prompt_tps = float(prompt_tps)
+    if isinstance(generation_tps, (int, float)) and generation_tps > 0:
+        state.server_generation_tps = float(generation_tps)
+
+
 def _finalize_metrics(state: _StreamState, request: CompletionRequest, total_seconds: float) -> None:
     _finalize_token_counts(state, request)
     if state.finish_reason == "unknown":
@@ -325,6 +341,12 @@ def _result_from_state(
 ) -> CompletionResult:
     ttft = state.ttft_seconds or 0.0
     generation_seconds = max(0.001, total_seconds - ttft)
+    prompt_eval_tps = state.server_prompt_tps
+    if prompt_eval_tps is None:
+        prompt_eval_tps = state.input_tokens / max(ttft, 0.001) if state.input_tokens else 0
+    generation_tps = state.server_generation_tps
+    if generation_tps is None:
+        generation_tps = state.output_tokens / generation_seconds if state.output_tokens else 0
     return CompletionResult(
         model=request.model,
         response_text=state.response_text,
@@ -332,8 +354,8 @@ def _result_from_state(
         input_tokens=state.input_tokens,
         output_tokens=state.output_tokens,
         token_count_source=state.token_count_source,
-        prompt_eval_tps=round(state.input_tokens / max(ttft, 0.001), 2) if state.input_tokens else 0,
-        generation_tps=round(state.output_tokens / generation_seconds, 2) if state.output_tokens else 0,
+        prompt_eval_tps=round(prompt_eval_tps, 2),
+        generation_tps=round(generation_tps, 2),
         ttft_seconds=round(ttft, 3),
         total_seconds=round(total_seconds, 2),
         finish_reason=state.finish_reason,
