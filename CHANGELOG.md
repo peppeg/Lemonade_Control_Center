@@ -17,6 +17,7 @@ The project is under active development, so entries currently describe the evolv
 ### Fixed
 
 - The last task reads `in=`, `out=`, `ttft=` and `tps=` from `Inference completed` lines only. The same words on any other line were taken for its numbers.
+- In the older log format (one field per line), a repeated field ends the last task: after `Input tokens: 80`, `Output tokens: 24`, `Output tokens: 9`, a following `TPS: 12` is no longer taken for it, since it belongs to a task whose first line is missing. Its TPS is shown as missing.
 
 ## 0.3.2 - 2026-11-24
 

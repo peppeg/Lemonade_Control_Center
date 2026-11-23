@@ -241,6 +241,15 @@ def test_the_older_format_keeps_the_first_value_of_each_field(monkeypatch):
     assert (stats.output_tokens, stats.generation_tps) == (24, 12.0)
 
 
+def test_a_repeated_field_on_its_own_line_ends_the_older_format_record(monkeypatch):
+    """The lines after it belong to a task whose first line is missing."""
+    _fake_journal(monkeypatch, ["Input tokens: 80", "Output tokens: 24", "Output tokens: 9", "TPS: 12"])
+
+    stats = parse_last_task()
+
+    assert (stats.input_tokens, stats.output_tokens, stats.generation_tps) == (80, 24, None)
+
+
 def test_stray_fields_after_a_record_do_not_change_it(monkeypatch):
     _fake_journal(monkeypatch, [*_task(9, 27, 134, 5.3), "Server note: tps=999", "Output tokens: 5"])
 
