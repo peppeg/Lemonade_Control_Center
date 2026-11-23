@@ -108,3 +108,26 @@ def test_undated_records_with_different_metrics_are_both_stored(monkeypatch, tmp
     history.refresh_from_logs()
 
     assert history.count() == 2
+
+
+def test_a_moving_window_over_legacy_records_stores_each_record_once(monkeypatch, tmp_path):
+    records = [
+        line
+        for input_tokens, output_tokens in ((40, 12), (80, 24), (120, 36))
+        for line in (
+            f"Input tokens: {input_tokens}",
+            f"Output tokens: {output_tokens}",
+            "TTFT (s): 0.50",
+            f"TPS: {output_tokens / 2}",
+        )
+    ]
+    windows = [records[dropped:] for dropped in (3, 2, 1, 0)] + [records[:10], records]
+    history = _history(monkeypatch, tmp_path, windows)
+
+    for _ in windows:
+        history.refresh_from_logs()
+
+    stored = history.get_recent(refresh=False)
+    assert sorted((row["input_tokens"], row["output_tokens"]) for row in stored) == [
+        (40, 12), (80, 24), (120, 36)
+    ]

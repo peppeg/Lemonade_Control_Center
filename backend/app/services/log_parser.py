@@ -253,12 +253,53 @@ def _read_last_task(lines: list[str], stats: LastTaskStats) -> None:
 def _last_telemetry_record(lines: list[str]) -> tuple[dict, int, int]:
     """The newest telemetry record, and the range of lines that can concern it.
 
-    A record is one `Inference completed` line, or the older format with one
-    field per line. Both begin with the input tokens. The range goes from the
-    end of the previous record to the end of this one.
+    The range goes from the end of the previous record to the end of this one.
     """
-    record: dict = {}
-    start = end = 0
+    found = _telemetry_records(lines)
+    if not found:
+        return {}, 0, 0
+    last = found[-1]
+    record = dict(last.fields)
+    if "ttft_seconds" in record:
+        record["ttft_seconds"] = round(record["ttft_seconds"], 2)
+    if "model" in record:
+        line = next(lines[i] for i in last.lines if RE_TELEMETRY_MODEL.search(lines[i]))
+        record["completed_at"] = _lemonade_timestamp_iso(line)
+    start = found[-2].end if len(found) > 1 else 0
+    return record, start, last.end
+
+
+@dataclass
+class _TelemetryLines:
+    """The lines of one telemetry record, and the fields read from them."""
+
+    lines: list[int]
+    fields: dict
+    # A line with nothing new for the record ended it.
+    closed: bool = False
+
+    @property
+    def end(self) -> int:
+        return self.lines[-1] + 1
+
+
+def _telemetry_records(lines: list[str]) -> list[_TelemetryLines]:
+    """Split journal lines into telemetry records, oldest first.
+
+    A record is one `Inference completed` line, or the older format with one
+    field per line (Input tokens, Output tokens, TTFT, TPS). Both begin with
+    the input tokens, so an input-token count always starts a new record,
+    and a window that starts inside a record cannot shift the fields of
+    later ones. Lines before the first input-token count belong to a record
+    whose start is not in the window, and are skipped.
+
+    A later line adds the fields the record does not have yet, and the first
+    value of each field is kept. A line with nothing new ends the record:
+    the lines up to the next input-token count belong to a record whose
+    first line is missing, and are skipped, so one record never takes the
+    fields of another.
+    """
+    records: list[_TelemetryLines] = []
     for index, line in enumerate(lines):
         fields: dict = {}
         if m := RE_TELEMETRY_INPUT.search(line):
@@ -266,20 +307,23 @@ def _last_telemetry_record(lines: list[str]) -> tuple[dict, int, int]:
         if m := RE_TELEMETRY_OUTPUT.search(line):
             fields["output_tokens"] = int(m.group(1))
         if m := RE_TELEMETRY_TTFT.search(line):
-            fields["ttft_seconds"] = round(float(m.group(1)), 2)
+            fields["ttft_seconds"] = float(m.group(1))
         if m := RE_TELEMETRY_TPS.search(line):
             fields["generation_tps"] = float(m.group(1))
         if m := RE_TELEMETRY_MODEL.search(line):
             fields["model"] = m.group(1)
-            fields["completed_at"] = _lemonade_timestamp_iso(line)
 
         if "input_tokens" in fields:
-            start, record = end, {}
-        elif not record or fields.keys() <= record.keys():
+            records.append(_TelemetryLines(lines=[], fields={}))
+        elif not fields or not records or records[-1].closed:
             continue
-        record = fields | record
-        end = index + 1
-    return record, start, end
+        elif fields.keys() <= records[-1].fields.keys():
+            records[-1].closed = True
+            continue
+        record = records[-1]
+        record.lines.append(index)
+        record.fields = fields | record.fields
+    return records
 
 
 def _task_timings(lines: list[str], start: int) -> list[_TaskTimings]:
@@ -504,8 +548,8 @@ class TaskTelemetryRecord:
     generation_tps: float
     prompt_eval_tps: float
     total_duration_seconds: float
-    # False when no log line carried a timestamp and `timestamp` is the time
-    # the record was read. Such a record cannot be told apart by time.
+    # False when none of the record's own lines carried a timestamp and
+    # `timestamp` is the time it was read. It cannot be told apart by time.
     dated: bool = True
 
     @property
@@ -540,55 +584,48 @@ def extract_task_records(lines: list[str]) -> list[TaskTelemetryRecord]:
 
     Handles both spellings parse_last_task() accepts: the Lemonade 11.7
     single-line record, where all fields share one line, and the legacy
-    per-field lines, where they arrive one after another. A partial record is
-    flushed as soon as a field it already holds shows up again, which is what
-    separates two consecutive tasks in the legacy format.
+    per-field lines (Input tokens, Output tokens, TTFT, TPS), where they
+    arrive one after another.
+
+    The result for a record must not depend on where the journal window
+    starts or ends, or the same inference would be stored twice as the
+    window moves:
+
+    * an input-token count always starts a new record, so a window that
+      starts inside a record cannot shift the fields of later ones;
+    * a record without an input-token count lost its start to the window
+      edge and is dropped;
+    * a line with nothing new for a record ends it, so one record never
+      takes the fields of another whose input-token line was lost;
+    * the last record is kept only once all four fields are there, since
+      the rest of it may still be on its way to the journal;
+    * a record is dated by its own lines only, never by an earlier line.
+
+    The records are split as for parse_last_task(); see _telemetry_records().
     """
     records: list[TaskTelemetryRecord] = []
-    pending: dict[str, object] = {}
-    last_timestamp: str | None = None
-
-    def flush() -> None:
+    telemetry = _telemetry_records(lines)
+    for position, found in enumerate(telemetry):
+        if (
+            position == len(telemetry) - 1
+            and not found.closed
+            and not all(key in found.fields for key in _RECORD_FIELDS)
+        ):
+            continue
+        pending: dict[str, object] = dict(found.fields)
+        if "ttft_seconds" in pending:
+            pending["ttft_seconds"] = round(pending["ttft_seconds"], 2)
+        pending["timestamp"] = next(
+            (stamp for index in found.lines if (stamp := _line_timestamp(lines[index]))), None
+        )
         record = _build_task_record(pending)
         if record is not None:
             records.append(record)
-        pending.clear()
-
-    for line in lines:
-        line_timestamp = _line_timestamp(line)
-        if line_timestamp:
-            last_timestamp = line_timestamp
-
-        fields: dict[str, object] = {}
-        match = RE_TELEMETRY_INPUT.search(line)
-        if match:
-            fields["input_tokens"] = int(match.group(1))
-        match = RE_TELEMETRY_OUTPUT.search(line)
-        if match:
-            fields["output_tokens"] = int(match.group(1))
-        match = RE_TELEMETRY_TTFT.search(line)
-        if match:
-            fields["ttft_seconds"] = round(float(match.group(1)), 2)
-        match = RE_TELEMETRY_TPS.search(line)
-        if match:
-            fields["generation_tps"] = float(match.group(1))
-
-        if not fields:
-            continue
-
-        # A repeated field means the previous record ended and a new one began.
-        if any(key in pending for key in fields):
-            flush()
-
-        match = RE_TELEMETRY_MODEL.search(line)
-        if match:
-            fields["model"] = match.group(1)
-
-        pending.update(fields)
-        pending.setdefault("timestamp", last_timestamp)
-
-    flush()
     return records
+
+
+# The fields every telemetry record carries, in both spellings.
+_RECORD_FIELDS = ("input_tokens", "output_tokens", "ttft_seconds", "generation_tps")
 
 
 def _build_task_record(pending: dict[str, object]) -> TaskTelemetryRecord | None:

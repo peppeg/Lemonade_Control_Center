@@ -290,6 +290,97 @@ def test_extract_task_records_splits_consecutive_legacy_records():
     assert not any(record.dated for record in records)
 
 
+# Three legacy records, one field per line, as older Lemonade logged them.
+LEGACY_RECORDS = [(40, 12, 22.5), (80, 24, 20.0), (120, 36, 18.0)]
+LEGACY_WINDOW = [
+    line
+    for input_tokens, output_tokens, tps in LEGACY_RECORDS
+    for line in (
+        f"Input tokens: {input_tokens}",
+        f"Output tokens: {output_tokens}",
+        "TTFT (s): 0.50",
+        f"TPS: {tps}",
+    )
+]
+
+
+def _identities(records):
+    return [(r.input_tokens, r.output_tokens, r.generation_tps) for r in records]
+
+
+def test_a_window_starting_inside_a_legacy_record_does_not_shift_later_ones():
+    """Reported in review: the window started at an Output tokens line."""
+    for dropped in (1, 2, 3):
+        records = extract_task_records(LEGACY_WINDOW[dropped:])
+
+        assert _identities(records) == LEGACY_RECORDS[1:], f"first {dropped} lines dropped"
+
+
+def test_a_legacy_record_still_being_written_is_left_for_the_next_read():
+    for kept in (1, 2, 3):
+        window = LEGACY_WINDOW[: 8 + kept]
+
+        assert _identities(extract_task_records(window)) == LEGACY_RECORDS[:2], f"{kept} lines"
+
+    assert _identities(extract_task_records(LEGACY_WINDOW)) == LEGACY_RECORDS
+
+
+def test_every_window_yields_only_true_legacy_records():
+    """Wherever the window starts and ends, no record is invented."""
+    for start in range(len(LEGACY_WINDOW)):
+        for end in range(start, len(LEGACY_WINDOW) + 1):
+            found = _identities(extract_task_records(LEGACY_WINDOW[start:end]))
+            whole = [
+                record
+                for index, record in enumerate(LEGACY_RECORDS)
+                if start <= 4 * index and 4 * index + 4 <= end
+            ]
+
+            assert found == whole, (start, end)
+
+
+def test_a_legacy_record_missing_its_input_line_does_not_borrow_one():
+    """A record whose start was lost mid-journal is dropped, not merged."""
+    window = LEGACY_WINDOW[:4] + LEGACY_WINDOW[5:]
+
+    assert _identities(extract_task_records(window)) == [LEGACY_RECORDS[0], LEGACY_RECORDS[2]]
+
+
+def test_a_legacy_record_with_a_lost_line_does_not_borrow_from_the_next():
+    """The next record lost its input line: its TTFT is not the first one's."""
+    window = ["Input tokens: 40", "Output tokens: 12", "TPS: 22.5", "Output tokens: 24", "TTFT (s): 1.10", "TPS: 20.0"]
+
+    records = extract_task_records(window)
+
+    assert _identities(records) == [(40, 12, 22.5)]
+    assert records[0].ttft_seconds == 0.0
+
+
+def test_the_last_task_does_not_borrow_from_a_record_that_lost_its_input_line(monkeypatch):
+    _fake_journal(monkeypatch, ["Input tokens: 40", "Output tokens: 12", "Output tokens: 24", "TTFT (s): 1.10", "TPS: 20.0"])
+
+    stats = parse_last_task()
+
+    assert (stats.input_tokens, stats.output_tokens, stats.ttft_seconds, stats.generation_tps) == (40, 12, None, None)
+
+
+def test_a_repeated_field_keeps_its_first_value_as_in_the_last_task():
+    """Stored records are split like the last task (#52)."""
+    records = extract_task_records(["Input tokens: 80", "Output tokens: 24", "out=9, tps=12.0", "TTFT (s): 0.50"])
+
+    assert _identities(records) == [(80, 24, 12.0)]
+
+
+def test_a_record_is_not_dated_by_an_earlier_unrelated_line():
+    """Otherwise its time would change when that line leaves the window."""
+    records = extract_task_records([
+        "2026-08-22 10:11:10.139 [Info] (Server) POST /api/v1/chat/completions - 200 OK",
+        *LEGACY_WINDOW[:4],
+    ])
+
+    assert [record.dated for record in records] == [False]
+
+
 def test_extract_task_records_drops_records_without_output_tokens():
     """A request that produced nothing is not a data point."""
     assert extract_task_records([
