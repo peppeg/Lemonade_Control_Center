@@ -26,7 +26,7 @@ SERVERS = [pytest.param(None, id="headers-ignored"), pytest.param(LOOPBACK, id="
 def audit_log(monkeypatch, tmp_path):
     path = tmp_path / "audit.jsonl"
     monkeypatch.setattr("app.services.security.AUDIT_LOG", path)
-    monkeypatch.setattr("app.services.security._warned_about_forwarding", False)
+    monkeypatch.setattr("app.services.security._warned", set())
     monkeypatch.setattr("app.config.settings.require_auth", False)
     monkeypatch.setattr("app.config.settings.lcc_api_key", KEY)
     monkeypatch.setattr("app.config.settings.allowed_origins", "")
@@ -37,7 +37,7 @@ def audit_log(monkeypatch, tmp_path):
 def _client(target, trusted: str | None, peer: str) -> TestClient:
     if trusted is not None:
         target = ProxyHeadersMiddleware(target, trusted_hosts=trusted)
-    return TestClient(target, client=(peer, 50000))
+    return TestClient(target, base_url="http://127.0.0.1:17600", client=(peer, 50000))
 
 
 def _status(headers, *, trusted: str | None, peer: str = LOOPBACK, method: str = "GET") -> int:
@@ -112,12 +112,13 @@ def test_forwarded_websockets_need_the_key(monkeypatch, trusted, path):
 
     with client.websocket_connect(path, headers=spoofed | {"x-lcc-api-key": KEY}):
         pass
-    with client.websocket_connect(path):
+    # websocket_connect() ignores base_url, so the Host has to be explicit.
+    with client.websocket_connect(path, headers={"host": "127.0.0.1:17600"}):
         pass
 
 
 def test_status_asks_forwarded_clients_for_the_key():
-    client = TestClient(app, client=(LOOPBACK, 50000))
+    client = _client(app, None, LOOPBACK)
 
     direct = client.get("/api/security/status").json()
     forwarded = client.get("/api/security/status", headers={"x-forwarded-for": LOOPBACK}).json()

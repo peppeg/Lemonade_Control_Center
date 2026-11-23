@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # requests, comma-separated. For reverse proxies that do not forward the
     # original Host header. The request host is always accepted.
     allowed_origins: str = ""
+    # Names besides localhost and IP addresses under which clients on this host
+    # can open LCC without a key, comma-separated.
+    allowed_hosts: str = ""
     # Addresses of reverse proxies whose X-Forwarded-For gives the real client
     # address, comma-separated. Empty ignores forwarded addresses. Forwarded
     # clients need the key either way.

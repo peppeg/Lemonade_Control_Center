@@ -21,7 +21,7 @@ class LccAccessControlMiddleware(BaseHTTPMiddleware):
 
     Static/frontend routes remain public so the browser can render the login
     prompt. API routes are protected whenever the request is remote, forwarded
-    by a proxy, or REQUIRE_AUTH=true. State-changing requests from other web sites are refused
+    by a proxy, sent to an unknown host name, or REQUIRE_AUTH=true. State-changing requests from other web sites are refused
     on every path, whatever the client address or key.
     """
 
@@ -50,7 +50,7 @@ class LccAccessControlMiddleware(BaseHTTPMiddleware):
                 {
                     "detail": (
                         "LAN/API access is blocked because LCC_API_KEY is not configured. "
-                        "Set LCC_API_KEY, or connect to LCC directly from its own host."
+                        "Set LCC_API_KEY, or open LCC directly on its own host as localhost."
                     )
                 },
                 status_code=503,
