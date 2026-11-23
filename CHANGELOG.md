@@ -6,6 +6,10 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+### Fixed
+
+- The last task (Dashboard, Logs & Stats, Diagnostics, and the task history) is read from its own log lines only. A missing line was taken from an earlier task, giving it a wrong duration, and a newer task still being logged was mixed in.
+
 ## 0.3.1 - 2026-11-23
 
 ### Added
