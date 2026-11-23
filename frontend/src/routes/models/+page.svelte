@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    models, loadedModel, modelsLoading, modelsError, modelsSource, refreshModels,
-    pullAction, pullModel, unloadAction,
+    models, loadedModel, loadedModels, loadedModelsKnown, modelsLoading, modelsError, modelsSource,
+    refreshModels, selectLoadedModel, pullAction, pullModel, unloadAction,
   } from '$lib/stores/models';
   import { capabilities } from '$lib/stores/capabilities';
   import { api } from '$lib/api/client';
@@ -13,6 +13,7 @@
   import { notify } from '$lib/stores/notifications';
   import type { ModelEntry, RunEvidenceSeed } from '$lib/types';
   import { formatGB } from '$lib/utils/format';
+  import { canChat } from '$lib/utils/loadedModels';
   import { loadWorkflowDefaults, type WorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   let isRefreshing = false;
@@ -90,8 +91,8 @@
   }
 
   async function runSmokeTest() {
-    const modelName = $loadedModel?.name;
-    if (!modelName) return;
+    if (!$loadedModel || !canChat($loadedModel)) return;
+    const modelName = $loadedModel.name;
     smokeRunning = true;
     try {
       const defaults = loadWorkflowDefaults();
@@ -156,16 +157,34 @@
     <div class="ops-card-header">
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3">
-          <h2 class="ops-title">Active Model</h2>
+          <h2 class="ops-title">{$loadedModels.length > 1 ? `Active Models (${$loadedModels.length})` : 'Active Model'}</h2>
           {#if $loadedModel}
             <span class="ops-badge ops-badge-ok">Active</span>
           {:else}
-            <span class="ops-badge">None</span>
+            <span class="ops-badge">{$loadedModelsKnown ? 'None' : 'Unknown'}</span>
+          {/if}
+          {#if $loadedModel?.type}
+            <span class="ops-badge">{$loadedModel.type}</span>
           {/if}
         </div>
-        <p class="mt-3 break-all ops-value text-lemon">
-          {$loadedModel?.name ?? 'No model is currently loaded'}
-        </p>
+        {#if $loadedModels.length > 1}
+          <div class="mt-3 flex flex-wrap gap-2 rounded border border-[#444936] bg-[#2b2d2a] p-1" role="group" aria-label="Model the actions apply to">
+            {#each $loadedModels as model (model.name)}
+              <button
+                class="break-all rounded px-3 py-2 text-left ops-mono text-sm {model.name === $loadedModel?.name ? 'bg-[#4a4d49] text-lemon' : 'text-[#e3e5d3] hover:bg-[#363935]'}"
+                type="button"
+                aria-pressed={model.name === $loadedModel?.name}
+                on:click={() => selectLoadedModel(model.name)}
+              >
+                {model.name}
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <p class="mt-3 break-all ops-value text-lemon">
+            {$loadedModel?.name ?? ($loadedModelsKnown ? 'No model is currently loaded' : 'Lemonade did not report the loaded models')}
+          </p>
+        {/if}
       </div>
       <div class="flex flex-wrap justify-end gap-2">
         {#if $loadedModel}
@@ -181,7 +200,13 @@
             <Info class="h-4 w-4" />
             Model Details
           </a>
-          <button class="ops-button ops-button-primary" type="button" on:click={runSmokeTest} disabled={smokeRunning}>
+          <button
+            class="ops-button ops-button-primary"
+            type="button"
+            on:click={runSmokeTest}
+            disabled={smokeRunning || !canChat($loadedModel)}
+            title={canChat($loadedModel) ? undefined : `Smoke Test needs a chat model, this one is of type ${$loadedModel.type}`}
+          >
             <Activity class="h-4 w-4 {smokeRunning ? 'animate-pulse' : ''}" />
             {smokeRunning ? 'Testing' : 'Smoke Test'}
           </button>
@@ -208,6 +233,7 @@
           <div>
             <div class="flex flex-wrap items-center gap-2">
               <h3 class="ops-label">Latest Run Evidence Seed</h3>
+              <span class="ops-value break-all text-sm">{latestSmoke.requested_model_name ?? latestSmoke.model_name}</span>
               <span class="ops-badge {latestSmoke.success ? 'ops-badge-ok' : 'ops-badge-danger'}">
                 {latestSmoke.success ? 'passed' : 'failed'}
               </span>
@@ -275,7 +301,7 @@
       </div>
     {/if}
 
-    {#if $loadedModel}
+    {#if $loadedModel && canChat($loadedModel)}
       <div class="border-t border-[#30342b] p-5">
         {#if appliedProfileMatches}
           <div class="ops-banner">
