@@ -369,6 +369,8 @@ LAN_MODE=false
 | `ENABLE_RESTART` | Enables guarded service restart when set to `true` |
 | `LCC_API_KEY` | Protects LAN and remote access to LCC |
 | `REQUIRE_AUTH` | Requires `LCC_API_KEY` for every client, including localhost, when set to `true` |
+| `ALLOWED_ORIGINS` | Extra browser origins, comma-separated, for reverse proxies that do not forward the original `Host` |
+| `TRUSTED_PROXY_IPS` | Reverse proxy addresses whose `X-Forwarded-For` is recorded as the client address |
 | `APP_HOST` | Bind host for the unified runtime |
 | `APP_PORT` | Bind port for the unified runtime |
 | `SERVE_FRONTEND` | Serves the built frontend from FastAPI when `true` |

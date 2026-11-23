@@ -13,11 +13,15 @@ def main() -> None:
         if not settings.require_auth:
             raise SystemExit("LAN_MODE=true requires REQUIRE_AUTH=true.")
 
+    # Explicit on purpose: Uvicorn trusts forwarded headers from 127.0.0.1 by default.
+    trusted_proxies = settings.trusted_proxy_ips.strip()
     uvicorn.run(
         "app.main:app",
         host=settings.app_host,
         port=settings.app_port,
         reload=settings.debug,
+        proxy_headers=bool(trusted_proxies),
+        forwarded_allow_ips=trusted_proxies,
     )
 
 

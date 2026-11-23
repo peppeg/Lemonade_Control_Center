@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # requests, comma-separated. For reverse proxies that do not forward the
     # original Host header. The request host is always accepted.
     allowed_origins: str = ""
+    # Addresses of reverse proxies whose X-Forwarded-For gives the real client
+    # address, comma-separated. Empty ignores forwarded addresses. Forwarded
+    # clients need the key either way.
+    trusted_proxy_ips: str = ""
 
     # ── Server ──
     app_host: str = "127.0.0.1"
