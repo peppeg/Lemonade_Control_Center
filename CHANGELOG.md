@@ -19,6 +19,7 @@ The project is under active development, so entries currently describe the evolv
 ### Fixed
 
 - WebSocket routes enforce the same access rules as the HTTP API: the live log stream (`/api/logs/ws/logs`) now requires the LCC key where the API does, and handshakes from a foreign browser `Origin` are refused. Clients that send no `Origin` (CLI tools) are unaffected. Behind a reverse proxy that does not forward the original `Host`, set `ALLOWED_ORIGINS`.
+- State-changing API requests (`POST`, `PUT`, `PATCH`, `DELETE`) sent by another web site are refused with 403, for localhost and LAN clients alike. The LCC frontend and non-browser clients are unaffected.
 - Smoke Test works with reasoning models: the token budget defaults to 1024 (up to 4096, previously capped at 256), token counts are kept when the model produces no answer, and the error says when reasoning used the whole budget.
 - Saved model options are read from Lemonade's `/api/v1/models` (`recipe_options`), falling back to `recipe_options.json`. Current Lemonade moved that file into its private config directory, so the Load dialog showed no saved options.
 - Config updates send dotted keys (e.g. `llamacpp.backend`) as nested sections, as Lemonade 11+ expects.
