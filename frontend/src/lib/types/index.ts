@@ -299,7 +299,8 @@ export interface HardwareInfo {
 /** Aggregated dashboard data from multiple endpoints. */
 export interface DashboardData {
   serverStatus: ServerStatus | null;
-  loadedModel: LoadedModelInfo | null;
+  /** The one to show first at the top. */
+  loadedModels: LoadedModelInfo[];
   lastTask: LastTaskInfo | null;
   hardware: HardwareInfo | null;
   runtimeConfigAvailable: boolean | null;
@@ -319,6 +320,8 @@ export interface ServerStatus {
 
 export interface LoadedModelInfo {
   name: string;
+  /** Lemonade's model type (llm, embedding, ...), null when it does not report it. */
+  type: string | null;
   backend: string | null;
   ctxSize: number | null;
   ngl: number | null;
@@ -401,6 +404,8 @@ export interface RuntimeParams {
 
 export interface LoadedModelDetail {
   name: string;
+  /** Lemonade's model type (llm, embedding, ...), null when it does not report it. */
+  type: string | null;
   params: RuntimeParams | null;
   process: {
     pid: number;

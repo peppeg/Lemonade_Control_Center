@@ -7,7 +7,8 @@
   import { api } from '$lib/api/client';
   import { loadModelDetailed, loadAction, type LoadModelActionResult } from '$lib/stores/models';
   import { AlertTriangle, CheckCircle2, Cpu, Database, Loader2, RefreshCw, Save, SlidersHorizontal, Terminal } from 'lucide-svelte';
-  import type { HardwareInfo, LemonadeSavedOptions } from '$lib/types';
+  import type { HardwareInfo, LemonadeSavedOptions, LoadedModelDetail } from '$lib/types';
+  import { canChat, parseLoadedModel } from '$lib/utils/loadedModels';
   import { loadWorkflowDefaults, type WorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   export let modelName: string;
@@ -28,7 +29,7 @@
   let preflightLoading = false;
   let preflightModel = '';
   let hardware: HardwareInfo | null = null;
-  let activeProcess: Record<string, unknown> | null = null;
+  let activeModel: LoadedModelDetail | null = null;
   let savedOptions: LemonadeSavedOptions | null = null;
   let preflightError: string | null = null;
   let loadResult: LoadModelActionResult | null = null;
@@ -85,7 +86,7 @@
   $: effectiveCtx = selectedCtx === 'default' ? null : ctxSize;
   $: canLoad = (selectedCtx === 'default' || Boolean(ctxSize && ctxSize > 0)) && blockedManualArgs.length === 0;
   $: modelSizeGb = modelSizeBytes ? modelSizeBytes / (1024 ** 3) : null;
-  $: activeRssGb = readActiveRssGb(activeProcess);
+  $: activeRssGb = activeModel?.process?.rssGb ?? 0;
   $: reservedSystemGb = hardware ? Math.max(8, hardware.ram_total_gb * 0.12) : null;
   $: planningHeadroomGb = hardware && reservedSystemGb !== null
     ? Math.max(0, hardware.ram_available_gb + activeRssGb - reservedSystemGb)
@@ -149,21 +150,18 @@
     preflightError = null;
     preflightModel = modelName;
 
-    const [hardwareResult, processResult, savedOptionsResult] = await Promise.allSettled([
+    const [hardwareResult, loadedResult, savedOptionsResult] = await Promise.allSettled([
       api.system.hardware(),
-      api.system.llamaServer(),
+      api.lemonade.loaded(),
       api.lemonade.savedOptions(modelName),
     ]);
 
     hardware = hardwareResult.status === 'fulfilled' && hardwareResult.value.ok ? hardwareResult.value.data : null;
-    if (processResult.status === 'fulfilled' && processResult.value.ok && processResult.value.data.found) {
-      activeProcess = (processResult.value.data.process as Record<string, unknown>) ?? null;
-    } else {
-      activeProcess = null;
-    }
+    const loaded = loadedResult.status === 'fulfilled' && loadedResult.value.ok ? loadedResult.value.data.models.map(parseLoadedModel) : [];
+    activeModel = loaded.find((model) => canChat(model) && model.process) ?? null;
     savedOptions = savedOptionsResult.status === 'fulfilled' && savedOptionsResult.value.ok ? savedOptionsResult.value.data : null;
 
-    if (!hardware && !savedOptions && !activeProcess) {
+    if (!hardware && !savedOptions && !activeModel) {
       preflightError = 'Preflight data is unavailable. You can still load, but LCC cannot estimate host risk.';
     }
     preflightLoading = false;
@@ -188,11 +186,6 @@
     open = false;
     loadResult = null;
     resetForm();
-  }
-
-  function readActiveRssGb(value: Record<string, unknown> | null): number {
-    const raw = value?.rss_gb;
-    return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
   }
 
   function estimateSafeCtx(modelGb: number | null, headroomGb: number | null, factor: number, cap: number): number | null {
@@ -316,9 +309,9 @@
         <div class="border border-[#30342b] bg-[#111312] p-3">
           <p class="ops-label">active process impact</p>
           <p class="ops-muted mt-1 text-sm">
-            {activeProcess
-              ? `llama-server RSS ${formatGb(activeRssGb)} is treated as recoverable if Lemonade evicts/unloads it.`
-              : 'No active llama-server process detected.'}
+            {activeModel
+              ? `${activeModel.name}: llama-server RSS ${formatGb(activeRssGb)} is treated as recoverable if Lemonade evicts/unloads it.`
+              : 'No loaded chat model with a llama-server process.'}
           </p>
         </div>
         <div class="border border-[#30342b] bg-[#111312] p-3">

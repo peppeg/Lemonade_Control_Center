@@ -32,7 +32,7 @@ from app.models.setup import (
     SetupConnectionRequest,
     SystemConfig,
 )
-from app.services.process import find_llama_server
+from app.services.process import find_llama_servers
 from app.services.state_files import ensure_private_dir, write_private_text
 
 CONFIG_FILE = Path(__file__).parent.parent / "data" / "config.json"
@@ -245,10 +245,10 @@ class SetupService:
         if local_target:
             response.host_telemetry_available = True
             checks.append(ConnectionDoctorCheck(name="Host telemetry", status="ok", detail="Target appears local; LCC host telemetry is applicable."))
-            llama = find_llama_server()
-            if llama.found:
+            pids = [str(server.process.pid) for server in find_llama_servers() if server.process]
+            if pids:
                 response.process_evidence = "found"
-                checks.append(ConnectionDoctorCheck(name="Process evidence", status="ok", detail=f"llama-server PID {llama.process.pid if llama.process else 'unknown'} found."))
+                checks.append(ConnectionDoctorCheck(name="Process evidence", status="ok", detail=f"llama-server PID {', '.join(pids)} found."))
             else:
                 response.process_evidence = "not_running"
                 checks.append(ConnectionDoctorCheck(name="Process evidence", status="warning", detail="No llama-server process found. This is expected when no model is loaded."))
@@ -727,18 +727,24 @@ def _is_local_url(value: str) -> bool:
 
 
 def _loaded_model_name(data: dict) -> str | None:
-    model_loaded = data.get("model_loaded")
-    if isinstance(model_loaded, str) and model_loaded:
-        return model_loaded
-
+    """The chat model where Lemonade reports the types, otherwise the first one named."""
     loaded = data.get("all_models_loaded") or data.get("loaded_models") or data.get("models")
-    if isinstance(loaded, list) and loaded:
-        first = loaded[0]
-        if isinstance(first, str):
-            return first
-        if isinstance(first, dict):
-            value = first.get("name") or first.get("model") or first.get("id")
-            return str(value) if value else None
+    entries = loaded if isinstance(loaded, list) else []
+    names = [(_model_entry_name(entry), entry.get("type") if isinstance(entry, dict) else None) for entry in entries]
+    chat = [name for name, model_type in names if name and model_type == "llm"]
+
+    latest = data.get("model_loaded")
+    if isinstance(latest, str) and latest and (not chat or latest in chat):
+        return latest
+    return next(iter(chat), None) or next((name for name, _ in names if name), None)
+
+
+def _model_entry_name(entry: object) -> str | None:
+    if isinstance(entry, str):
+        return entry or None
+    if isinstance(entry, dict):
+        value = entry.get("model_name") or entry.get("name") or entry.get("model") or entry.get("id")
+        return str(value) if value else None
     return None
 
 

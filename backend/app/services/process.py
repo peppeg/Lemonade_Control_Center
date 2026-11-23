@@ -6,6 +6,7 @@ backend, ngl, mmap, MTP, reasoning format, etc.
 """
 import re
 import subprocess
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 import psutil
@@ -28,6 +29,13 @@ def find_llama_server(pid: int | None = None, port: int | None = None) -> LlamaS
     servers = find_llama_servers()
     if pid is None and port is None:
         return servers[0] if servers else LlamaServerInfoResponse(found=False)
+    return match_llama_server(servers, pid=pid, port=port)
+
+
+def match_llama_server(
+    servers: Sequence[LlamaServerInfoResponse], pid: int | None = None, port: int | None = None
+) -> LlamaServerInfoResponse:
+    """The one of `servers` with this port or pid."""
 
     def matches(server: LlamaServerInfoResponse) -> tuple[bool, bool]:
         return (
