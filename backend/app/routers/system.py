@@ -11,6 +11,7 @@ from app.config import settings
 from app.models.schemas import (
     HardwareInfo,
     LlamaServerInfoResponse,
+    LlamaServersResponse,
     RestartServiceResponse,
     ServiceStatusResponse,
     TemperaturesResponse,
@@ -24,6 +25,7 @@ from app.services.hardware import (
 )
 from app.services.process import (
     find_llama_server,
+    find_llama_servers,
     get_service_status,
     restart_service,
 )
@@ -60,6 +62,12 @@ async def telemetry_snapshot():
 async def llama_server_info():
     """Find llama-server process and parse its command line parameters."""
     return find_llama_server()
+
+
+@router.get("/llama-servers", response_model=LlamaServersResponse)
+async def llama_servers():
+    """Find every llama-server process on this host."""
+    return LlamaServersResponse(servers=find_llama_servers())
 
 
 @router.get("/service", response_model=ServiceStatusResponse)

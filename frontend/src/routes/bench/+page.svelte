@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { capabilities } from '$lib/stores/capabilities';
   import { api } from '$lib/api/client';
-  import { models, refreshModels } from '$lib/stores/models';
+  import { loadedModels, refreshModels } from '$lib/stores/models';
   import TestResult from '$lib/components/bench/TestResult.svelte';
   import {
     benchError,
@@ -17,7 +17,8 @@
     runSuiteBench,
     annotateBenchResult,
   } from '$lib/stores/bench';
-  import type { BenchStoredResult } from '$lib/types';
+  import type { BenchStoredResult, LoadedModelDetail } from '$lib/types';
+  import { canChat } from '$lib/utils/loadedModels';
   import { loadWorkflowDefaults, type WorkflowDefaults } from '$lib/utils/workflowDefaults';
 
   type Tab = 'quick' | 'suites' | 'results' | 'compare';
@@ -41,13 +42,15 @@
     loadBenchData();
   });
 
-  $: if (!selectedModel && $models.length > 0) {
-    selectedModel = $models.find((model) => model.isLoaded)?.name ?? $models[0].name;
-  }
-  $: loadedBenchModel = $models.find((model) => model.isLoaded) ?? null;
-  $: if (loadedBenchModel && selectedModel !== loadedBenchModel.name) selectedModel = loadedBenchModel.name;
+  $: benchModels = $loadedModels.filter(canChat);
+  $: keepLoadedSelection(benchModels);
+  $: loadedBenchModel = benchModels.find((model) => model.name === selectedModel) ?? null;
   $: benchProfileMatches = Boolean(appliedWorkflow.activeProfileId && appliedWorkflow.activeProfileModelName === selectedModel);
   $: canRunSuite = Boolean(loadedBenchModel && selectedModel === loadedBenchModel.name && benchProfileMatches && !$benchLoading);
+
+  function keepLoadedSelection(available: LoadedModelDetail[]) {
+    if (!available.some((model) => model.name === selectedModel)) selectedModel = available[0]?.name ?? '';
+  }
 
   function resultName(result: BenchStoredResult): string {
     return 'suite_name' in result ? result.suite_name : result.prompt_name;
@@ -124,11 +127,11 @@
           <label class="block space-y-2">
             <span class="ops-label">Model</span>
             <select class="ops-select" bind:value={selectedModel}>
-              {#each $models.filter((model) => model.isLoaded) as model}
+              {#each benchModels as model (model.name)}
                 <option value={model.name}>{model.name}</option>
               {/each}
             </select>
-            {#if !loadedBenchModel}<p class="text-xs text-status-warn">Load a model before running Bench Lab.</p>{/if}
+            {#if !loadedBenchModel}<p class="text-xs text-status-warn">Load a chat model before running Bench Lab.</p>{/if}
           </label>
           <label class="block space-y-2">
             <span class="ops-label">max_tokens</span>

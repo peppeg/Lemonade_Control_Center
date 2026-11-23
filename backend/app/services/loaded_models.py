@@ -6,8 +6,16 @@ so neither the first model nor the first process can be taken as the active one.
 """
 from collections.abc import Sequence
 
-from app.models.schemas import LlamaServerInfoResponse, RunningModelInfo
-from app.services.process import find_llama_server, find_llama_servers
+from app.models.schemas import (
+    LlamaServerInfoResponse,
+    LoadedModelInfo,
+    RunningModelInfo,
+)
+from app.services.process import (
+    find_llama_server,
+    find_llama_servers,
+    match_llama_server,
+)
 
 
 def find_loaded(models: Sequence[RunningModelInfo], requested: str) -> RunningModelInfo | None:
@@ -43,3 +51,20 @@ def llama_server_for(model: RunningModelInfo | None) -> LlamaServerInfoResponse:
         return find_llama_server(pid=model.pid, port=model.port)
     servers = find_llama_servers()
     return servers[0] if len(servers) == 1 else LlamaServerInfoResponse(found=False)
+
+
+def describe_loaded(models: Sequence[RunningModelInfo]) -> list[LoadedModelInfo]:
+    """Each loaded model with its own llama-server process, the primary model first."""
+    servers = find_llama_servers()
+
+    def server(model: RunningModelInfo) -> LlamaServerInfoResponse:
+        if model.pid is not None or model.port is not None:
+            return match_llama_server(servers, pid=model.pid, port=model.port)
+        # Not reported by Lemonade: known only when there is nothing to choose from.
+        if len(models) == 1 and len(servers) == 1:
+            return servers[0]
+        return LlamaServerInfoResponse(found=False)
+
+    primary = primary_model(models)
+    ordered = sorted(models, key=lambda model: model is not primary)
+    return [LoadedModelInfo(**model.model_dump(), server=server(model)) for model in ordered]

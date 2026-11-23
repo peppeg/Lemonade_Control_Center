@@ -6,8 +6,17 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+### Added
+
+- Dashboard shows every loaded model, and the Models page lets you choose which one the actions apply to. Smoke Test is offered for chat models only. (Reported by @dolaresko, #36)
+- `GET /api/lemonade/loaded` lists the loaded models, each with its own `llama-server` process, and `GET /api/system/llama-servers` lists every process.
+
 ### Fixed
 
+- Bench Lab lets you choose among the loaded chat models. It always went back to the first loaded model.
+- System, the diagnostic bundle (now `llama_servers.json`) and Connection Doctor report every `llama-server` process. Connection Doctor could name one model with the process of another.
+- The Models page no longer shows an "Unknown" active model for a `llama-server` that Lemonade did not start, and says so when Lemonade does not answer.
+- Stop & Unload says that it unloads every loaded model.
 - The `llama-server` process is recognized by its executable. Any program whose command line mentioned `llama-server` (a shell, an editor, a `grep`) could be shown in its place, with its command line.
 - With several models loaded, Run Evidence and Bench Lab record the requested model and its own process (PID, backend, context, memory) instead of the first ones found, and Diagnostics describes the chat model. When LCC cannot tell, these fields are left unavailable. Bench Lab no longer refuses a loaded model because another one is listed first. (Reported by @dolaresko, #36)
 - Load evidence no longer falls back to the process that was running before the load.

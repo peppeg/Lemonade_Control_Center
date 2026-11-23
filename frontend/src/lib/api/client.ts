@@ -47,6 +47,7 @@ import type {
   IntakeSearchResponse,
   SuiteResult,
 } from '$lib/types';
+import type { LoadedModelResponse } from '$lib/utils/loadedModels';
 
 const BASE = '/api';
 const LCC_KEY_STORAGE = 'lcc_api_key';
@@ -183,7 +184,7 @@ export const api = {
     installBackend: (recipeKey: string, backendKey: string) =>
       post<BackendInstallResponse>('/lemonade/backends/install', { recipe_key: recipeKey, backend_key: backendKey }),
     models: (catalog = false) => get<{ models: unknown[]; source: string }>(`/lemonade/models${catalog ? '?catalog=true' : ''}`),
-    running: () => get<{ models: unknown[] }>('/lemonade/running'),
+    loaded: () => get<{ models: LoadedModelResponse[] }>('/lemonade/loaded'),
     savedOptions: (modelName?: string) =>
       get<LemonadeSavedOptions>(`/lemonade/saved-options${modelName ? `?model_name=${enc(modelName)}` : ''}`),
     showModel: (name: string) => get<Record<string, unknown>>(`/lemonade/models/${encodeURIComponent(name)}`),
@@ -229,7 +230,7 @@ export const api = {
     hardware: () => get<HardwareInfo>('/system/hardware'),
     temperatures: () => get<{ readings: unknown[]; available: boolean }>('/system/temperatures'),
     processes: () => get<{ processes: unknown[] }>('/system/processes'),
-    llamaServer: () => get<{ found: boolean; process: unknown; params: unknown }>('/system/llama-server'),
+    llamaServers: () => get<{ servers: unknown[] }>('/system/llama-servers'),
     telemetry: () => get<TelemetrySnapshot>('/system/telemetry'),
     service: () => get<{ active: boolean; status: string }>('/system/service'),
     restart: () => post<{ success: boolean; message: string }>('/system/restart'),

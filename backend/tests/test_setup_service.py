@@ -81,6 +81,20 @@ def test_loaded_model_name_handles_health_shapes():
     assert _loaded_model_name({"all_models_loaded": [{"name": "coder"}]}) == "coder"
     assert _loaded_model_name({"loaded_models": ["tiny"]}) == "tiny"
     assert _loaded_model_name({"loaded_models": []}) is None
+    assert _loaded_model_name({"model_loaded": None, "all_models_loaded": []}) is None
+    assert _loaded_model_name({"all_models_loaded": [None, {}, {"id": "last"}]}) == "last"
+
+
+def test_loaded_model_name_prefers_a_chat_model():
+    embed = {"model_name": "embed", "type": "embedding"}
+    chat = {"model_name": "chat", "type": "llm"}
+    other = {"model_name": "other", "type": "llm"}
+
+    assert _loaded_model_name({"model_loaded": "embed", "all_models_loaded": [embed, chat]}) == "chat"
+    assert _loaded_model_name({"model_loaded": None, "all_models_loaded": [embed, chat]}) == "chat"
+    assert _loaded_model_name({"model_loaded": "other", "all_models_loaded": [chat, other]}) == "other"
+    assert _loaded_model_name({"model_loaded": "embed", "all_models_loaded": [embed]}) == "embed"
+    assert _loaded_model_name({"model_loaded": "chat", "all_models_loaded": [{"model_name": "embed"}, {"model_name": "chat"}]}) == "chat"
 
 
 def test_connection_doctor_next_action_prioritizes_reachability_and_locality():
@@ -97,6 +111,8 @@ def test_connection_doctor_next_action_prioritizes_reachability_and_locality():
     loaded = unreachable.model_copy(update={"reachable": True, "local_target": True, "loaded_model": "qwen"})
     assert "smoke test" in _connection_doctor_next_action(loaded)
 
+
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -139,3 +155,30 @@ async def test_connection_doctor_includes_auth_header_for_health(monkeypatch):
     health_headers = [h for h in recorded_headers if "authorization" in h]
     assert len(health_headers) >= 1
     assert health_headers[0]["authorization"] == "Bearer my-admin-key"
+
+
+@pytest.mark.asyncio
+async def test_connection_doctor_names_the_chat_model_and_every_process(monkeypatch, tmp_path):
+    health = {
+        "status": "ok",
+        "version": "2026.45.3",
+        "model_loaded": "embed",
+        "all_models_loaded": [{"model_name": "embed", "type": "embedding"}, {"model_name": "chat", "type": "llm"}],
+    }
+    original_client_init = httpx.AsyncClient.__init__
+
+    def patched_init(self, *args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(lambda request: httpx.Response(200, json=health))
+        original_client_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", patched_init)
+    servers = [SimpleNamespace(process=SimpleNamespace(pid=pid)) for pid in (111, 222)]
+    monkeypatch.setattr("app.services.setup.find_llama_servers", lambda: servers)
+
+    report = await SetupService(config_file=tmp_path / "config.json").connection_doctor(
+        RuntimeConfig(id="x", type="lemonade", name="x", url="http://127.0.0.1:13305", is_active=True)
+    )
+
+    assert report.loaded_model == "chat"
+    assert report.process_evidence == "found"
+    assert [c.detail for c in report.checks if c.name == "Process evidence"] == ["llama-server PID 111, 222 found."]
