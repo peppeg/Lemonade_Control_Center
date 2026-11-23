@@ -17,11 +17,7 @@ from app.services.metrics.store import (
     CLEARED_AT_META_KEY,
     MetricsStore,
     TaskRow,
-    bucket_hardware_rows,
-    bucket_start,
-    bucket_task_rows,
     measurable_rate,
-    percentile,
     resolve_range,
 )
 from app.services.metrics.task_history import (
@@ -237,7 +233,6 @@ def _exercise(store: MetricsStore) -> None:
             "gpu_temp_c": None,
         }
     )
-    store.history_summary()
     store.set_meta("key", "value")
     store.get_meta("key")
     store.prune(task_retention_days=1, hardware_retention_days=1, now=BASE)
@@ -301,13 +296,8 @@ def test_hardware_samples_have_nullable_gpu_memory_columns(store):
         assert columns[name][3] == 0  # Nullable.
 
 
-def test_empty_store_returns_empty_series_not_errors(store):
-    end = datetime.now(UTC)
-    start = end - timedelta(days=30)
-
+def test_empty_store_returns_empty_results_not_errors(store):
     assert store.get_tasks() == []
-    assert store.task_series(start, end, 3600) == []
-    assert store.hardware_series(start, end, 3600) == []
     assert store.count_tasks() == 0
     assert store.count_hardware() == 0
     assert store.latest_task_timestamp() is None
@@ -384,142 +374,18 @@ def test_get_tasks_on_an_empty_window_is_an_empty_list(store):
     assert store.get_tasks(since=BASE + timedelta(days=1)) == []
 
 
-# ── Bucketing and aggregation arithmetic ───────────────────
-
-
-def test_percentile_uses_nearest_rank():
-    values = [float(n) for n in range(1, 101)]
-
-    assert percentile(values, 0.5) == 50.0
-    assert percentile(values, 0.95) == 95.0
-    assert percentile([7.0], 0.95) == 7.0
-    assert percentile([], 0.5) == 0.0
-
-
-def test_percentile_ignores_input_order():
-    assert percentile([9.0, 1.0, 5.0, 3.0, 7.0], 0.5) == 5.0
-    assert percentile([9.0, 1.0, 5.0, 3.0, 7.0], 0.95) == 9.0
-
-
-def test_bucket_start_floors_to_the_bucket_boundary():
-    assert bucket_start(3661, 60) == 3660
-    assert bucket_start(3661, 900) == 3600
-    assert bucket_start(3600, 3600) == 3600
-
-
-def test_bucket_task_rows_aggregates_each_bucket():
-    minute = BASE.timestamp()
-    rows = [
-        {"ts_epoch": minute + 1, "gen_tps": 10.0, "ttft_seconds": 1.0,
-         "input_tokens": 10, "output_tokens": 100},
-        {"ts_epoch": minute + 30, "gen_tps": 20.0, "ttft_seconds": 3.0,
-         "input_tokens": 20, "output_tokens": 200},
-        # Second bucket, one minute later.
-        {"ts_epoch": minute + 61, "gen_tps": 30.0, "ttft_seconds": 5.0,
-         "input_tokens": 30, "output_tokens": 300},
-    ]
-
-    buckets = bucket_task_rows(rows, 60)
-
-    assert len(buckets) == 2
-    first, second = buckets
-    assert first["t"] == BASE.isoformat()
-    assert first["count"] == 2
-    assert first["gen_tps_mean"] == 15.0
-    assert first["gen_tps_p50"] == 10.0      # nearest rank of two samples
-    assert first["gen_tps_p95"] == 20.0
-    assert first["ttft_mean"] == 2.0
-    assert first["input_tokens"] == 30
-    assert first["output_tokens"] == 300
-    assert first["total_tokens"] == 330
-    assert second["count"] == 1
-    assert second["gen_tps_mean"] == second["gen_tps_p50"] == 30.0
-
-
-def test_bucket_task_rows_omits_empty_buckets():
-    """A quiet hour is a gap, not a run of zeroes pulling the chart down."""
-    minute = BASE.timestamp()
-    rows = [
-        {"ts_epoch": minute, "gen_tps": 10.0, "ttft_seconds": 1.0,
-         "input_tokens": 1, "output_tokens": 1},
-        {"ts_epoch": minute + 600, "gen_tps": 10.0, "ttft_seconds": 1.0,
-         "input_tokens": 1, "output_tokens": 1},
-    ]
-
-    assert len(bucket_task_rows(rows, 60)) == 2
-
-
-def test_bucket_task_rows_on_no_rows_is_empty():
-    assert bucket_task_rows([], 900) == []
-
-
-def test_bucket_hardware_rows_means_and_keeps_ram_extremes():
-    minute = BASE.timestamp()
-    rows = [
-        {"ts_epoch": minute, "sample_count": 12, "ram_used_gb": 10.0,
-         "ram_total_gb": 32.0, "ram_percent": 30.0, "ram_percent_min": 28.0,
-         "ram_percent_max": 34.0, "cpu_percent": 20.0, "swap_used_gb": 0.0,
-         "gpu_load_percent": 40.0, "gpu_temp_c": 50.0,
-         "temperatures": json.dumps({"k10temp/Tctl": 55.0})},
-        {"ts_epoch": minute + 60, "sample_count": 12, "ram_used_gb": 20.0,
-         "ram_total_gb": 32.0, "ram_percent": 60.0, "ram_percent_min": 55.0,
-         "ram_percent_max": 90.0, "cpu_percent": 40.0, "swap_used_gb": 1.0,
-         "gpu_load_percent": 60.0, "gpu_temp_c": 70.0,
-         "temperatures": json.dumps({"k10temp/Tctl": 65.0})},
-    ]
-
-    buckets = bucket_hardware_rows(rows, 900)
-
-    assert len(buckets) == 1
-    bucket = buckets[0]
-    assert bucket["count"] == 24
-    assert bucket["ram_used_gb"] == 15.0
-    assert bucket["ram_percent"] == 45.0
-    assert bucket["ram_percent_min"] == 28.0
-    assert bucket["ram_percent_max"] == 90.0
-    assert bucket["cpu_percent"] == 30.0
-    assert bucket["gpu_load_percent"] == 50.0
-    assert bucket["temps"] == {"k10temp/Tctl": 60.0}
-
-
-def test_bucket_hardware_rows_reports_absent_gpu_as_none():
-    rows = [
-        {"ts_epoch": BASE.timestamp(), "sample_count": 1, "ram_used_gb": 1.0,
-         "ram_total_gb": 8.0, "ram_percent": 12.5, "ram_percent_min": 12.5,
-         "ram_percent_max": 12.5, "cpu_percent": 5.0, "swap_used_gb": 0.0,
-         "gpu_load_percent": None, "gpu_temp_c": None, "temperatures": "{}"},
-    ]
-
-    bucket = bucket_hardware_rows(rows, 60)[0]
-
-    assert bucket["gpu_load_percent"] is None
-    assert bucket["gpu_temp_c"] is None
-    assert bucket["temps"] == {}
+# ── Ranges ─────────────────────────────────────────────────
 
 
 def test_resolve_range_maps_selectors_and_defaults_only_when_none_is_given():
-    assert resolve_range("1h")[2] == 5 * 60
-    assert resolve_range("24h")[2] == 60 * 60
-    assert resolve_range("7d")[2] == 6 * 60 * 60
-    assert resolve_range("30d")[2] == 24 * 60 * 60
+    assert resolve_range("1h") == ("1h", timedelta(hours=1))
+    assert resolve_range("24h") == ("24h", timedelta(hours=24))
+    assert resolve_range("7d") == ("7d", timedelta(days=7))
+    assert resolve_range("30d") == ("30d", timedelta(days=30))
     assert resolve_range("7D")[0] == "7d"
     assert resolve_range(None)[0] == "24h"
     with pytest.raises(ValueError, match="1h, 24h, 7d, 30d"):
         resolve_range("90d")
-
-
-def test_task_series_runs_end_to_end_through_sqlite(store):
-    store.insert_tasks([
-        make_row(0, gen_tps=10.0),
-        make_row(30, gen_tps=20.0),
-        make_row(3600, gen_tps=30.0),
-    ])
-
-    buckets = store.task_series(BASE - timedelta(hours=1), BASE + timedelta(hours=2), 3600)
-
-    assert [bucket["count"] for bucket in buckets] == [2, 1]
-    assert buckets[0]["gen_tps_mean"] == 15.0
-    assert buckets[1]["gen_tps_mean"] == 30.0
 
 
 # ── Hardware rollups ───────────────────────────────────────
@@ -535,11 +401,11 @@ def test_hardware_minute_rows_are_upserted_in_place(store):
     store.upsert_hardware_minute(minute)
     store.upsert_hardware_minute({**minute, "sample_count": 12, "ram_percent": 40.0})
 
-    buckets = store.hardware_series(BASE - timedelta(minutes=1), BASE + timedelta(minutes=1), 60)
+    row = store.get_hardware_minute(BASE)
 
     assert store.count_hardware() == 1
-    assert buckets[0]["count"] == 12
-    assert buckets[0]["ram_percent"] == 40.0
+    assert row["sample_count"] == 12
+    assert row["ram_percent"] == 40.0
 
 
 # ── Retention ──────────────────────────────────────────────
@@ -932,41 +798,6 @@ def test_iter_tasks_honours_the_window(store):
     ]
 
 
-# ── Window summary ─────────────────────────────────────────
-
-
-def test_summarize_task_rows_uses_the_raw_values_not_bucket_percentiles(store):
-    """A window p95 has to come from the runs, not from averaged bucket p95s."""
-    store.insert_tasks([
-        make_row(offset, gen_tps=float(n + 1))
-        for n, offset in enumerate(range(0, 100 * 60, 60))
-    ])
-
-    window = store.task_window(BASE - timedelta(hours=1), BASE + timedelta(days=1), 3600)
-
-    assert window["summary"]["count"] == 100
-    assert window["summary"]["gen_tps_p50"] == 50.0
-    assert window["summary"]["gen_tps_p95"] == 95.0
-    assert window["summary"]["gen_tps_mean"] == 50.5
-    assert sum(bucket["count"] for bucket in window["buckets"]) == 100
-
-
-def test_task_window_summary_is_zeroed_on_an_empty_window(store):
-    window = store.task_window(BASE, BASE + timedelta(hours=1), 3600)
-
-    assert window["buckets"] == []
-    assert window["summary"] == {
-        "count": 0,
-        "gen_tps_mean": 0.0,
-        "gen_tps_p50": 0.0,
-        "gen_tps_p95": 0.0,
-        "ttft_mean": 0.0,
-        "input_tokens": 0,
-        "output_tokens": 0,
-        "total_tokens": 0,
-    }
-
-
 def test_stored_finish_confidence_matches_the_rest_of_the_api(store):
     """Plain "inferred", not the enum's repr, so CSV exports stay readable."""
     history = TaskHistory(store)
@@ -1010,26 +841,6 @@ def test_sentinel_rate_is_never_stored(store):
     [row] = store.get_tasks()
     assert row["gen_tps"] == 0.0
     assert row["output_tokens"] == 1
-
-
-def test_sentinel_row_is_kept_as_a_run_but_not_as_a_speed(store):
-    """The run happened and its ttft is real; only the rate is meaningless."""
-    store.insert_tasks([
-        make_row(0, gen_tps=20.0),
-        make_row(60, gen_tps=30.0),
-        make_row(120, gen_tps=1000000.0, output_tokens=1),
-    ])
-
-    window = store.task_window(BASE - timedelta(hours=1), BASE + timedelta(days=1), 3600)
-    summary = window["summary"]
-    [bucket] = window["buckets"]
-
-    assert summary["count"] == 3, "the run must still be counted"
-    assert summary["gen_tps_mean"] == 25.0, "the sentinel must not drag the mean"
-    assert summary["gen_tps_p95"] == 30.0
-    assert bucket["count"] == 3
-    assert bucket["gen_tps_mean"] == 25.0
-    assert bucket["gen_tps_p95"] == 30.0
 
 
 def test_legacy_import_drops_the_sentinel_rate(tmp_path, store):

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -49,15 +50,14 @@ async def test_samples_in_one_minute_collapse_to_a_single_row(store):
     for seconds, ram in ((0, 30.0), (5, 50.0), (10, 40.0)):
         await collector._persist_minute(point(seconds, ram))
 
-    buckets = store.hardware_series(MINUTE, MINUTE + timedelta(minutes=1), 60)
+    row = store.get_hardware_minute(MINUTE)
 
     assert store.count_hardware() == 1
-    assert len(buckets) == 1
-    assert buckets[0]["t"] == MINUTE.isoformat()
-    assert buckets[0]["count"] == 3
-    assert buckets[0]["ram_percent"] == 40.0     # mean of the minute
-    assert buckets[0]["ram_percent_min"] == 30.0
-    assert buckets[0]["ram_percent_max"] == 50.0
+    assert row["timestamp"] == MINUTE.isoformat()
+    assert row["sample_count"] == 3
+    assert row["ram_percent"] == 40.0     # mean of the minute
+    assert row["ram_percent_min"] == 30.0
+    assert row["ram_percent_max"] == 50.0
 
 
 @pytest.mark.asyncio
@@ -79,14 +79,14 @@ async def test_a_restart_mid_minute_keeps_the_samples_already_stored(store):
 
     await collector._persist_minute(point(30, 30.0, cpu=40.0))
 
-    [bucket] = store.hardware_series(MINUTE, MINUTE + timedelta(minutes=1), 60)
-    assert bucket["count"] == 6
-    assert bucket["ram_percent"] == 80.0          # (5 x 90 + 30) / 6
-    assert bucket["ram_percent_min"] == 30.0
-    assert bucket["ram_percent_max"] == 90.0
-    assert bucket["cpu_percent"] == 15.0          # (5 x 10 + 40) / 6
-    assert bucket["gpu_gtt_used_gb"] == 40.0      # Kept, though the new sample has none.
-    assert bucket["temps"] == {"k10temp/Tctl": 65.0}
+    row = store.get_hardware_minute(MINUTE)
+    assert row["sample_count"] == 6
+    assert row["ram_percent"] == pytest.approx(80.0)   # (5 x 90 + 30) / 6
+    assert row["ram_percent_min"] == 30.0
+    assert row["ram_percent_max"] == 90.0
+    assert row["cpu_percent"] == pytest.approx(15.0)   # (5 x 10 + 40) / 6
+    assert row["gpu_gtt_used_gb"] == 40.0      # Kept, though the new sample has none.
+    assert json.loads(row["temperatures"]) == {"k10temp/Tctl": 65.0}
 
 
 @pytest.mark.asyncio
@@ -94,9 +94,9 @@ async def test_the_rollup_keeps_the_temperature_dictionary(store):
     await collector._persist_minute(point(0, 30.0, cpu=10.0))
     await collector._persist_minute(point(5, 30.0, cpu=20.0))
 
-    bucket = store.hardware_series(MINUTE, MINUTE + timedelta(minutes=1), 60)[0]
+    row = store.get_hardware_minute(MINUTE)
 
-    assert bucket["temps"] == {"k10temp/Tctl": 65.0}
+    assert json.loads(row["temperatures"]) == {"k10temp/Tctl": 65.0}
 
 
 @pytest.mark.asyncio
@@ -255,7 +255,8 @@ async def test_the_rollup_keeps_gpu_memory_when_the_host_reports_it(store):
         await collector._persist_minute(sample)
     await collector._persist_minute(point(65, 30.0))  # Next minute: not reported.
 
-    first, second = store.hardware_series(MINUTE, MINUTE + timedelta(minutes=2), 60)
+    first = store.get_hardware_minute(MINUTE)
+    second = store.get_hardware_minute(MINUTE + timedelta(minutes=1))
 
     assert first["gpu_vram_used_gb"] == 0.5
     assert first["gpu_gtt_used_gb"] == 42.0

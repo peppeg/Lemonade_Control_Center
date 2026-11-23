@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from fastapi.responses import StreamingResponse
 
 from app.services.metrics.collector import buffer, collect_once, subscribe, unsubscribe
-from app.services.metrics.store import RANGE_WINDOWS, resolve_range
+from app.services.metrics.store import resolve_range
 from app.services.metrics.task_history import TaskHistory, task_history
 from app.services.security import authorize_websocket
 
@@ -52,83 +52,17 @@ async def get_tasks(
     return {"tasks": tasks}
 
 
-@router.get("/tasks/series")
-async def get_tasks_series(
-    range: str = Query(default="24h", description="|".join(RANGE_WINDOWS)),
-):
-    """Time-bucketed generation-speed aggregates over a long window."""
-    key, window, bucket_seconds = _resolve_range(range)
-    end = datetime.now(UTC)
-    start = end - window
-    window = await asyncio.to_thread(task_history.window, start, end, bucket_seconds)
-    return {
-        "range": key,
-        "bucket_seconds": bucket_seconds,
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-        "buckets": window["buckets"],
-        "summary": window["summary"],
-    }
-
-
-@router.get("/tasks/scale")
-async def get_tasks_scale(
-    range: str = Query(default="30d", description="|".join(RANGE_WINDOWS)),
-    quantile: float = Query(default=0.95, gt=0.0, le=1.0),
-):
-    """One percentile of output_tokens over a window.
-
-    The scatter sizes each mark against a fixed ceiling. Computing it in the
-    browser meant downloading every run in the window just to reduce it to a
-    single number; the store reads one column and reduces it here instead.
-    """
-    key, window, _bucket_seconds = _resolve_range(range)
-    end = datetime.now(UTC)
-    start = end - window
-    result = await asyncio.to_thread(
-        task_history.store.output_token_percentile, start, end, quantile
-    )
-    return {
-        "range": key,
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-        "quantile": quantile,
-        "output_tokens": result["value"],
-        "count": result["count"],
-    }
-
-
-@router.get("/hardware/series")
-async def get_hardware_series(
-    range: str = Query(default="24h", description="|".join(RANGE_WINDOWS)),
-):
-    """Time-bucketed hardware aggregates from the persisted per-minute rows."""
-    key, window, bucket_seconds = _resolve_range(range)
-    end = datetime.now(UTC)
-    start = end - window
-    buckets = await asyncio.to_thread(
-        task_history.store.hardware_series, start, end, bucket_seconds
-    )
-    return {
-        "range": key,
-        "bucket_seconds": bucket_seconds,
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-        "buckets": buckets,
-    }
-
-
 @router.get("/tasks/csv")
 async def export_tasks_csv(
     since: str | None = Query(default=None),
     until: str | None = Query(default=None),
     range: str | None = Query(default=None),
 ):
-    """CSV export, optionally narrowed by the same window the charts use."""
+    """CSV export of every task, optionally narrowed to a window or a range."""
     window_start = _parse_boundary(since, "since")
     window_end = _parse_boundary(until, "until")
     if range:
-        _, window, _bucket = _resolve_range(range)
+        _, window = _resolve_range(range)
         if window_start is None:
             window_start = datetime.now(UTC) - window
 
@@ -142,19 +76,9 @@ async def export_tasks_csv(
 
 
 # What each scope is allowed to destroy. "buffer" is the in-memory ring the
-# live view streams into and refills within seconds; "history" additionally
-# drops both SQLite tables, which is irreversible.
-CLEAR_SCOPES = ("buffer", "history")
-
-
-@router.get("/history/summary")
-async def get_history_summary():
-    """Row counts and oldest record per table.
-
-    Read before the delete-history confirmation so the prompt can name what it
-    is about to destroy instead of describing it vaguely.
-    """
-    return await asyncio.to_thread(task_history.store.history_summary)
+# live view streams into and refills within seconds; the persisted history
+# is never cleared by it.
+CLEAR_SCOPES = ("buffer",)
 
 
 @router.post("/clear")
@@ -177,14 +101,10 @@ async def clear_metrics(
         )
 
     buffer.clear()
-    if scope == "buffer":
-        return {"cleared": True, "scope": "buffer"}
-
-    deleted = await asyncio.to_thread(task_history.clear)
-    return {"cleared": True, "scope": "history", "deleted": deleted}
+    return {"cleared": True, "scope": "buffer"}
 
 
-def _resolve_range(value: str | None) -> tuple[str, timedelta, int]:
+def _resolve_range(value: str | None) -> tuple[str, timedelta]:
     try:
         return resolve_range(value)
     except ValueError as error:

@@ -178,13 +178,6 @@ class TaskHistory:
             self._refresh_quietly()
         return self._store.get_tasks(since=since, until=until, limit=n)
 
-    def series(self, start: datetime, end: datetime, bucket_seconds: int) -> list[dict]:
-        return self._store.task_series(start, end, bucket_seconds)
-
-    def window(self, start: datetime, end: datetime, bucket_seconds: int) -> dict:
-        """Buckets plus a whole-window summary."""
-        return self._store.task_window(start, end, bucket_seconds)
-
     def count(self) -> int:
         return self._store.count_tasks()
 

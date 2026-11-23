@@ -79,9 +79,6 @@ def test_task_history_drops_the_single_token_sentinel_rate(monkeypatch, tmp_path
     [record] = history.get_recent(refresh=False)
     assert record["output_tokens"] == 1
     assert record["gen_tps"] == 0.0
-    assert history.store.task_window(
-        datetime(2026, 11, 1, tzinfo=UTC), datetime(2026, 11, 30, tzinfo=UTC), 3600
-    )["summary"]["gen_tps_mean"] == 0.0
 
 
 def test_task_history_stores_an_undated_record_once(monkeypatch, tmp_path):

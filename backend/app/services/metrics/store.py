@@ -28,16 +28,12 @@ from app.services.state_files import PRIVATE_FILE_MODE, ensure_private_dir
 
 SCHEMA_VERSION = 1
 
-# Bucket width per selectable range. Sized so that a bucket is usually
-# populated rather than merely to cap the point count: empty buckets are
-# dropped and gaps are drawn as gaps, so too fine a bucket turns a sparse
-# workload into scattered points instead of a trend. Each range lands at
-# 12-30 points, which the SVG charts render comfortably.
-RANGE_WINDOWS: dict[str, tuple[timedelta, int]] = {
-    "1h": (timedelta(hours=1), 5 * 60),
-    "24h": (timedelta(hours=24), 60 * 60),
-    "7d": (timedelta(days=7), 6 * 60 * 60),
-    "30d": (timedelta(days=30), 24 * 60 * 60),
+# Time windows a range selector stands for.
+RANGE_WINDOWS: dict[str, timedelta] = {
+    "1h": timedelta(hours=1),
+    "24h": timedelta(hours=24),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
 }
 
 DEFAULT_RANGE = "24h"
@@ -65,7 +61,7 @@ def measurable_rate(rate: float, output_tokens: int) -> float:
     """Return the rate, or 0.0 when it cannot have been measured.
 
     The run itself is kept: its token counts and TTFT are real. Only the rate
-    is dropped, and every aggregate skips non-positive rates.
+    is dropped.
     """
     try:
         value = float(rate)
@@ -401,106 +397,6 @@ class MetricsStore:
         )
         return row[0] if row else None
 
-    def _task_rows_in_window(self, start: datetime, end: datetime) -> list[dict]:
-        def run(connection: sqlite3.Connection) -> list[sqlite3.Row]:
-            return connection.execute(
-                "SELECT ts_epoch, gen_tps, ttft_seconds, input_tokens, output_tokens"
-                " FROM task_records WHERE ts_epoch >= ? AND ts_epoch <= ?"
-                " ORDER BY ts_epoch ASC",
-                (start.timestamp(), end.timestamp()),
-            ).fetchall()
-
-        return [dict(row) for row in self._read(run)]
-
-    def task_series(
-        self,
-        start: datetime,
-        end: datetime,
-        bucket_seconds: int,
-    ) -> list[dict]:
-        """Time-bucketed task aggregates over a window."""
-        return bucket_task_rows(self._task_rows_in_window(start, end), bucket_seconds)
-
-    def output_token_percentile(
-        self,
-        start: datetime,
-        end: datetime,
-        fraction: float = 0.95,
-    ) -> dict:
-        """One percentile of output_tokens over a window.
-
-        The scatter's size scale needs a single scalar, not every row: shipping
-        30 days of runs to the client to compute one number was a full history
-        transfer per page load. Only the column that feeds the percentile is
-        read, and the aggregation reuses the same nearest-rank `percentile`
-        the series summaries use, so the two never drift apart.
-
-        Zero-token rows are excluded: a run that produced nothing carries no
-        magnitude and would drag the percentile down.
-        """
-
-        def run(connection: sqlite3.Connection) -> list[int]:
-            return [
-                int(row[0])
-                for row in connection.execute(
-                    "SELECT output_tokens FROM task_records"
-                    " WHERE ts_epoch >= ? AND ts_epoch <= ? AND output_tokens > 0",
-                    (start.timestamp(), end.timestamp()),
-                ).fetchall()
-            ]
-
-        values = self._read(run)
-        return {
-            "count": len(values),
-            # None, not 0: an empty window has no ceiling, and a zero one would
-            # make every mark render at maximum radius.
-            "value": percentile([float(value) for value in values], fraction) if values else None,
-        }
-
-    def history_summary(self) -> dict:
-        """Row counts and the oldest timestamp in each table.
-
-        Backs the delete-history confirmation, which has to state what is about
-        to be destroyed rather than guess at it.
-        """
-
-        def run(connection: sqlite3.Connection) -> dict:
-            tasks = connection.execute("SELECT COUNT(*) FROM task_records").fetchone()[0]
-            hardware = connection.execute(
-                "SELECT COUNT(*) FROM hardware_samples"
-            ).fetchone()[0]
-            oldest_task = connection.execute(
-                "SELECT timestamp FROM task_records ORDER BY ts_epoch ASC, id ASC LIMIT 1"
-            ).fetchone()
-            oldest_hardware = connection.execute(
-                "SELECT timestamp FROM hardware_samples ORDER BY ts_epoch ASC, id ASC LIMIT 1"
-            ).fetchone()
-            return {
-                "tasks": tasks,
-                "hardware": hardware,
-                "oldest_task": oldest_task[0] if oldest_task else None,
-                "oldest_hardware": oldest_hardware[0] if oldest_hardware else None,
-            }
-
-        return self._read(run)
-
-    def task_window(
-        self,
-        start: datetime,
-        end: datetime,
-        bucket_seconds: int,
-    ) -> dict:
-        """Buckets plus a summary over the whole window, from one read.
-
-        The window percentiles come from the raw rows, not from the per-bucket
-        percentiles: averaging percentiles would not be a percentile.
-        """
-        rows = self._task_rows_in_window(start, end)
-        return {
-            "buckets": bucket_task_rows(rows, bucket_seconds),
-            "summary": summarize_task_rows(rows),
-        }
-
     # ── Hardware samples ───────────────────────────────────
 
     def upsert_hardware_minute(self, aggregate: dict) -> None:
@@ -573,29 +469,6 @@ class MetricsStore:
             ).fetchone()[0]
         )
 
-    def hardware_series(
-        self,
-        start: datetime,
-        end: datetime,
-        bucket_seconds: int,
-    ) -> list[dict]:
-        """Time-bucketed hardware aggregates over a window."""
-
-        def run(connection: sqlite3.Connection) -> list[sqlite3.Row]:
-            return connection.execute(
-                "SELECT ts_epoch, sample_count, ram_used_gb, ram_total_gb, ram_percent,"
-                " ram_percent_min, ram_percent_max, cpu_percent, swap_used_gb,"
-                " gpu_load_percent, gpu_temp_c, gpu_vram_used_gb, gpu_gtt_used_gb,"
-                " temperatures FROM hardware_samples WHERE ts_epoch >= ? AND ts_epoch <= ?"
-                " ORDER BY ts_epoch ASC",
-                (start.timestamp(), end.timestamp()),
-            ).fetchall()
-
-        return bucket_hardware_rows(
-            [dict(row) for row in self._read(run)],
-            bucket_seconds,
-        )
-
     # ── Housekeeping ───────────────────────────────────────
 
     def prune(
@@ -639,10 +512,7 @@ class MetricsStore:
         return self._write(run)
 
     def clear(self, now: datetime | None = None) -> dict[str, int]:
-        """Wipe both series, reporting the rows removed.
-
-        The caller shows those counts back to the operator: an irreversible
-        delete that answers "done" tells them nothing about what it took.
+        """Wipe both tables, reporting the rows removed from each.
 
         The journal still holds the cleared tasks, so the time of the clear is
         stored with the delete, in the same transaction, and nothing completed
@@ -672,11 +542,11 @@ class MetricsStore:
         self._write(lambda connection: _set_meta(connection, key, value))
 
 
-# ── Bucketing and aggregation ──────────────────────────────
+# ── Ranges ─────────────────────────────────────────────────
 
 
-def resolve_range(name: str | None) -> tuple[str, timedelta, int]:
-    """Map a range selector onto its window and bucket width.
+def resolve_range(name: str | None) -> tuple[str, timedelta]:
+    """Map a range selector onto its window.
 
     No selector means the default range. An unknown one raises ValueError
     rather than quietly answering for another window: a CSV export for a
@@ -685,164 +555,10 @@ def resolve_range(name: str | None) -> tuple[str, timedelta, int]:
     key = (name or DEFAULT_RANGE).strip().lower()
     if key not in RANGE_WINDOWS:
         raise ValueError(f"range must be one of: {', '.join(RANGE_WINDOWS)}")
-    window, bucket_seconds = RANGE_WINDOWS[key]
-    return key, window, bucket_seconds
-
-
-def percentile(values: list[float], fraction: float) -> float:
-    """Nearest-rank percentile over an unsorted list.
-
-    Nearest-rank always returns an observed value, which is what makes p95
-    meaningful on the small per-bucket samples this store produces.
-    """
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    if len(ordered) == 1:
-        return round(ordered[0], 2)
-    rank = math.ceil(fraction * len(ordered))
-    index = min(max(rank - 1, 0), len(ordered) - 1)
-    return round(ordered[index], 2)
-
-
-def _mean(values: list[float]) -> float:
-    return round(sum(values) / len(values), 2) if values else 0.0
-
-
-def bucket_start(epoch: float, bucket_seconds: int) -> float:
-    """Floor an epoch to its bucket boundary."""
-    return math.floor(epoch / bucket_seconds) * bucket_seconds
-
-
-def bucket_task_rows(rows: list[dict], bucket_seconds: int) -> list[dict]:
-    """Group task rows into fixed buckets and aggregate each one.
-
-    Empty buckets are omitted rather than zero-filled, so a quiet range simply
-    yields fewer points instead of a flat line at zero.
-    """
-    if bucket_seconds <= 0:
-        bucket_seconds = 60
-
-    grouped: dict[float, list[dict]] = {}
-    for row in rows:
-        grouped.setdefault(bucket_start(row["ts_epoch"], bucket_seconds), []).append(row)
-
-    buckets: list[dict] = []
-    for start in sorted(grouped):
-        members = grouped[start]
-        gen_tps = _measured_rates(members)
-        ttft = [float(item["ttft_seconds"]) for item in members]
-        input_tokens = sum(int(item["input_tokens"]) for item in members)
-        output_tokens = sum(int(item["output_tokens"]) for item in members)
-        buckets.append(
-            {
-                "t": _iso(start),
-                "count": len(members),
-                "gen_tps_mean": _mean(gen_tps),
-                "gen_tps_p50": percentile(gen_tps, 0.5),
-                "gen_tps_p95": percentile(gen_tps, 0.95),
-                "ttft_mean": _mean(ttft),
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-            }
-        )
-    return buckets
-
-
-def summarize_task_rows(rows: list[dict]) -> dict:
-    """Aggregate an entire window into one summary row."""
-    gen_tps = _measured_rates(rows)
-    ttft = [float(row["ttft_seconds"]) for row in rows]
-    input_tokens = sum(int(row["input_tokens"]) for row in rows)
-    output_tokens = sum(int(row["output_tokens"]) for row in rows)
-    return {
-        "count": len(rows),
-        "gen_tps_mean": _mean(gen_tps),
-        "gen_tps_p50": percentile(gen_tps, 0.5),
-        "gen_tps_p95": percentile(gen_tps, 0.95),
-        "ttft_mean": _mean(ttft),
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "total_tokens": input_tokens + output_tokens,
-    }
-
-
-def bucket_hardware_rows(rows: list[dict], bucket_seconds: int) -> list[dict]:
-    """Group per-minute hardware rows into fixed buckets and aggregate."""
-    if bucket_seconds <= 0:
-        bucket_seconds = 60
-
-    grouped: dict[float, list[dict]] = {}
-    for row in rows:
-        grouped.setdefault(bucket_start(row["ts_epoch"], bucket_seconds), []).append(row)
-
-    buckets: list[dict] = []
-    for start in sorted(grouped):
-        members = grouped[start]
-        ram_percent_mins = _numbers(members, "ram_percent_min")
-        ram_percent_maxes = _numbers(members, "ram_percent_max")
-        buckets.append(
-            {
-                "t": _iso(start),
-                "count": sum(int(item.get("sample_count") or 0) for item in members),
-                "ram_used_gb": _mean(_numbers(members, "ram_used_gb")),
-                "ram_total_gb": _mean(_numbers(members, "ram_total_gb")),
-                "ram_percent": _mean(_numbers(members, "ram_percent")),
-                "ram_percent_min": round(min(ram_percent_mins), 2) if ram_percent_mins else 0.0,
-                "ram_percent_max": round(max(ram_percent_maxes), 2) if ram_percent_maxes else 0.0,
-                "cpu_percent": _mean(_numbers(members, "cpu_percent")),
-                "swap_used_gb": _mean(_numbers(members, "swap_used_gb")),
-                "gpu_load_percent": _optional_mean(members, "gpu_load_percent"),
-                "gpu_temp_c": _optional_mean(members, "gpu_temp_c"),
-                "gpu_vram_used_gb": _optional_mean(members, "gpu_vram_used_gb"),
-                "gpu_gtt_used_gb": _optional_mean(members, "gpu_gtt_used_gb"),
-                "temps": _merge_temperatures(members),
-            }
-        )
-    return buckets
-
-
-def _measured_rates(rows: list[dict]) -> list[float]:
-    """Generation rates that were measured; zeroed sentinels are skipped."""
-    return [rate for row in rows if (rate := float(row["gen_tps"])) > 0.0]
-
-
-def _numbers(rows: list[dict], key: str) -> list[float]:
-    return [float(row[key]) for row in rows if row.get(key) is not None]
-
-
-def _optional_mean(rows: list[dict], key: str) -> float | None:
-    """Mean of a metric that may be absent on this host (no GPU, no sensors)."""
-    values = _numbers(rows, key)
-    return _mean(values) if values else None
-
-
-def _merge_temperatures(rows: list[dict]) -> dict[str, float]:
-    """Mean per sensor label across the bucket."""
-    totals: dict[str, list[float]] = {}
-    for row in rows:
-        raw = row.get("temperatures")
-        if isinstance(raw, str):
-            try:
-                raw = json.loads(raw)
-            except ValueError:
-                raw = {}
-        if not isinstance(raw, dict):
-            continue
-        for label, value in raw.items():
-            try:
-                totals.setdefault(label, []).append(float(value))
-            except (TypeError, ValueError):
-                continue
-    return {label: _mean(values) for label, values in totals.items()}
+    return key, RANGE_WINDOWS[key]
 
 
 # ── Helpers ────────────────────────────────────────────────
-
-
-def _iso(epoch: float) -> str:
-    return datetime.fromtimestamp(epoch, tz=UTC).isoformat()
 
 
 def _utc(timestamp: str) -> datetime | None:

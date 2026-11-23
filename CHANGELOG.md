@@ -8,11 +8,11 @@ The project is under active development, so entries currently describe the evolv
 
 ### Added
 
-- Persisted run history: every completed inference in the Lemonade journal and a per-minute hardware rollup (including GTT and VRAM in use, where amdgpu reports them) are stored in SQLite (`backend/app/data/lcc_metrics.db`, task records kept indefinitely and hardware rollups for 30 days by default; `TASK_RETENTION_DAYS` and `HARDWARE_RETENTION_DAYS` set a limit, 0 means none), sampled in the background so history accrues with no UI open. New endpoints `/api/metrics/tasks/series`, `/api/metrics/tasks/scale`, `/api/metrics/hardware/series` and `/api/metrics/history/summary`; `/api/metrics/tasks` and the CSV export accept a time range; `/api/metrics/tasks` keeps its default of 20 records and accepts `n` up to 5000 instead of 50, and the CSV export holds every record in the range. An existing `task_history.json` is imported once.
+- Persisted run history: every completed inference in the Lemonade journal and a per-minute hardware rollup (including GTT and VRAM in use, where amdgpu reports them) are stored in SQLite (`backend/app/data/lcc_metrics.db`, task records kept indefinitely and hardware rollups for 30 days by default; `TASK_RETENTION_DAYS` and `HARDWARE_RETENTION_DAYS` set a limit, 0 means none), sampled in the background so history accrues with no UI open. `/api/metrics/tasks` and the CSV export accept a time range; `/api/metrics/tasks` keeps its default of 20 records and accepts `n` up to 5000 instead of 50, and the CSV export holds every record in the range. An existing `task_history.json` is imported once.
 
 ### Changed
 
-- `POST /api/metrics/clear` now requires `scope=buffer` (live buffer only) or `scope=history` (also deletes the persisted history; tasks still in the Lemonade journal at that point are not recorded again); a missing or unknown scope returns 400 instead of wiping data.
+- `POST /api/metrics/clear` now requires `scope=buffer`, which empties the live buffer and keeps the persisted history; a missing or unknown scope returns 400 instead of wiping data.
 
 ## 0.3.2 - 2026-11-24
 
