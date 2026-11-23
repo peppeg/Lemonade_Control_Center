@@ -6,6 +6,14 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+### Added
+
+- Persisted run history: every completed inference in the Lemonade journal and a per-minute hardware rollup are stored in SQLite (`backend/app/data/lcc_metrics.db`, retention 90/30 days, configurable), sampled in the background so history accrues with no UI open. New endpoints `/api/metrics/tasks/series`, `/api/metrics/tasks/scale`, `/api/metrics/hardware/series` and `/api/metrics/history/summary`; `/api/metrics/tasks` and the CSV export accept a time range. An existing `task_history.json` is imported once.
+
+### Changed
+
+- `POST /api/metrics/clear` now requires `scope=buffer` (live buffer only) or `scope=history` (also deletes the persisted history); a missing or unknown scope returns 400 instead of wiping data.
+
 ## 0.3.2 - 2026-11-24
 
 ### Added

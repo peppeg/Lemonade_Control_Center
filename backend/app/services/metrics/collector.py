@@ -1,4 +1,16 @@
-"""Background metrics collector."""
+"""Background metrics collector.
+
+Three loops share this lifecycle:
+
+* the hardware sampler, which feeds the live in-memory buffer every few
+  seconds and folds each minute into one persisted row;
+* the task sampler, which scrapes the journal on its own schedule so history
+  is recorded whether or not a UI is connected;
+* the pruner, which enforces the retention windows on startup and hourly.
+
+Every SQLite call is pushed onto a worker thread, so nothing here blocks the
+event loop.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -6,12 +18,104 @@ from datetime import UTC, datetime
 
 import psutil
 
+from app.config import settings
 from app.services.hardware import get_gpu_info
 from app.services.metrics.buffer import DataPoint, TimeSeriesBuffer
+from app.services.metrics.store import MetricsStore
+from app.services.metrics.task_history import task_history
+
+
+def store() -> MetricsStore:
+    """The live store, resolved late so a rebind is picked up everywhere."""
+    return task_history.store
+
 
 buffer = TimeSeriesBuffer(retention_minutes=30, interval_seconds=5)
+
 _task: asyncio.Task | None = None
+_task_sampler: asyncio.Task | None = None
+_pruner: asyncio.Task | None = None
 _subscribers: list[asyncio.Queue] = []
+
+
+class _MinuteAggregate:
+    """Running aggregate for the minute currently being sampled.
+
+    Requirement R4 keeps the 5s buffer for the live view and persists one
+    downsampled row per minute. The row is upserted on every sample rather
+    than written when the minute closes, so a restart mid-minute keeps what
+    was already observed.
+    """
+
+    def __init__(self, minute_start: datetime) -> None:
+        self.minute_start = minute_start
+        self.count = 0
+        self._sums: dict[str, float] = {}
+        self._optional: dict[str, list[float]] = {"gpu_load_percent": [], "gpu_temp_c": []}
+        self.ram_percent_min: float | None = None
+        self.ram_percent_max: float | None = None
+        self.temperatures: dict[str, list[float]] = {}
+
+    def add(self, point: DataPoint) -> None:
+        self.count += 1
+        for key, value in (
+            ("ram_used_gb", point.ram_used_gb),
+            ("ram_total_gb", point.ram_total_gb),
+            ("ram_percent", point.ram_percent),
+            ("cpu_percent", point.cpu_percent),
+            ("swap_used_gb", point.swap_used_gb),
+        ):
+            self._sums[key] = self._sums.get(key, 0.0) + value
+
+        if point.gpu_load_percent is not None:
+            self._optional["gpu_load_percent"].append(point.gpu_load_percent)
+        if point.gpu_temp_c is not None:
+            self._optional["gpu_temp_c"].append(point.gpu_temp_c)
+
+        self.ram_percent_min = (
+            point.ram_percent
+            if self.ram_percent_min is None
+            else min(self.ram_percent_min, point.ram_percent)
+        )
+        self.ram_percent_max = (
+            point.ram_percent
+            if self.ram_percent_max is None
+            else max(self.ram_percent_max, point.ram_percent)
+        )
+
+        for label, value in point.temperatures.items():
+            self.temperatures.setdefault(label, []).append(value)
+
+    def as_row(self) -> dict:
+        def mean(key: str) -> float:
+            return round(self._sums.get(key, 0.0) / self.count, 3) if self.count else 0.0
+
+        def optional_mean(key: str) -> float | None:
+            values = self._optional[key]
+            return round(sum(values) / len(values), 2) if values else None
+
+        return {
+            "timestamp": self.minute_start.isoformat(),
+            "sample_count": self.count,
+            "ram_used_gb": mean("ram_used_gb"),
+            "ram_total_gb": mean("ram_total_gb"),
+            "ram_percent": mean("ram_percent"),
+            "ram_percent_min": round(self.ram_percent_min or 0.0, 2),
+            "ram_percent_max": round(self.ram_percent_max or 0.0, 2),
+            "cpu_percent": mean("cpu_percent"),
+            "swap_used_gb": mean("swap_used_gb"),
+            "gpu_load_percent": optional_mean("gpu_load_percent"),
+            "gpu_temp_c": optional_mean("gpu_temp_c"),
+            "temperatures": {
+                label: round(sum(values) / len(values), 1)
+                for label, values in self.temperatures.items()
+                if values
+            },
+        }
+
+
+_minute: _MinuteAggregate | None = None
+_minute_lock = asyncio.Lock()
 
 
 def subscribe() -> asyncio.Queue:
@@ -31,6 +135,7 @@ def unsubscribe(queue: asyncio.Queue) -> None:
 async def collect_once() -> dict:
     point = _sample()
     buffer.append(point)
+    await _persist_minute(point)
     latest = buffer.get_latest()
     for queue in _subscribers:
         try:
@@ -38,6 +143,44 @@ async def collect_once() -> dict:
         except asyncio.QueueFull:
             pass
     return latest or {}
+
+
+async def _persist_minute(point: DataPoint) -> None:
+    """Fold one live sample into the persisted per-minute rollup."""
+    global _minute
+    minute_start = point.timestamp.astimezone(UTC).replace(second=0, microsecond=0)
+    # The lock spans the write too: the endpoints can call collect_once()
+    # alongside the loop, and an out-of-order upsert would drop a sample.
+    async with _minute_lock:
+        if _minute is None or _minute.minute_start != minute_start:
+            _minute = _MinuteAggregate(minute_start)
+        _minute.add(point)
+        row = _minute.as_row()
+        try:
+            await asyncio.to_thread(store().upsert_hardware_minute, row)
+        except Exception:
+            # Losing a rollup must never stop the live stream.
+            pass
+
+
+async def sample_tasks_once() -> int:
+    """Record every finished inference the journal still carries."""
+    try:
+        return await asyncio.to_thread(task_history.refresh_from_logs)
+    except Exception:
+        return 0
+
+
+async def prune_once() -> dict[str, int]:
+    """Apply both retention windows."""
+    try:
+        return await asyncio.to_thread(
+            store().prune,
+            settings.task_retention_days,
+            settings.hardware_retention_days,
+        )
+    except Exception:
+        return {"tasks": 0, "hardware": 0}
 
 
 async def _collector_loop(interval_seconds: int) -> None:
@@ -49,17 +192,59 @@ async def _collector_loop(interval_seconds: int) -> None:
         await asyncio.sleep(interval_seconds)
 
 
+async def _task_sampler_loop(interval_seconds: int) -> None:
+    while True:
+        try:
+            await sample_tasks_once()
+        except Exception:
+            pass
+        await asyncio.sleep(interval_seconds)
+
+
+async def _pruner_loop(interval_seconds: int) -> None:
+    while True:
+        try:
+            await prune_once()
+        except Exception:
+            pass
+        await asyncio.sleep(interval_seconds)
+
+
 def start_collector(interval_seconds: int = 5) -> None:
-    global _task
+    global _task, _task_sampler, _pruner
+
+    # First start also imports the pre-SQLite JSON history and prunes anything
+    # already past retention, both off the event loop.
+    async def bootstrap() -> None:
+        try:
+            await asyncio.to_thread(task_history.migrate_legacy_json)
+        except Exception:
+            pass
+        # The pruner loop prunes on its own first iteration, so bootstrap only
+        # has to get the first batch of tasks in without waiting 15 seconds.
+        await sample_tasks_once()
+
     if _task is None or _task.done():
         _task = asyncio.create_task(_collector_loop(interval_seconds))
+    if _task_sampler is None or _task_sampler.done():
+        _task_sampler = asyncio.create_task(
+            _task_sampler_loop(max(1, settings.task_sampler_interval_seconds))
+        )
+    if _pruner is None or _pruner.done():
+        _pruner = asyncio.create_task(
+            _pruner_loop(max(60, settings.metrics_prune_interval_seconds))
+        )
+    asyncio.ensure_future(bootstrap())
 
 
 def stop_collector() -> None:
-    global _task
-    if _task and not _task.done():
-        _task.cancel()
+    global _task, _task_sampler, _pruner
+    for running in (_task, _task_sampler, _pruner):
+        if running and not running.done():
+            running.cancel()
     _task = None
+    _task_sampler = None
+    _pruner = None
 
 
 def _sample() -> DataPoint:

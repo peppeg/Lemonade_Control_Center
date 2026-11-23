@@ -355,7 +355,7 @@ def parse_last_task(
         stats.total_duration_seconds = round(
             stats.ttft_seconds + stats.output_tokens / stats.generation_tps, 1)
 
-    stats.finish_reason = _infer_finish_reason(stats, configured_max_tokens)
+    stats.finish_reason = infer_finish_reason(stats, configured_max_tokens)
 
     return stats
 
@@ -371,7 +371,7 @@ def _lemonade_timestamp_iso(line: str) -> str | None:
         return None
 
 
-def _infer_finish_reason(
+def infer_finish_reason(
     stats: LastTaskStats,
     configured_max_tokens: int | None
 ) -> FinishReason:
@@ -483,3 +483,169 @@ def _parse_log_line(line: str) -> LogEntry:
         timestamp=timestamp, level=LogEntryLevel.INFO,
         message=line, raw=line, icon="ℹ️"
     )
+
+
+# ── Multi-record telemetry extraction ──────────────────────
+
+# parse_last_task() above collapses the journal window to a single task, so any
+# inference that finished between two polls is lost. The helpers below walk the
+# same window and yield every completed record instead, which is what the
+# long-run performance store needs.
+
+@dataclass
+class TaskTelemetryRecord:
+    """One completed inference recovered from the journal."""
+
+    timestamp: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    ttft_seconds: float
+    generation_tps: float
+    prompt_eval_tps: float
+    total_duration_seconds: float
+
+    @property
+    def dedup_key(self) -> tuple[str, str, int, int]:
+        """Identity of a record, so the same inference is stored only once."""
+        return (self.timestamp, self.model, self.input_tokens, self.output_tokens)
+
+
+def parse_task_records(
+    service: str = "lemond.service",
+    n_lines: int = 500,
+    timeout: float = 10,
+) -> list[TaskTelemetryRecord]:
+    """Return every completed task in the journal window, oldest first."""
+    try:
+        result = subprocess.run(
+            ["journalctl", "-u", service, "-n", str(n_lines),
+             "-o", "cat", "--no-pager"],
+            capture_output=True, text=True, timeout=timeout,
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return []
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return []
+
+    return extract_task_records(result.stdout.splitlines())
+
+
+def extract_task_records(lines: list[str]) -> list[TaskTelemetryRecord]:
+    """Pull every telemetry record out of raw journal lines, oldest first.
+
+    Handles both spellings parse_last_task() accepts: the Lemonade 11.7
+    single-line record, where all fields share one line, and the legacy
+    per-field lines, where they arrive one after another. A partial record is
+    flushed as soon as a field it already holds shows up again, which is what
+    separates two consecutive tasks in the legacy format.
+    """
+    records: list[TaskTelemetryRecord] = []
+    pending: dict[str, object] = {}
+    last_timestamp: str | None = None
+
+    def flush() -> None:
+        record = _build_task_record(pending)
+        if record is not None:
+            records.append(record)
+        pending.clear()
+
+    for line in lines:
+        line_timestamp = _line_timestamp(line)
+        if line_timestamp:
+            last_timestamp = line_timestamp
+
+        fields: dict[str, object] = {}
+        match = RE_TELEMETRY_INPUT.search(line)
+        if match:
+            fields["input_tokens"] = int(match.group(1))
+        match = RE_TELEMETRY_OUTPUT.search(line)
+        if match:
+            fields["output_tokens"] = int(match.group(1))
+        match = RE_TELEMETRY_TTFT.search(line)
+        if match:
+            fields["ttft_seconds"] = round(float(match.group(1)), 2)
+        match = RE_TELEMETRY_TPS.search(line)
+        if match:
+            fields["generation_tps"] = float(match.group(1))
+
+        if not fields:
+            continue
+
+        # A repeated field means the previous record ended and a new one began.
+        if any(key in pending for key in fields):
+            flush()
+
+        match = RE_TELEMETRY_MODEL.search(line)
+        if match:
+            fields["model"] = match.group(1)
+
+        pending.update(fields)
+        pending.setdefault("timestamp", last_timestamp)
+
+    flush()
+    return records
+
+
+def _build_task_record(pending: dict[str, object]) -> TaskTelemetryRecord | None:
+    """Turn an accumulated field set into a record, or None if unusable."""
+    input_tokens = pending.get("input_tokens")
+    output_tokens = pending.get("output_tokens")
+    if not isinstance(input_tokens, int) or not isinstance(output_tokens, int):
+        return None
+    if output_tokens <= 0:
+        return None
+
+    ttft = pending.get("ttft_seconds")
+    generation_tps = pending.get("generation_tps")
+    ttft_seconds = float(ttft) if isinstance(ttft, (int, float)) else 0.0
+    gen_tps = float(generation_tps) if isinstance(generation_tps, (int, float)) else 0.0
+
+    # Same derivations parse_last_task() applies: the single-line telemetry
+    # reports neither the prompt-eval rate nor the wall-clock duration, because
+    # the llama.cpp timing lines they came from are silenced at log-verbosity 0.
+    prompt_eval_tps = round(input_tokens / ttft_seconds, 2) if ttft_seconds else 0.0
+    total_seconds = round(ttft_seconds + output_tokens / gen_tps, 1) if gen_tps else 0.0
+
+    timestamp = pending.get("timestamp")
+    if not isinstance(timestamp, str) or not timestamp:
+        timestamp = datetime.now(UTC).isoformat()
+
+    model = pending.get("model")
+
+    return TaskTelemetryRecord(
+        timestamp=timestamp,
+        model=model if isinstance(model, str) and model else "unknown",
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        ttft_seconds=ttft_seconds,
+        generation_tps=gen_tps,
+        prompt_eval_tps=prompt_eval_tps,
+        total_duration_seconds=total_seconds,
+    )
+
+
+def _line_timestamp(line: str) -> str | None:
+    """Normalise a journal line's leading timestamp to an aware ISO string."""
+    match = RE_TIMESTAMP.match(line)
+    if match:
+        raw = match.group(1)
+        try:
+            return _as_utc(datetime.fromisoformat(raw)).isoformat()
+        except ValueError:
+            # Syslog-style "Mon 22 10:00:48" carries no year; it cannot be
+            # resolved to an instant, so the caller falls back to now.
+            return None
+
+    match = RE_LEMONADE_TIMESTAMP.match(line)
+    if not match:
+        return None
+    try:
+        # Lemonade stamps its own lines in host local time with no offset.
+        parsed = datetime.fromisoformat(match.group(1).replace(" ", "T"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.astimezone()
+    return _as_utc(parsed).isoformat()

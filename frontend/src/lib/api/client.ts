@@ -294,7 +294,8 @@ export const api = {
     history: (minutes = 30) => get<{ points: MetricPoint[]; total: number; retention_minutes: number }>(`/metrics/history?minutes=${minutes}`),
     latest: () => get<{ point: MetricPoint | null }>('/metrics/latest'),
     tasks: (n = 20) => get<{ tasks: TaskRecord[] }>(`/metrics/tasks?n=${n}`),
-    clear: () => post<{ cleared: boolean }>('/metrics/clear'),
+    /** 'buffer' empties the live ring buffer only; the persisted history stays. */
+    clear: (scope: 'buffer') => post<{ cleared: boolean; scope: string }>(`/metrics/clear?scope=${scope}`),
     tasksCsvUrl: () => `${BASE}${withLccKey('/metrics/tasks/csv')}`,
   },
 

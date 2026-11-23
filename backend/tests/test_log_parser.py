@@ -1,13 +1,16 @@
 import json
 import subprocess
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 
 from app.models.schemas import LogEntryLevel
 from app.services.log_parser import (
     _parse_log_line,
+    extract_task_records,
     get_logs_for_window,
     parse_last_task,
+    parse_task_records,
 )
 
 
@@ -207,3 +210,107 @@ def test_parse_last_task_unavailable_without_journal(monkeypatch):
     monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
 
     assert parse_last_task().available is False
+
+
+# ── Multi-record extraction ────────────────────────────────
+
+FIXTURE = Path(__file__).parent / "fixtures" / "lemond_journal_11_7.log"
+
+
+def _fixture_lines() -> list[str]:
+    return FIXTURE.read_text(encoding="utf-8").splitlines()
+
+
+def test_extract_task_records_finds_every_record_in_a_real_journal():
+    """The captured 11.7 slice holds nine completed inferences."""
+    records = extract_task_records(_fixture_lines())
+
+    assert len(records) == 9
+    assert [record.output_tokens for record in records] == [
+        38, 79, 562, 10, 217, 61, 24, 55, 61
+    ]
+    assert [record.input_tokens for record in records] == [
+        27, 21, 26, 2306, 24124, 2337, 91, 49, 91
+    ]
+    assert {record.model for record in records} == {"Gemma-4-12B-it-MTP-GGUF"}
+
+
+def test_extract_task_records_matches_parse_last_task_on_the_final_record():
+    """The multi-record path derives exactly what parse_last_task derives."""
+    last = extract_task_records(_fixture_lines())[-1]
+
+    assert last.input_tokens == 91
+    assert last.output_tokens == 61
+    assert last.ttft_seconds == 1.24
+    assert last.generation_tps == 13.84
+    assert last.prompt_eval_tps == 73.39          # 91 / 1.24
+    assert last.total_duration_seconds == 5.6     # 1.24 + 61 / 13.84
+
+
+def test_extract_task_records_ignores_the_surrounding_journal_noise():
+    """An image model loading, VRAM pressure warnings and an eviction."""
+    noise = [
+        line for line in _fixture_lines()
+        if "(Telemetry) Inference completed" not in line
+    ]
+
+    assert len(noise) == 53
+    assert extract_task_records(noise) == []
+
+
+def test_extract_task_records_reads_timestamps_from_the_journal_lines():
+    records = extract_task_records(_fixture_lines())
+    stamps = [record.timestamp for record in records]
+
+    assert len(set(stamps)) == 9
+    assert stamps == sorted(stamps)
+    assert all(stamp.endswith("+00:00") for stamp in stamps)
+
+
+def test_extract_task_records_splits_consecutive_legacy_records():
+    """The per-field spelling separates records when a field repeats."""
+    records = extract_task_records([
+        "Input tokens: 40",
+        "Output tokens: 12",
+        "TTFT (s): 0.55",
+        "TPS: 22.5",
+        "Input tokens: 80",
+        "Output tokens: 24",
+        "TTFT (s): 1.10",
+        "TPS: 20.0",
+    ])
+
+    assert len(records) == 2
+    assert [record.input_tokens for record in records] == [40, 80]
+    assert [record.output_tokens for record in records] == [12, 24]
+    assert [record.generation_tps for record in records] == [22.5, 20.0]
+    assert records[0].model == "unknown"
+
+
+def test_extract_task_records_drops_records_without_output_tokens():
+    """A request that produced nothing is not a data point."""
+    assert extract_task_records([
+        ("2026-08-22 10:11:15.874 [Info] (Telemetry) Inference completed: "
+        "model=X, tokens=91 (in=91, out=0), ttft=1.24s, tps=0.00"),
+    ]) == []
+
+
+def test_parse_task_records_reads_the_journal_window(monkeypatch):
+    _fake_journal(monkeypatch, _fixture_lines())
+
+    assert len(parse_task_records()) == 9
+
+
+def test_parse_task_records_returns_empty_without_journal(monkeypatch):
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("journalctl")
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
+
+    assert parse_task_records() == []
+
+
+def test_parse_task_records_returns_empty_on_a_quiet_journal(monkeypatch):
+    _fake_journal(monkeypatch, [])
+
+    assert parse_task_records() == []

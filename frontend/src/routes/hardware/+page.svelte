@@ -5,7 +5,7 @@
   import SvgBarChart from '$lib/components/hardware/SvgBarChart.svelte';
   import SvgLineChart from '$lib/components/hardware/SvgLineChart.svelte';
   import {
-    clearMetricsHistory,
+    clearLiveBuffer,
     connectMetricsWs,
     disconnectMetricsWs,
     exportTasksCsv,
@@ -107,7 +107,7 @@
         <Download class="h-4 w-4" />
         Export CSV
       </button>
-      <button class="ops-button ops-button-danger" type="button" on:click={clearMetricsHistory}>
+      <button class="ops-button ops-button-danger" type="button" on:click={clearLiveBuffer}>
         <Trash2 class="h-4 w-4" />
         Clear
       </button>
