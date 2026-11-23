@@ -341,6 +341,48 @@ def test_prune_drops_rows_past_their_retention_window(store):
     assert store.get_tasks()[0]["timestamp"] == fresh.isoformat()
 
 
+def _seed_old_rows(store: MetricsStore, now: datetime) -> None:
+    store.insert_tasks([
+        TaskRow((now - timedelta(days=d)).isoformat(), "m", 1, 1, 1, 1, 1, 1, "stop", "inferred")
+        for d in (1, 400)
+    ])
+    for days in (1, 45):
+        store.upsert_hardware_minute({
+            "timestamp": (now - timedelta(days=days)).isoformat(), "sample_count": 1,
+            "ram_used_gb": 1.0, "ram_total_gb": 8.0, "ram_percent": 12.0,
+            "ram_percent_min": 12.0, "ram_percent_max": 12.0, "cpu_percent": 1.0,
+            "swap_used_gb": 0.0, "gpu_load_percent": None, "gpu_temp_c": None,
+            "temperatures": {},
+        })
+
+
+def test_zero_retention_means_no_limit_not_delete_all(store):
+    now = datetime(2026, 8, 22, 12, 0, tzinfo=UTC)
+    _seed_old_rows(store, now)
+
+    removed = store.prune(task_retention_days=0, hardware_retention_days=0, now=now)
+
+    assert removed == {"tasks": 0, "hardware": 0}
+    assert store.count_tasks() == 2
+    assert store.count_hardware() == 2
+
+
+def test_default_retention_keeps_tasks_and_prunes_hardware_after_30_days(store):
+    from app.config import Settings
+
+    # The shipped defaults, independent of any local .env.
+    task_days = Settings.model_fields["task_retention_days"].default
+    hardware_days = Settings.model_fields["hardware_retention_days"].default
+    assert (task_days, hardware_days) == (0, 30)
+    now = datetime(2026, 8, 22, 12, 0, tzinfo=UTC)
+    _seed_old_rows(store, now)
+
+    removed = store.prune(task_days, hardware_days, now=now)
+
+    assert removed == {"tasks": 0, "hardware": 1}
+    assert store.count_tasks() == 2
+
+
 def test_prune_on_an_empty_store_removes_nothing(store):
     assert store.prune(task_retention_days=90, hardware_retention_days=30) == {
         "tasks": 0,

@@ -68,9 +68,11 @@ class Settings(BaseSettings):
 
     # ── Long-run metrics store ──
     # Persistent performance history lives in SQLite next to the legacy JSON
-    # history file. Both retention windows are pruned on startup and hourly.
+    # history file. Retention is pruned on startup and hourly; 0 means no
+    # limit. Task records are small and are the evidence across Lemonade and
+    # driver updates, so they are kept indefinitely by default.
     metrics_db_path: str = str(Path(__file__).parent / "data" / "lcc_metrics.db")
-    task_retention_days: int = 90
+    task_retention_days: int = 0
     hardware_retention_days: int = 30
     # How often the background sampler scrapes the journal for finished tasks.
     task_sampler_interval_seconds: int = 15

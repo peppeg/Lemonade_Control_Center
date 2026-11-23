@@ -3,7 +3,8 @@
 The in-memory buffers elsewhere in this package answer the live view; this
 module answers "what did generation speed look like last week". Two tables,
 one row per completed inference and one aggregated row per minute of hardware
-sampling, both pruned against configurable retention windows.
+sampling. Hardware rows are pruned after 30 days by default; task rows are
+kept unless a retention window is configured.
 
 Plain stdlib sqlite3, no ORM. Every method is synchronous and short; callers
 running inside the event loop push them through asyncio.to_thread.
@@ -423,7 +424,11 @@ class MetricsStore:
         hardware_retention_days: int | None = None,
         now: datetime | None = None,
     ) -> dict[str, int]:
-        """Drop rows past their retention window. Returns rows removed."""
+        """Drop rows past their retention window. Returns rows removed.
+
+        A retention of 0 (or less) means no limit for that table, never
+        "delete everything".
+        """
         moment = now or datetime.now(UTC)
         task_days = (
             task_retention_days
@@ -435,17 +440,21 @@ class MetricsStore:
             if hardware_retention_days is not None
             else settings.hardware_retention_days
         )
-        task_cutoff = (moment - timedelta(days=task_days)).timestamp()
-        hardware_cutoff = (moment - timedelta(days=hardware_days)).timestamp()
+
+        def delete_before(connection: sqlite3.Connection, table: str, days: int) -> int:
+            if days <= 0:
+                return 0
+            cutoff = (moment - timedelta(days=days)).timestamp()
+            removed = connection.execute(
+                f"DELETE FROM {table} WHERE ts_epoch < ?", (cutoff,)
+            ).rowcount
+            return max(0, removed)
 
         def run(connection: sqlite3.Connection) -> dict[str, int]:
-            tasks = connection.execute(
-                "DELETE FROM task_records WHERE ts_epoch < ?", (task_cutoff,)
-            ).rowcount
-            hardware = connection.execute(
-                "DELETE FROM hardware_samples WHERE ts_epoch < ?", (hardware_cutoff,)
-            ).rowcount
-            return {"tasks": max(0, tasks), "hardware": max(0, hardware)}
+            return {
+                "tasks": delete_before(connection, "task_records", task_days),
+                "hardware": delete_before(connection, "hardware_samples", hardware_days),
+            }
 
         return self._write(run)
 
