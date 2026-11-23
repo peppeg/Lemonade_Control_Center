@@ -7,10 +7,8 @@ from starlette.responses import JSONResponse, Response
 
 from app.services.security import (
     audit_write,
-    auth_required_for_host,
-    key_configured,
-    key_from_request,
-    verify_key,
+    evaluate_access,
+    key_from_connection,
 )
 
 PUBLIC_API_PATHS = {
@@ -32,11 +30,9 @@ class LccAccessControlMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         host = request.client.host if request.client else None
-        supplied_key = key_from_request(request)
-        auth_required = auth_required_for_host(host)
-        authenticated = not auth_required or verify_key(supplied_key)
+        access = evaluate_access(host, key_from_connection(request))
 
-        if auth_required and not key_configured():
+        if access.blocked:
             response = JSONResponse(
                 {
                     "detail": (
@@ -49,11 +45,11 @@ class LccAccessControlMiddleware(BaseHTTPMiddleware):
             audit_write(request=request, status_code=response.status_code, authenticated=False)
             return response
 
-        if auth_required and not authenticated:
+        if not access.authenticated:
             response = JSONResponse({"detail": "LCC API key required."}, status_code=401)
             audit_write(request=request, status_code=response.status_code, authenticated=False)
             return response
 
         response = await call_next(request)
-        audit_write(request=request, status_code=response.status_code, authenticated=authenticated)
+        audit_write(request=request, status_code=response.status_code, authenticated=access.authenticated)
         return response

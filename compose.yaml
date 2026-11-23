@@ -15,6 +15,7 @@ services:
       LAN_MODE: "true"
       REQUIRE_AUTH: "true"
       LCC_API_KEY: "${LCC_API_KEY:?Set LCC_API_KEY in the environment or Compose .env}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
       LEMONADE_URL: "${LEMONADE_URL:-http://host.docker.internal:13305}"
       LEMONADE_ADMIN_API_KEY: "${LEMONADE_ADMIN_API_KEY:-}"
       ENABLE_DELETE: "${ENABLE_DELETE:-false}"
