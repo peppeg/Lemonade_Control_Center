@@ -620,3 +620,50 @@ def test_a_database_that_cannot_be_written_still_holds_the_cursor_back(monkeypat
     with pytest.raises(sqlite3.OperationalError):
         history.refresh_from_logs()
     assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) is None
+
+
+@pytest.mark.parametrize(
+    "received",
+    ["9" * 30, "-" + "9" * 30, "1" + "0" * 400, "nonsense"],
+    ids=["far-future", "far-past", "overflows-float", "not-a-number"],
+)
+def test_a_journal_entry_with_an_unusable_time_does_not_stop_the_reads(
+    monkeypatch, tmp_path, received
+):
+    """datetime.fromtimestamp() raised on it, from every read that met it."""
+    from types import SimpleNamespace
+
+    now = datetime.now(UTC)
+    entries = [
+        {"MESSAGE": _completion(now - timedelta(seconds=20), 4), "__CURSOR": "c0",
+         "__REALTIME_TIMESTAMP": received},
+        {"MESSAGE": _completion(now - timedelta(seconds=10), 5), "__CURSOR": "c1",
+         "__REALTIME_TIMESTAMP": str(int((now - timedelta(seconds=10)).timestamp() * 1_000_000))},
+    ]
+    output = "\n".join(json.dumps(entry) for entry in entries)
+    monkeypatch.setattr(
+        "app.services.log_parser.subprocess.run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout=output, stderr=""),
+    )
+    monkeypatch.setattr(task_history.capabilities, "cmd_journalctl", True)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+
+    assert history.refresh_from_logs() == 2
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c1"
+
+
+def test_a_cursor_that_is_not_ascii_is_not_kept(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    now = datetime.now(UTC)
+    entry = {"MESSAGE": _completion(now, 4), "__CURSOR": "c\ud8000",
+             "__REALTIME_TIMESTAMP": str(int(now.timestamp() * 1_000_000))}
+    monkeypatch.setattr(
+        "app.services.log_parser.subprocess.run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout=json.dumps(entry), stderr=""),
+    )
+    monkeypatch.setattr(task_history.capabilities, "cmd_journalctl", True)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+
+    assert history.refresh_from_logs() == 1
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) is None

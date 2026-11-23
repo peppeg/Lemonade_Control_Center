@@ -194,9 +194,10 @@ def _as_utc(value: datetime) -> datetime:
 def _journal_timestamp(value: object) -> str | None:
     try:
         microseconds = int(str(value))
-    except (TypeError, ValueError):
+        return datetime.fromtimestamp(microseconds / 1_000_000, tz=UTC).isoformat()
+    except (OverflowError, OSError, TypeError, ValueError):
+        # A time beyond what datetime holds is no time, not a failed read.
         return None
-    return datetime.fromtimestamp(microseconds / 1_000_000, tz=UTC).isoformat()
 
 
 @dataclass
@@ -782,7 +783,9 @@ def _journal_entries(output: str) -> _JournalEntries:
             continue
         entries.count += 1
         cursor = payload.get("__CURSOR")
-        cursor = cursor if isinstance(cursor, str) and cursor else None
+        # journald's cursors are ASCII. Anything else could not be passed back
+        # to journalctl, nor stored.
+        cursor = cursor if isinstance(cursor, str) and cursor and cursor.isascii() else None
         received = _journal_timestamp(payload.get("__REALTIME_TIMESTAMP"))
         if cursor is not None:
             entries.last_cursor, entries.last_time = cursor, received
