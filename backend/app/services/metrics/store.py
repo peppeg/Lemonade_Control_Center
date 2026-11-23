@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sqlite3
+import stat
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -108,8 +110,29 @@ class MetricsStore:
 
     # ── Connection handling ────────────────────────────────
 
+    def _prepare_file(self) -> None:
+        """Create the database file readable by its owner only.
+
+        sqlite3.connect() would create it with the process umask, typically
+        0644. Creating it first with 0600 is enough for the -wal and -shm
+        files too: SQLite gives them the main file's permissions. A file left
+        by an earlier version with wider permissions is tightened.
+        """
+        self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.close(os.open(self._path, os.O_RDWR | os.O_CREAT, 0o600))
+        for path in (
+            self._path,
+            self._path.with_name(self._path.name + "-wal"),
+            self._path.with_name(self._path.name + "-shm"),
+        ):
+            try:
+                if stat.S_IMODE(path.stat().st_mode) & 0o077:
+                    path.chmod(0o600)
+            except FileNotFoundError:
+                continue
+
     def _connect(self) -> sqlite3.Connection:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._prepare_file()
         connection = sqlite3.connect(self._path, timeout=5.0)
         connection.row_factory = sqlite3.Row
         return connection

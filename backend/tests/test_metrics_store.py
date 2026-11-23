@@ -1,4 +1,7 @@
 import json
+import os
+import sqlite3
+import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -70,6 +73,36 @@ def test_store_creates_its_database_in_wal_mode(store):
     assert mode.lower() == "wal"
     assert "idx_task_records_ts" in indexes
     assert "idx_hardware_samples_ts" in indexes
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_database_files_are_owner_only(tmp_path):
+    previous = os.umask(0o022)
+    try:
+        store = MetricsStore(tmp_path / "data" / "lcc_metrics.db")
+        store.insert_tasks([make_row(0)])
+        # Hold a connection open so the WAL and shared-memory files exist.
+        connection = sqlite3.connect(store.path)
+        connection.execute("SELECT COUNT(*) FROM task_records").fetchone()
+        paths = [store.path, *(store.path.with_name(store.path.name + s) for s in ("-wal", "-shm"))]
+        modes = {path.name: stat.S_IMODE(path.stat().st_mode) for path in paths}
+        connection.close()
+    finally:
+        os.umask(previous)
+
+    assert modes == {path.name: 0o600 for path in paths}
+    assert stat.S_IMODE(store.path.parent.stat().st_mode) == 0o700
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_an_existing_world_readable_database_is_tightened(tmp_path):
+    path = tmp_path / "lcc_metrics.db"
+    sqlite3.connect(path).close()
+    path.chmod(0o644)
+
+    MetricsStore(path).initialize()
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_empty_store_returns_empty_series_not_errors(store):
