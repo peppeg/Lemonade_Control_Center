@@ -42,7 +42,7 @@
   let hardware: HardwareInfo | null = null;
   let temperatures: TemperatureReading[] = [];
   let tempsAvailable = false;
-  let llamaServer: LlamaServerInfo | null = null;
+  let llamaServers: LlamaServerInfo[] = [];
   let processes: TopProcess[] = [];
   let serviceStatus = 'unknown';
   let loading = true;
@@ -64,7 +64,7 @@
     const [hardwareResult, tempResult, llamaResult, processResult, serviceResult] = await Promise.all([
       api.system.hardware(),
       api.system.temperatures(),
-      api.system.llamaServer(),
+      api.system.llamaServers(),
       api.system.processes(),
       api.system.service(),
     ]);
@@ -77,7 +77,7 @@
       tempsAvailable = tempResult.data.available;
     }
 
-    if (llamaResult.ok) llamaServer = llamaResult.data as LlamaServerInfo;
+    if (llamaResult.ok) llamaServers = llamaResult.data.servers as LlamaServerInfo[];
     if (processResult.ok) processes = processResult.data.processes as TopProcess[];
     if (serviceResult.ok) serviceStatus = serviceResult.data.status;
 
@@ -114,7 +114,7 @@
     confirmStopUnload = false;
     const success = await unloadModel(undefined, { suppressNotification: true });
     if (success) {
-      notify.warning('Emergency unload complete', 'The active model was unloaded from System recovery.', { href: '/system' });
+      notify.warning('Emergency unload complete', 'Every loaded model was unloaded from System recovery.', { href: '/system' });
     } else {
       notify.error('Emergency unload failed', $unloadAction.error || 'Lemonade rejected the unload request.', { href: '/system' });
     }
@@ -209,34 +209,41 @@
         <div class="flex items-center gap-3">
           <Cpu class="h-5 w-5 text-lemon" />
           <h2 class="ops-title">llama-server</h2>
-          <span class="ops-badge {llamaServer?.found ? 'ops-badge-ok' : 'ops-badge-warn'}">{llamaServer?.found ? 'Running' : 'Not Found'}</span>
+          <span class="ops-badge {llamaServers.length > 0 ? 'ops-badge-ok' : 'ops-badge-warn'}">{llamaServers.length > 1 ? `${llamaServers.length} Running` : llamaServers.length === 1 ? 'Running' : 'Not Found'}</span>
         </div>
-        <span class="ops-value">PID: {llamaServer?.process?.pid ?? 'Unavailable'}</span>
+        {#if llamaServers.length < 2}
+          <span class="ops-value">PID: {llamaServers[0]?.process?.pid ?? 'Unavailable'}</span>
+        {/if}
       </div>
 
-      <div class="grid grid-cols-2 gap-5 border-b border-[#34382d] p-5 md:grid-cols-4">
-        <div>
-          <span class="ops-label">RSS Memory</span>
-          <p class="mt-2 ops-value text-xl">{llamaServer?.process ? formatGB(llamaServer.process.rss_gb) : 'Unavailable'}</p>
+      {#each llamaServers.length > 0 ? llamaServers : [null] as llamaServer (llamaServer?.process?.pid ?? null)}
+        {#if llamaServers.length > 1}
+          <p class="px-5 pt-5 ops-value">PID: {llamaServer?.process?.pid ?? 'Unavailable'}</p>
+        {/if}
+        <div class="grid grid-cols-2 gap-5 border-b border-[#34382d] p-5 md:grid-cols-4">
+          <div>
+            <span class="ops-label">RSS Memory</span>
+            <p class="mt-2 ops-value text-xl">{llamaServer?.process ? formatGB(llamaServer.process.rss_gb) : 'Unavailable'}</p>
+          </div>
+          <div>
+            <span class="ops-label">VMS</span>
+            <p class="mt-2 ops-value text-xl">{llamaServer?.process?.vms_gb ? formatGB(llamaServer.process.vms_gb) : 'Unavailable'}</p>
+          </div>
+          <div>
+            <span class="ops-label">CPU Usage</span>
+            <p class="mt-2 ops-value text-xl">{llamaServer?.process ? `${llamaServer.process.cpu_percent.toFixed(1)}%` : 'Unavailable'}</p>
+          </div>
+          <div>
+            <span class="ops-label">Uptime</span>
+            <p class="mt-2 ops-value text-xl">{llamaServer?.process?.uptime_seconds ? formatDuration(llamaServer.process.uptime_seconds) : 'Unavailable'}</p>
+          </div>
         </div>
-        <div>
-          <span class="ops-label">VMS</span>
-          <p class="mt-2 ops-value text-xl">{llamaServer?.process?.vms_gb ? formatGB(llamaServer.process.vms_gb) : 'Unavailable'}</p>
-        </div>
-        <div>
-          <span class="ops-label">CPU Usage</span>
-          <p class="mt-2 ops-value text-xl">{llamaServer?.process ? `${llamaServer.process.cpu_percent.toFixed(1)}%` : 'Unavailable'}</p>
-        </div>
-        <div>
-          <span class="ops-label">Uptime</span>
-          <p class="mt-2 ops-value text-xl">{llamaServer?.process?.uptime_seconds ? formatDuration(llamaServer.process.uptime_seconds) : 'Unavailable'}</p>
-        </div>
-      </div>
 
-      <details class="p-5" open>
-        <summary class="cursor-pointer ops-label">Command Line</summary>
-        <pre class="ops-terminal mt-4 max-h-36 overflow-auto p-3 whitespace-pre-wrap">{commandLine(llamaServer?.params)}</pre>
-      </details>
+        <details class="p-5" open>
+          <summary class="cursor-pointer ops-label">Command Line</summary>
+          <pre class="ops-terminal mt-4 max-h-36 overflow-auto p-3 whitespace-pre-wrap">{commandLine(llamaServer?.params)}</pre>
+        </details>
+      {/each}
     </article>
   </section>
 
@@ -283,7 +290,7 @@
         <div>
           <h2 class="text-2xl font-bold text-danger">Emergency Recovery</h2>
           <p class="mt-2 max-w-3xl text-sm text-[#ffcec8]">
-            Stop & Unload interrupts active inference by unloading the current model. Restart Service restarts lemond.service and should only be used when the system is unresponsive or models fail to unload cleanly.
+            Stop & Unload interrupts active inference by unloading every loaded model. Restart Service restarts lemond.service and should only be used when the system is unresponsive or models fail to unload cleanly.
           </p>
           <p class="mt-2 text-xs text-muted-foreground">Service status: <span class="ops-value">{serviceStatus}</span></p>
           {#if !$capabilities.cmd_systemctl}

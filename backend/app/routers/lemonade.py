@@ -4,6 +4,7 @@ Router that proxies all Lemonade API calls through the LemonadeProvider.
 Every endpoint is capability-driven: if the underlying Lemonade endpoint
 isn't available, the provider raises a clean 501 error.
 """
+import asyncio
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,6 +26,7 @@ from app.models.schemas import (
     LemonadeHealthResponse,
     LemonadeSavedOptionsResponse,
     LemonadeStatsResponse,
+    LoadedModelsResponse,
     LoadModelRequest,
     LoadModelResponse,
     ModelShowResponse,
@@ -47,7 +49,7 @@ from app.services.backend_readiness import (
 )
 from app.services.completion_runner import CompletionRunner
 from app.services.lemonade_options import read_saved_options, saved_options_from_api
-from app.services.loaded_models import observed_model
+from app.services.loaded_models import describe_loaded, observed_model
 from app.services.run_evidence import (
     LoadEvidenceRecorder,
     RunEvidenceStorage,
@@ -105,6 +107,13 @@ async def list_models(
 async def running_models(provider: LemonadeProvider = Depends(get_provider)):
     """List currently loaded/running models."""
     return await provider.get_running_models()
+
+
+@router.get("/loaded", response_model=LoadedModelsResponse)
+async def loaded_models(provider: LemonadeProvider = Depends(get_provider)):
+    """List the loaded models, each with its own llama-server process."""
+    running = await provider.get_running_models()
+    return LoadedModelsResponse(models=await asyncio.to_thread(describe_loaded, running.models))
 
 
 @router.get("/saved-options", response_model=LemonadeSavedOptionsResponse)

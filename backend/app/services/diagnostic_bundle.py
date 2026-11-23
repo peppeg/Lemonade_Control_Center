@@ -15,13 +15,14 @@ from typing import Any
 
 from app.capabilities import capabilities
 from app.config import settings
+from app.models.schemas import LlamaServersResponse
 from app.services.backend_readiness import (
     collect_backend_readiness,
     unavailable_backend_readiness,
 )
 from app.services.hardware import get_hardware_info, get_temperatures
 from app.services.log_parser import get_recent_logs, parse_last_task
-from app.services.process import find_llama_server, get_service_status
+from app.services.process import find_llama_servers, get_service_status
 from app.services.run_evidence import RunEvidenceStorage
 from app.services.setup import SetupService
 
@@ -127,7 +128,7 @@ class DiagnosticBundleBuilder:
         self._collect_sync("target.json", _target_snapshot)
         self._collect_sync("hardware.json", get_hardware_info)
         self._collect_sync("temperatures.json", lambda: get_temperatures(timeout=2))
-        self._collect_sync("llama_server.json", find_llama_server)
+        self._collect_sync("llama_servers.json", llama_servers)
         self._collect_sync("service_status.json", lambda: get_service_status(timeout=2))
         self._collect_sync("last_task.json", lambda: parse_last_task(n_lines=120, timeout=3))
         self._collect_sync("run_evidence_summary.json", _run_evidence_summary)
@@ -198,6 +199,10 @@ class DiagnosticBundleBuilder:
                 ],
             },
         }
+
+
+def llama_servers() -> LlamaServersResponse:
+    return LlamaServersResponse(servers=find_llama_servers())
 
 
 def _target_snapshot() -> dict[str, Any]:

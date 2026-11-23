@@ -18,7 +18,8 @@
 
   $: data = $dashboardData;
   $: server = data.serverStatus;
-  $: model = data.loadedModel;
+  $: model = data.loadedModels[0] ?? null;
+  $: otherModels = data.loadedModels.slice(1);
   $: hardware = data.hardware;
   $: lastTask = data.lastTask;
   $: isLoading = $dashboardLoading === 'loading';
@@ -47,6 +48,11 @@
     const backend = loaded?.backend ?? serverStatus?.defaultBackend ?? 'unknown';
     const ctx = loaded?.ctxSize ? `ctx ${formatNumber(loaded.ctxSize)}` : 'ctx unknown';
     return `${backend} (${ctx})`;
+  }
+
+  function modelSummary(loaded: LoadedModelInfo): string {
+    const backend = loaded.backend ?? 'backend unknown';
+    return loaded.type && loaded.type !== 'llm' ? `${loaded.type} · ${backend}` : backend;
   }
 
   function taskMetric(task: LastTaskInfo | null, key: keyof LastTaskInfo, suffix = ''): string {
@@ -88,6 +94,7 @@
       <div class="min-w-0">
         <span class="ops-muted">Model:</span>
         <span class="ops-value ml-2 text-lemon">{model?.name ?? 'No active model'}</span>
+        {#if otherModels.length > 0}<span class="ops-muted ml-1">+{otherModels.length}</span>{/if}
       </div>
       <div class="hidden h-5 w-px bg-[#444936] md:block"></div>
       <div>
@@ -109,10 +116,10 @@
     </section>
   {/if}
 
-  {#if !lastTask?.available}
+  {#if lastTask && !lastTask.logReadable}
     <section class="ops-banner ops-banner-muted">
       <Info class="mt-0.5 h-5 w-5 shrink-0" />
-      <p class="text-sm text-[#d9dbcf]">No recent task stats available.</p>
+      <p class="text-sm text-[#d9dbcf]">Last task unavailable: Lemonade's log is empty or not readable.</p>
     </section>
   {/if}
 
@@ -142,11 +149,11 @@
 
     <article class="ops-card p-4">
       <div class="flex items-center justify-between">
-        <span class="ops-label">Loaded Model</span>
+        <span class="ops-label">{otherModels.length > 0 ? `Loaded Models (${data.loadedModels.length})` : 'Loaded Model'}</span>
         <Cpu class="h-5 w-5 text-lemon" />
       </div>
       <h2 class="mt-6 break-words text-xl font-bold text-lemon">{model?.name ?? 'No model loaded'}</h2>
-      <p class="mt-2 ops-value text-sm">{model?.backend ?? 'backend unknown'}</p>
+      <p class="mt-2 ops-value text-sm">{model ? modelSummary(model) : 'backend unknown'}</p>
       <div class="mt-10 grid grid-cols-2 gap-2">
         <div class="rounded border border-[#414632] bg-[#282b28] p-3">
           <p class="text-xs text-muted-foreground">Context Window</p>
@@ -157,6 +164,18 @@
           <p class="ops-value mt-1">{model?.ngl ?? 'Unknown'}</p>
         </div>
       </div>
+      {#if otherModels.length > 0}
+        <ul class="mt-4 space-y-3 border-t border-[#34382d] pt-3 text-sm">
+          {#each otherModels as other (other.name)}
+            <li>
+              <p class="break-words ops-value">{other.name}</p>
+              <p class="mt-1 text-xs text-muted-foreground">
+                {modelSummary(other)} · {other.ctxSize ? `ctx ${formatNumber(other.ctxSize)}` : 'ctx unknown'}
+              </p>
+            </li>
+          {/each}
+        </ul>
+      {/if}
     </article>
 
     <article class="ops-card p-4">
@@ -235,7 +254,7 @@
       {:else}
         <div class="mt-6 flex h-40 flex-col items-center justify-center border border-dashed border-[#454936] bg-[#101211] text-center">
           <Clock3 class="mb-4 h-10 w-10 text-[#5a5f45]" />
-          <p class="text-sm text-muted-foreground">Waiting for incoming requests...</p>
+          <p class="text-sm text-muted-foreground">{lastTask?.logReadable ? 'No recent requests' : isLoading ? 'Loading...' : 'Unavailable'}</p>
         </div>
       {/if}
     </article>

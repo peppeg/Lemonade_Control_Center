@@ -5,16 +5,21 @@ import httpx
 import psutil
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
+from app.dependencies import get_provider
+from app.main import app
 from app.models.completions import CompletionResult
 from app.models.schemas import RunningModelInfo, RunningModelsResponse
 from app.providers.lemonade import LemonadeProvider
 from app.routers import bench as bench_router
 from app.routers import lemonade as lemonade_router
 from app.routers import profiles as profiles_router
+from app.services import diagnostic_bundle
 from app.services.bench.models import BenchRunRequest
 from app.services.diagnostics import collectors
 from app.services.loaded_models import (
+    describe_loaded,
     find_loaded,
     llama_server_for,
     observed_model,
@@ -248,6 +253,102 @@ async def test_running_models_work_without_usable_details(monkeypatch, health, s
 
 
 # ── Callers ──
+
+
+OLD_EMBED = RunningModelInfo(name="Embed-GGUF")
+OLD_CHAT = RunningModelInfo(name="Chat-GGUF")
+NPU_CHAT = RunningModelInfo(name="Npu-FLM", type="llm", pid=333, port=8003)
+
+
+def _described(models):
+    return [(m.name, m.server.process.pid if m.server.process else None) for m in describe_loaded(models)]
+
+
+@pytest.mark.parametrize(
+    ("models", "servers", "expected"),
+    [
+        pytest.param([], [(111, 8001)], [], id="no-model-with-a-foreign-process"),
+        pytest.param([CHAT], [(222, 8002)], [("Chat-GGUF", 222)], id="one"),
+        pytest.param(
+            [EMBED, CHAT], [(111, 8001), (222, 8002)], [("Chat-GGUF", 222), ("Embed-GGUF", 111)], id="chat-first"
+        ),
+        pytest.param(
+            [EMBED, CHAT], [(222, 8002), (111, 8001)], [("Chat-GGUF", 222), ("Embed-GGUF", 111)], id="any-process-order"
+        ),
+        pytest.param([EMBED, CHAT], [(111, 8001)], [("Chat-GGUF", None), ("Embed-GGUF", 111)], id="one-process-missing"),
+        pytest.param(
+            [CHAT, EMBED, NPU_CHAT],
+            [(111, 8001), (222, 8002)],
+            [("Chat-GGUF", 222), ("Embed-GGUF", 111), ("Npu-FLM", None)],
+            id="lemonade-order-after-the-first",
+        ),
+        pytest.param([OLD_CHAT], [(222, 8002)], [("Chat-GGUF", 222)], id="old-lemonade-one-of-each"),
+        pytest.param([OLD_CHAT], [(111, 8001), (222, 8002)], [("Chat-GGUF", None)], id="old-lemonade-two-processes"),
+        pytest.param(
+            [OLD_EMBED, OLD_CHAT], [(222, 8002)], [("Embed-GGUF", None), ("Chat-GGUF", None)], id="old-lemonade-two-models"
+        ),
+    ],
+)
+def test_each_loaded_model_gets_its_own_process(processes, models, servers, expected):
+    processes(*[_server(pid, port) for pid, port in servers])
+
+    assert _described(models) == expected
+
+
+def test_describing_the_loaded_models_scans_the_processes_once(monkeypatch):
+    # A second scan right after the first one would also spoil the CPU reading.
+    scans = []
+    monkeypatch.setattr("app.services.process.psutil.process_iter", lambda attrs: scans.append(1) or iter(()))
+
+    describe_loaded([EMBED, CHAT, NPU_CHAT])
+
+    assert len(scans) == 1
+
+
+@pytest.mark.asyncio
+async def test_loaded_models_route_keeps_what_lemonade_reports(processes):
+    processes(_server(111, 8001, ctx=512), _server(222, 8002, ctx=65536))
+
+    response = await lemonade_router.loaded_models(provider=Provider(EMBED, CHAT))
+
+    assert [(m.name, m.type, m.port, m.server.params.ctx_size) for m in response.models] == [
+        ("Chat-GGUF", "llm", 8002, 65536),
+        ("Embed-GGUF", "embedding", 8001, 512),
+    ]
+
+
+def test_loaded_models_and_processes_are_served(processes):
+    processes(_server(111, 8001), _server(222, 8002))
+    app.dependency_overrides[get_provider] = lambda: Provider(EMBED, CHAT)
+    try:
+        client = TestClient(app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1:17600")
+        loaded = client.get("/api/lemonade/loaded").json()["models"]
+        servers = client.get("/api/system/llama-servers").json()["servers"]
+    finally:
+        app.dependency_overrides.clear()
+
+    assert [(m["name"], m["server"]["process"]["pid"]) for m in loaded] == [("Chat-GGUF", 222), ("Embed-GGUF", 111)]
+    assert [s["process"]["pid"] for s in servers] == [111, 222]
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_bundle_holds_every_llama_server(processes, monkeypatch):
+    processes(_server(111, 8001), _server(222, 8002))
+
+    class Builder(diagnostic_bundle.DiagnosticBundleBuilder):
+        def _collect_sync(self, name, func):
+            if name == "llama_servers.json":
+                super()._collect_sync(name, func)
+
+        async def _collect_backend_readiness(self):
+            pass
+
+    monkeypatch.setattr(diagnostic_bundle, "get_recent_logs", lambda **_: SimpleNamespace(entries=[]))
+    builder = Builder()
+    await builder.build()
+
+    servers = json.loads(builder.entries["llama_servers.json"])["servers"]
+    assert [server["process"]["pid"] for server in servers] == [111, 222]
 
 
 class Provider:

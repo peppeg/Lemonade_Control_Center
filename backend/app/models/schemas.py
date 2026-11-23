@@ -377,6 +377,21 @@ class LlamaServerInfoResponse(BaseModel):
     params: LlamaServerParams | None = None
 
 
+class LoadedModelInfo(RunningModelInfo):
+    """A loaded model with the llama-server process that runs it."""
+    server: LlamaServerInfoResponse
+
+
+class LoadedModelsResponse(BaseModel):
+    """Every loaded model, the one to show first at the top."""
+    models: list[LoadedModelInfo] = Field(default_factory=list)
+
+
+class LlamaServersResponse(BaseModel):
+    """Every llama-server process on this host."""
+    servers: list[LlamaServerInfoResponse] = Field(default_factory=list)
+
+
 class ServiceStatusResponse(BaseModel):
     """Status of the lemond systemd service."""
     active: bool = False
@@ -423,7 +438,9 @@ class FinishReason(BaseModel):
 
 class LastTaskStats(BaseModel):
     """Parsed statistics from the last completed task."""
+    # The log could be read. It may hold no task, for example after a restart.
     available: bool = False
+    found: bool = False
     model: str | None = None
     completed_at: str | None = None
     input_tokens: int | None = None

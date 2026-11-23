@@ -16,14 +16,14 @@ import type {
   SmartAlert,
   DashboardLoadingState,
 } from '$lib/types';
-import { formatDuration } from '$lib/utils/format';
+import { canChat, parseLoadedModel } from '$lib/utils/loadedModels';
 import { configuredBackend } from '$lib/utils/runtimeConfig';
 
 // ── Stores ──
 
 export const dashboardData = writable<DashboardData>({
   serverStatus: null,
-  loadedModel: null,
+  loadedModels: [],
   lastTask: null,
   hardware: null,
   runtimeConfigAvailable: null,
@@ -49,16 +49,14 @@ export async function refreshDashboard(): Promise<void> {
   const [
     healthResult,
     hardwareResult,
-    llamaResult,
+    loadedResult,
     lastTaskResult,
-    runningResult,
     configResult,
   ] = await Promise.allSettled([
     api.lemonade.health(),
     api.system.hardware(),
-    api.system.llamaServer(),
+    api.lemonade.loaded(),
     api.logs.lastTask(),
-    api.lemonade.running(),
     api.lemonade.getConfig(),
   ]);
 
@@ -78,90 +76,50 @@ export async function refreshDashboard(): Promise<void> {
     };
   }
 
-  // ── Parse Loaded Model ──
-  let loadedModel: LoadedModelInfo | null = null;
-  if (runningResult.status === 'fulfilled' && runningResult.value.ok) {
-    const models = runningResult.value.data.models;
-    if (models && models.length > 0) {
-      const m = models[0] as Record<string, unknown>;
-
-      // Enrich with llama-server process info
-      let pid: number | null = null;
-      let rssGb: number | null = null;
-      let cpuPercent: number | null = null;
-      let uptime: string | null = null;
-      let uptimeSeconds: number | null = null;
-      let ctxSize: number | null = null;
-      let ngl: number | null = null;
-      let backend: string | null = null;
-      let mmap: boolean | null = null;
-      let jinja = false;
-      let specType: string | null = null;
-      let specDraftMax: number | null = null;
-      let reasoningFormat: string | null = null;
-      let mmproj: string | null = null;
-
-      if (llamaResult.status === 'fulfilled' && llamaResult.value.ok) {
-        const info = llamaResult.value.data;
-        if (info.found) {
-          const proc = info.process as Record<string, unknown>;
-          const params = info.params as Record<string, unknown>;
-          pid = (proc?.pid as number) ?? null;
-          rssGb = (proc?.rss_gb as number) ?? null;
-          cpuPercent = (proc?.cpu_percent as number) ?? null;
-          uptimeSeconds = (proc?.uptime_seconds as number) ?? null;
-          uptime = uptimeSeconds ? formatDuration(uptimeSeconds) : null;
-          ctxSize = (params?.ctx_size as number) ?? null;
-          ngl = (params?.ngl as number) ?? null;
-          backend = (params?.backend as string) ?? null;
-          mmap = (params?.mmap as boolean) ?? null;
-          jinja = (params?.jinja as boolean) ?? false;
-          specType = (params?.spec_type as string) ?? null;
-          specDraftMax = (params?.spec_draft_n_max as number) ?? null;
-          reasoningFormat = (params?.reasoning_format as string) ?? null;
-          mmproj = (params?.mmproj as string) ?? null;
-        }
-      }
-
-      loadedModel = {
-        name: (m.name as string) ?? 'Unknown',
-        backend,
-        ctxSize,
-        ngl,
-        mmap,
-        jinja,
-        specType,
-        specDraftMax,
-        reasoningFormat,
-        mmproj,
-        pid,
-        rssGb,
-        cpuPercent,
-        uptime,
-        uptimeSeconds,
+  // ── Parse Loaded Models ──
+  let loadedModels: LoadedModelInfo[] = [];
+  if (loadedResult.status === 'fulfilled' && loadedResult.value.ok) {
+    loadedModels = loadedResult.value.data.models.map((raw) => {
+      const { name, type, params, process } = parseLoadedModel(raw);
+      return {
+        name,
+        type,
+        backend: params?.backend ?? null,
+        ctxSize: params?.ctxSize ?? null,
+        ngl: params?.ngl ?? null,
+        mmap: params?.mmap ?? null,
+        jinja: params?.jinja ?? false,
+        specType: params?.specType ?? null,
+        specDraftMax: params?.specDraftMax ?? null,
+        reasoningFormat: params?.reasoningFormat ?? null,
+        mmproj: params?.mmproj ?? null,
+        pid: process?.pid ?? null,
+        rssGb: process?.rssGb ?? null,
+        cpuPercent: process?.cpuPercent ?? null,
+        uptime: process?.uptime ?? null,
+        uptimeSeconds: process?.uptimeSeconds ?? null,
       };
-    }
+    });
   }
 
   // ── Parse Last Task ──
   let lastTask: LastTaskInfo | null = null;
   if (lastTaskResult.status === 'fulfilled' && lastTaskResult.value.ok) {
     const t = lastTaskResult.value.data as Record<string, unknown>;
-    if (t.available) {
-      const fr = t.finish_reason as Record<string, unknown> | null;
-      lastTask = {
-        available: true,
-        inputTokens: (t.input_tokens as number) ?? null,
-        outputTokens: (t.output_tokens as number) ?? null,
-        promptEvalTps: (t.prompt_eval_tps as number) ?? null,
-        generationTps: (t.generation_tps as number) ?? null,
-        ttftSeconds: (t.ttft_seconds as number) ?? null,
-        totalDurationSeconds: (t.total_duration_seconds as number) ?? null,
-        finishReason: (fr?.reason as string) ?? null,
-        finishConfidence: (fr?.confidence as 'confirmed' | 'inferred' | 'unknown') ?? 'unknown',
-        finishEvidence: (fr?.evidence as string) ?? null,
-      };
-    }
+    const fr = t.finish_reason as Record<string, unknown> | null;
+    lastTask = {
+      available: Boolean(t.available && t.found),
+      logReadable: Boolean(t.available),
+      inputTokens: (t.input_tokens as number) ?? null,
+      outputTokens: (t.output_tokens as number) ?? null,
+      promptEvalTps: (t.prompt_eval_tps as number) ?? null,
+      generationTps: (t.generation_tps as number) ?? null,
+      ttftSeconds: (t.ttft_seconds as number) ?? null,
+      totalDurationSeconds: (t.total_duration_seconds as number) ?? null,
+      finishReason: (fr?.reason as string) ?? null,
+      finishConfidence: (fr?.confidence as 'confirmed' | 'inferred' | 'unknown') ?? 'unknown',
+      finishEvidence: (fr?.evidence as string) ?? null,
+    };
   }
 
   // ── Parse Hardware ──
@@ -187,18 +145,18 @@ export async function refreshDashboard(): Promise<void> {
 
   // ── Generate Alerts ──
   const alerts = generateAlerts(
-    loadedModel, lastTask, hardware, globalTimeout, configMaxTokens
+    loadedModels.find(canChat) ?? null, lastTask, hardware, globalTimeout, configMaxTokens
   );
 
   // ── Determine overall loading state ──
-  const hasAny = serverStatus || loadedModel || lastTask || hardware;
+  const hasAny = serverStatus || loadedModels.length > 0 || lastTask || hardware;
   const hasAll = serverStatus && hardware;
   const state: DashboardLoadingState = hasAll ? 'loaded' : hasAny ? 'partial' : 'error';
 
   // ── Update store ──
   dashboardData.set({
     serverStatus,
-    loadedModel,
+    loadedModels,
     lastTask,
     hardware,
     runtimeConfigAvailable,
