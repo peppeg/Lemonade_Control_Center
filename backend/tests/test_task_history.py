@@ -702,3 +702,34 @@ def test_a_saved_read_time_at_the_edge_of_the_calendar_does_not_stop_the_reads(m
 
     assert history.refresh_from_logs() == 1
     assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c9"
+
+
+def test_an_open_record_with_an_unknown_time_does_not_hold_the_cursor(monkeypatch, tmp_path):
+    """From review: it held the read position until a newer record arrived
+    or 20,000 lines followed."""
+    from types import SimpleNamespace
+
+    start = datetime.now(UTC) - timedelta(hours=1)
+
+    def at(minutes: int) -> str:
+        return str(int((start + timedelta(minutes=minutes)).timestamp() * 1_000_000))
+
+    entries = [
+        {"MESSAGE": "boot", "__CURSOR": "c0", "__REALTIME_TIMESTAMP": at(0)},
+        {"MESSAGE": "Input tokens: 5", "__CURSOR": "c1", "__REALTIME_TIMESTAMP": "9" * 30},
+        *({"MESSAGE": f"noise {i}", "__CURSOR": f"c{i}", "__REALTIME_TIMESTAMP": at(i)} for i in range(2, 50)),
+    ]
+
+    def run(command, **kwargs):
+        cursor = _cursor_of(command)
+        chosen = entries if cursor is None else entries[int(cursor[1:]) + 1:]
+        return SimpleNamespace(returncode=0, stdout="\n".join(json.dumps(e) for e in chosen), stderr="")
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", run)
+    monkeypatch.setattr(task_history.capabilities, "cmd_journalctl", True)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    history.store.set_meta(task_history.JOURNAL_CURSOR_META_KEY, "c0")
+
+    history.refresh_from_logs()
+
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c49"

@@ -815,12 +815,18 @@ def _journal_entries(output: str) -> _JournalEntries:
 
 
 def _still_open(entries: _JournalEntries, start: int) -> bool:
-    """Whether a record begun at `start` may still receive its last lines."""
+    """Whether a record begun at `start` may still receive its last lines.
+
+    Not when either time is unknown: held open, the record would keep the
+    read position at its first line until a newer record or a full read of
+    JOURNAL_MAX_LINES moved it on. Read on, a record that was still arriving
+    is lost, which is rare and loses one run rather than stalling the reads.
+    """
     try:
         began = datetime.fromisoformat(entries.times[start] or "")
         latest = datetime.fromisoformat(entries.last_time or "")
     except ValueError:
-        return True
+        return False
     return latest - began <= OPEN_RECORD_GRACE
 
 
