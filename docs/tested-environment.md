@@ -26,7 +26,7 @@ This is not a minimum requirement.
 | 10.7.0 | tested | Previous active test target |
 | 10.8.x | not yet tested | Release notes reviewed; requires smoke testing before compatibility claim |
 | 10.9.0 | tested with caveats | Full test pass for LCC 0.3.0; probe, backend tests, frontend check/build, and basic LCC runtime smoke passed |
-| 11.x | not yet formally tested | Compatibility fixes for 11.7 telemetry, nested config keys, and saved model options are merged (see Changelog). A full smoke pass is pending before a compatibility claim |
+| 11.x | not formally tested | Compatibility fixes for 11.7 telemetry, nested config keys, and saved model options are merged (see Changelog), without a full test pass. The next tested version is 2026.45.3 |
 | 2026.45.3 | tested with caveats | Test pass for LCC 0.3.1 on 2026-11-23; see [below](#lcc-031-on-lemonade-2026453) |
 
 Manual smoke tests on Lemonade `10.7.0` passed for:
@@ -92,7 +92,7 @@ Not tested: changing the Lemonade configuration, model download and deletion, ba
 Problems found, all present in 0.3.0 too and still open in 0.3.1:
 
 - The `llama-server` process is found by searching whole command lines, so another program that mentions it can be shown instead, with its command line.
-- When Lemonade drops a `total time` log line, the task gets the duration of an earlier one. In this host's journal, 9 of 241 completions since October had no such line. [#38](https://github.com/peppeg/Lemonade_Control_Center/pull/38) is not affected.
+- When Lemonade drops a `total time` log line, the task gets the duration of an earlier one. In this host's journal, 9 of 241 completions since October had no such line. [#38](https://github.com/peppeg/Lemonade_Control_Center/pull/38) avoids this in the stored history, not in the last-task view.
 - After Clear, the latest task comes back from the journal.
 - With several models loaded, the first one is taken as the active one, and Run Evidence can name the wrong model ([#36](https://github.com/peppeg/Lemonade_Control_Center/issues/36)).
 - Dashboard and Diagnostics read the default backend from `llamacpp_backend`, which Lemonade now nests as `llamacpp.backend`.

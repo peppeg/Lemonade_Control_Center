@@ -59,7 +59,7 @@ Version 0.3.1 is a security and compatibility release:
 
 - **Access control** covers HTTP and WebSocket alike, refuses actions sent by other web sites, and limits localhost trust to direct local connections. See [Security](docs/security.md).
 - **Local state files** are readable only by the user running LCC and are replaced in one step.
-- **Lemonade 11.x** fixes cover telemetry parsing, nested configuration keys, and saved model options. A full 11.x test pass is still pending.
+- **Lemonade 11.x** fixes cover telemetry parsing, nested configuration keys, and saved model options. The release was tested on Lemonade 2026.45.3; 11.x itself had no full test pass. See [Tested Environment](docs/tested-environment.md).
 - **Smoke Test** works with reasoning models, and AMD GTT and VRAM usage is shown where amdgpu reports it.
 
 See the [0.3.1 release notes](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.1) before updating: some reverse proxy setups need a new setting.
