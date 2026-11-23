@@ -1004,3 +1004,19 @@ def test_a_legacy_file_with_values_that_cannot_be_stored_is_still_imported(tmp_p
     assert [row["input_tokens"] for row in store.get_tasks()] == [5]
     assert store.get_meta(MIGRATION_META_KEY) is not None
     assert history.migrate_legacy_json(legacy) == 0
+
+
+def test_a_hardware_reading_that_is_not_finite_is_stored_as_missing(store):
+    minute = {
+        **_hardware_minute(BASE),
+        "cpu_percent": float("inf"),
+        "gpu_temp_c": float("nan"),
+        "temperatures": {"good": 50.0, "nan": float("nan"), "inf": float("-inf")},
+    }
+
+    store.upsert_hardware_minute(minute)
+
+    row = store.get_hardware_minute(BASE)
+    assert (row["cpu_percent"], row["gpu_temp_c"]) == (None, None)
+    assert json.loads(row["temperatures"]) == {"good": 50.0}
+    json.dumps(row, allow_nan=False)  # What a JSON response needs.

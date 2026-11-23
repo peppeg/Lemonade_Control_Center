@@ -471,7 +471,20 @@ class MetricsStore:
 
         A minute that began at or before the last clear() is not written: its
         running aggregate still holds samples taken before the clear.
+
+        A reading that is not a finite number is stored as missing. Infinity
+        would be stored as it is, and NaN in the temperatures' JSON too, and
+        either breaks every JSON response that includes the minute.
         """
+        aggregate = {
+            key: (_finite_or_none(value) if isinstance(value, float) else value)
+            for key, value in aggregate.items()
+        }
+        aggregate["temperatures"] = {
+            label: value
+            for label, value in (aggregate.get("temperatures") or {}).items()
+            if _finite_or_none(value) is not None
+        }
 
         def run(connection: sqlite3.Connection) -> None:
             cleared_at = _cleared_at(connection)
@@ -671,6 +684,14 @@ def _task_values(row: TaskRow, latest: datetime) -> tuple:
         _text("finish_reason", row.finish_reason),
         _text("finish_confidence", row.finish_confidence),
     )
+
+
+def _finite_or_none(value: object) -> float | None:
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (OverflowError, TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _count(name: str, value: object) -> int:

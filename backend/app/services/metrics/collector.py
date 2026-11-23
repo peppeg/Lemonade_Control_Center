@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -163,9 +164,11 @@ class _MinuteAggregate:
         for key in self._MEANS:
             self._sums[key] = self._sums.get(key, 0.0) + getattr(point, key)
 
+        # A sensor or sysfs file that reads NaN or infinity once would spoil
+        # the mean of its whole minute; that reading is left out instead.
         for key, total in self._optional.items():
             value = getattr(point, key)
-            if value is not None:
+            if value is not None and math.isfinite(value):
                 total[0] += value
                 total[1] += 1
 
@@ -181,6 +184,8 @@ class _MinuteAggregate:
         )
 
         for label, value in point.temperatures.items():
+            if not math.isfinite(value):
+                continue
             total = self.temperatures.setdefault(label, [0.0, 0])
             total[0] += value
             total[1] += 1

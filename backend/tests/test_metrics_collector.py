@@ -419,3 +419,23 @@ async def test_the_live_samples_keep_their_interval_when_a_write_is_slow(monkeyp
         await collector._collector_loop(10)
 
     assert sleeps == [7.0]
+
+
+@pytest.mark.asyncio
+async def test_a_reading_that_is_not_a_number_is_left_out_of_its_minute(store):
+    """One NaN or infinite reading spoiled the minute's mean, and infinity
+    stored in a row breaks every JSON response that includes it."""
+    good = point(0, 30.0)
+    good.gpu_temp_c = 60.0
+    bad = point(5, 30.0)
+    bad.gpu_temp_c = float("inf")
+    bad.gpu_load_percent = float("nan")
+    bad.temperatures = {"k10temp/Tctl": float("nan"), "amdgpu/edge": float("inf")}
+
+    await collector._persist_minute(good)
+    await collector._persist_minute(bad)
+
+    row = store.get_hardware_minute(MINUTE)
+    assert row["gpu_temp_c"] == 60.0
+    assert row["gpu_load_percent"] is None
+    assert json.loads(row["temperatures"]) == {"k10temp/Tctl": 60.0}
