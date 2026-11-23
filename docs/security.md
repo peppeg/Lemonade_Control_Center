@@ -117,14 +117,9 @@ Clients of the container image reach it through the container network rather tha
 
 ## Local Files
 
-LCC keeps its state under `backend/app/data/` (the `lcc-data` volume in the container). `config.json` holds the configured runtimes, including any Lemonade admin keys entered in Settings. `audit.jsonl` records mutating API requests and is not rotated yet.
+LCC keeps its state under `backend/app/data/` (the `lcc-data` volume in the container). `config.json` holds the configured runtimes, including any Lemonade admin keys entered in Settings. `audit.jsonl` records mutating API requests; it is rotated at 5 MB, and three older files are kept.
 
-On a shared host, restrict the directory to the LCC user:
-
-```bash
-chmod 700 backend/app/data
-chmod 600 backend/app/data/config.json
-```
+Only the user running LCC can read these files: the directory has mode `0700`, and LCC writes the files with mode `0600`. On startup LCC tightens a directory and a `config.json` left by an earlier version, and logs a warning if it is not allowed to.
 
 ## Known Limitations
 

@@ -171,15 +171,13 @@ Status: merged in [#41](https://github.com/peppeg/Lemonade_Control_Center/pull/4
 
 ##### 7.3 Protect local secrets and state files
 
-- `data/config.json` stores runtime admin keys and is written with the default umask and a non-atomic `write_text`.
-- The same non-atomic pattern is used by every JSON state writer: `services/setup.py` (config), `services/profile_service.py` (profiles), `services/run_evidence.py`, `services/bench/storage.py`, `services/metrics/task_history.py`, and `services/diagnostics/history.py`.
-- Add one shared helper (for example `services/state_files.py: atomic_write_json()`) that writes a temporary file in the same directory, `fsync`s it, and `os.replace`s it, with mode `0600`. Move all six writers to it. Create `data/` with mode `0700` on startup.
-- Rotate or cap `data/audit.jsonl`, which currently grows without limit (for example rotate at 5 MB, keep 3 files).
+Status: in review, [#45](https://github.com/peppeg/Lemonade_Control_Center/pull/45)
+
+- Every state writer uses `services/state_files.py`: a temporary file in the same directory, `fsync`, and `os.replace`, with mode `0600`.
+- The data directory is created with mode `0700`. On startup an existing one is tightened, together with `config.json`.
+- `audit.jsonl` is rotated at 5 MB, keeping three older files.
+- A test fails if another module writes files directly.
 - Later steps that add SQLite files (8, 9) must create them with the same modes.
-
-Done when tests prove the file mode, that an interrupted write leaves the previous file intact, that no writer bypasses the helper, and that audit rotation keeps recent records.
-
-Size: M.
 
 ##### 7.4 Reverse proxy trust (opt-in)
 
