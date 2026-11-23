@@ -291,3 +291,48 @@ def test_an_empty_log_is_not_available(monkeypatch):
     stats = parse_last_task()
 
     assert (stats.available, stats.found) == (False, False)
+
+
+# ── Numbers that cannot be read ──
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        pytest.param("(in=22, out=7), ttft=0.161s, tps=28.30.", (22, 7, 0.16, 28.3), id="full-stop"),
+        pytest.param("(in=22, out=7), ttft=1.2.3s, tps=28.3", (22, 7, None, 28.3), id="two-points"),
+        pytest.param("(in=22, out=7), ttft=...s, tps=.", (22, 7, None, None), id="points-only"),
+        pytest.param(f"(in=22, out=7), ttft=0.2s, tps={'9' * 20}", (22, 7, 0.2, None), id="huge-rate"),
+        pytest.param(f"(in=22, out={'9' * 20}), ttft=0.2s, tps=3", (22, None, 0.2, 3), id="huge-count"),
+        pytest.param(f"(in=22, out={'9' * 5000}), ttft=0.2s, tps=3", (22, None, 0.2, 3), id="longer-than-int-reads"),
+        pytest.param("(in=22, out=7), ttft=1s, tps=1000000", (22, 7, 1.0, 1000000.0), id="whole-numbers"),
+        pytest.param("(in=22, out=7), ttft=0.1s, tps=inf", (22, 7, 0.1, None), id="inf"),
+    ],
+)
+def test_a_telemetry_number_that_cannot_be_read_is_missing(monkeypatch, line, expected):
+    _fake_journal(monkeypatch, [f"[Info] (Telemetry) Inference completed: model=x, tokens=29 {line}"])
+
+    stats = parse_last_task()
+
+    assert (stats.input_tokens, stats.output_tokens, stats.ttft_seconds, stats.generation_tps) == expected
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        pytest.param(_slot(1, "total time = 1.2.3 ms / 29 tokens"), id="total"),
+        pytest.param(_slot(1, f"total time = 120.00 ms / {'9' * 5000} tokens"), id="total-tokens"),
+        pytest.param(_slot(1, "eval time = 1.2.3 ms / 7 tokens ( 1 ms per token, 2.00 tokens per second)"), id="generation-time"),
+        pytest.param(_slot(1, "eval time = 1.20 ms / 7 tokens ( 1 ms per token, 2.0.0 tokens per second)"), id="generation-rate"),
+        pytest.param(_slot(1, "prompt eval time = 1.20 ms / 22 tokens ( 1 ms per token, .. tokens per second)"), id="prompt-rate"),
+        pytest.param(_slot(1, f"stop processing, truncated = {'9' * 5000}"), id="truncated"),
+    ],
+)
+def test_a_timing_line_that_cannot_be_read_does_not_hide_the_task(monkeypatch, line):
+    _fake_journal(monkeypatch, [line, _completed(22, 7)])
+
+    stats = parse_last_task()
+
+    assert (stats.input_tokens, stats.output_tokens) == (22, 7)
+    # Derived from the telemetry: 22 tokens in 0.48 s.
+    assert (stats.prompt_eval_tps, stats.truncated) == (45.83, None)
