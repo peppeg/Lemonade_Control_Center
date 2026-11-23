@@ -145,9 +145,15 @@ class TaskHistory:
                 return read
 
         since = _parse_time(self._store.get_meta(JOURNAL_CURSOR_TIME_META_KEY))
-        if since is None:
+        try:
+            start = since - JOURNAL_OVERLAP if since is not None else None
+        except OverflowError:
+            # A time saved by an earlier build at the edge of the calendar.
+            # Raising here would stop every read, so it is no time.
+            start = None
+        if start is None:
             return read_task_journal(n_lines=JOURNAL_SCAN_LINES)
-        read = read_task_journal(n_lines=JOURNAL_MAX_LINES, since=since - JOURNAL_OVERLAP)
+        read = read_task_journal(n_lines=JOURNAL_MAX_LINES, since=start)
         if read.entries >= JOURNAL_MAX_LINES:
             log.warning(
                 "More than %d journal lines arrived since %s; runs logged among the"

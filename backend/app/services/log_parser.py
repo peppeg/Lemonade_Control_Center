@@ -191,13 +191,23 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
+# A journal receive time outside this range is not one: journald's clock was
+# never set, or the value is corrupt. Kept as the read position, such a time
+# would later be moved back by JOURNAL_OVERLAP and overflow.
+EARLIEST_JOURNAL_TIME = datetime(2000, 1, 1, tzinfo=UTC)
+JOURNAL_FUTURE_TOLERANCE = timedelta(days=1)
+
+
 def _journal_timestamp(value: object) -> str | None:
     try:
         microseconds = int(str(value))
-        return datetime.fromtimestamp(microseconds / 1_000_000, tz=UTC).isoformat()
+        received = datetime.fromtimestamp(microseconds / 1_000_000, tz=UTC)
     except (OverflowError, OSError, TypeError, ValueError):
         # A time beyond what datetime holds is no time, not a failed read.
         return None
+    if not EARLIEST_JOURNAL_TIME <= received <= datetime.now(UTC) + JOURNAL_FUTURE_TOLERANCE:
+        return None
+    return received.isoformat()
 
 
 @dataclass

@@ -667,3 +667,38 @@ def test_a_cursor_that_is_not_ascii_is_not_kept(monkeypatch, tmp_path):
 
     assert history.refresh_from_logs() == 1
     assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) is None
+
+
+@pytest.mark.parametrize(
+    "received",
+    [str(-62135596800 * 1_000_000), "0", str(int(datetime(1999, 12, 31, tzinfo=UTC).timestamp() * 1e6))],
+    ids=["year-1", "epoch", "1999"],
+)
+def test_a_journal_time_out_of_range_is_no_time(received):
+    from app.services.log_parser import _journal_timestamp
+
+    assert _journal_timestamp(received) is None
+
+
+def test_a_saved_read_time_at_the_edge_of_the_calendar_does_not_stop_the_reads(monkeypatch, tmp_path):
+    """From review: with the cursor unusable, `since - JOURNAL_OVERLAP`
+    raised OverflowError on every read."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(task_history.capabilities, "cmd_journalctl", True)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    history.store.set_meta(task_history.JOURNAL_CURSOR_META_KEY, "stale-cursor")
+    history.store.set_meta(task_history.JOURNAL_CURSOR_TIME_META_KEY, "0001-01-01T00:00:00+00:00")
+    now = datetime.now(UTC)
+    entry = {"MESSAGE": _completion(now, 4), "__CURSOR": "c9",
+             "__REALTIME_TIMESTAMP": str(int(now.timestamp() * 1_000_000))}
+
+    def run(command, **kwargs):
+        if any(arg.startswith("--after-cursor=") for arg in command):
+            return SimpleNamespace(returncode=1, stdout="", stderr="Failed to seek to cursor")
+        return SimpleNamespace(returncode=0, stdout=json.dumps(entry), stderr="")
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", run)
+
+    assert history.refresh_from_logs() == 1
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c9"
