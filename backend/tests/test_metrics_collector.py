@@ -345,3 +345,77 @@ async def test_start_imports_once_then_samples_tasks_one_at_a_time(store, monkey
     assert overlaps == 1
     # Nothing started by the collector outlives stop_collector().
     assert all(task.done() for task in asyncio.all_tasks() - before - {asyncio.current_task()})
+
+
+@pytest.mark.asyncio
+async def test_subscribers_get_a_sample_before_it_is_written_to_the_history(store, monkeypatch):
+    """Reported in review: a locked database held the live charts for up to
+    the connection timeout, because the write came first."""
+    import threading
+
+    release = threading.Event()
+    written: list[dict] = []
+
+    def slow_upsert(row):
+        release.wait(5)
+        written.append(row)
+
+    monkeypatch.setattr(store, "upsert_hardware_minute", slow_upsert)
+    monkeypatch.setattr(collector, "_sample", lambda: point(0, 30.0))
+    queue = collector.subscribe()
+    try:
+        running = asyncio.create_task(collector.collect_once())
+        latest = await asyncio.wait_for(queue.get(), timeout=2)
+
+        assert latest["ram_pct"] == 30.0
+        assert written == []  # The write is still waiting.
+        release.set()
+        await running
+        assert len(written) == 1
+    finally:
+        release.set()
+        collector.unsubscribe(queue)
+
+
+@pytest.mark.asyncio
+async def test_a_failure_anywhere_in_the_rollup_leaves_the_live_sample_alone(store, monkeypatch, caplog):
+    def broken_add(self, sample):
+        raise ValueError("bad sample")
+
+    monkeypatch.setattr(collector._MinuteAggregate, "add", broken_add)
+    monkeypatch.setattr(collector, "_sample", lambda: point(0, 30.0))
+    queue = collector.subscribe()
+    try:
+        with caplog.at_level(logging.WARNING, logger=collector.log.name):
+            latest = await collector.collect_once()
+    finally:
+        collector.unsubscribe(queue)
+
+    assert latest["ram_pct"] == 30.0
+    assert queue.get_nowait()["ram_pct"] == 30.0
+    assert collector.rollup_failures.failures == 1
+    assert "Hardware history write failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_the_live_samples_keep_their_interval_when_a_write_is_slow(monkeypatch):
+    sleeps: list[float] = []
+    clock = [100.0]
+
+    async def slow_collect():
+        clock[0] += 3.0  # A write held by a locked database.
+        return {}
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        raise asyncio.CancelledError
+
+    loop = asyncio.get_running_loop()
+    monkeypatch.setattr(loop, "time", lambda: clock[0])
+    monkeypatch.setattr(collector, "collect_once", slow_collect)
+    monkeypatch.setattr(collector.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await collector._collector_loop(10)
+
+    assert sleeps == [7.0]

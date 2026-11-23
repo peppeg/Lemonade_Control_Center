@@ -236,13 +236,19 @@ def unsubscribe(queue: asyncio.Queue) -> None:
 async def collect_once() -> dict:
     point = _sample()
     buffer.append(point)
-    await _persist_minute(point)
     latest = buffer.get_latest()
+    # The live view first: a locked database can hold the write below for
+    # up to the connection timeout, and the charts must not wait for it.
     for queue in _subscribers:
         try:
             queue.put_nowait(latest)
         except asyncio.QueueFull:
             pass
+    try:
+        await _persist_minute(point)
+    except Exception as error:
+        # Losing a rollup must never stop the live stream.
+        rollup_failures.failed(error)
     return latest or {}
 
 
@@ -301,14 +307,18 @@ async def prune_once() -> dict[str, int]:
 
 
 async def _collector_loop(interval_seconds: int) -> None:
+    loop = asyncio.get_running_loop()
     while True:
+        started = loop.time()
         try:
             await collect_once()
         except Exception as error:
             live_failures.failed(error)
         else:
             live_failures.succeeded()
-        await asyncio.sleep(interval_seconds)
+        # Counted from the start of the sample, so a slow write to the
+        # history does not space out the live points.
+        await asyncio.sleep(max(0.0, interval_seconds - (loop.time() - started)))
 
 
 async def _task_sampler_loop(interval_seconds: int) -> None:
