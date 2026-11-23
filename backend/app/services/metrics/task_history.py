@@ -10,16 +10,19 @@ import csv
 import io
 import json
 import logging
+import threading
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app.capabilities import capabilities
 from app.models.schemas import LastTaskStats
 from app.services.log_parser import (
+    JournalReadError,
+    TaskJournalRead,
     TaskTelemetryRecord,
     infer_finish_reason,
-    parse_task_records,
+    read_task_journal,
 )
 from app.services.metrics.store import MetricsStore, TaskRow
 
@@ -28,9 +31,22 @@ log = logging.getLogger(__name__)
 HISTORY_FILE = Path(__file__).parent.parent.parent / "data" / "task_history.json"
 MIGRATION_META_KEY = "task_history_json_imported"
 
-# How much journal to scan per sampler tick. The window has to comfortably
-# outrun the 15s sampling interval so a burst of inferences is never missed.
+# Where the journal was last read up to, kept in metrics_meta so a restart
+# resumes there: journald's cursor of the last entry read, and when journald
+# received that entry.
+JOURNAL_CURSOR_META_KEY = "journal_cursor"
+JOURNAL_CURSOR_TIME_META_KEY = "journal_cursor_time"
+
+# Each read takes up to JOURNAL_MAX_LINES entries after the saved cursor, so a
+# backlog (LCC was stopped, or reads failed for a while) is read in full over
+# a few reads. A fixed window of recent lines could lose a run: a model load
+# can log hundreds of lines between two ticks. Without a cursor, the very
+# first read takes the most recent JOURNAL_SCAN_LINES. When the cursor cannot
+# be used, reads go by time from the saved receive time, JOURNAL_OVERLAP
+# earlier to be safe.
 JOURNAL_SCAN_LINES = 500
+JOURNAL_MAX_LINES = 20_000
+JOURNAL_OVERLAP = timedelta(minutes=2)
 
 
 @dataclass
@@ -52,6 +68,9 @@ class TaskRecord:
 class TaskHistory:
     def __init__(self, store: MetricsStore | None = None) -> None:
         self._store = store or MetricsStore()
+        # One journal read at a time: the sampler and a read endpoint would
+        # otherwise read the same entries and race to save the cursor.
+        self._read_lock = threading.Lock()
 
     @property
     def store(self) -> MetricsStore:
@@ -59,7 +78,8 @@ class TaskHistory:
 
     def use_store(self, store: MetricsStore) -> None:
         """Point the history at a different database (tests, relocation)."""
-        self._store = store
+        with self._read_lock:
+            self._store = store
 
     # ── Ingestion ──────────────────────────────────────────
 
@@ -70,13 +90,63 @@ class TaskHistory:
         dropped by the store's (timestamp, model, in, out) identity, so calling
         this on every poll and on every sampler tick is cheap and idempotent.
 
+        Each read continues after the journal cursor the previous successful
+        read saved in metrics_meta, so nothing journald received in between is
+        skipped: not while LCC was stopped, not during a stretch of failed
+        reads, and not when more lines arrived than one read takes. The cursor
+        is saved only once the records are stored.
+
         Raises when the journal cannot be read or the store cannot be written;
-        the task sampler logs it. Read endpoints use _refresh_quietly().
+        the task sampler logs it, and the next read starts from the same
+        cursor. Read endpoints use _refresh_quietly().
         """
         if not capabilities.cmd_journalctl:
             return 0
-        records = parse_task_records(n_lines=JOURNAL_SCAN_LINES)
-        return self.ingest(records)
+        with self._read_lock:
+            cursor = self._store.get_meta(JOURNAL_CURSOR_META_KEY)
+            read = self._read_journal(cursor)
+            stored = self.ingest(read.records)
+            if read.cursor and read.cursor != cursor:
+                self._store.set_meta(JOURNAL_CURSOR_META_KEY, read.cursor)
+                if read.cursor_time:
+                    self._store.set_meta(JOURNAL_CURSOR_TIME_META_KEY, read.cursor_time)
+        return stored
+
+    def _read_journal(self, cursor: str | None) -> TaskJournalRead:
+        """Read on from the saved cursor, or by time when it cannot be used."""
+        if cursor:
+            try:
+                read = read_task_journal(n_lines=JOURNAL_MAX_LINES, after_cursor=cursor)
+            except JournalReadError as error:
+                # A cursor journalctl cannot seek to (malformed, or from a
+                # journal since replaced) fails the read. Reading by time
+                # replaces it; when the journal itself cannot be read, that
+                # fails too and the cursor is kept.
+                log.info(
+                    "Cannot read the journal after the saved cursor (%s); reading by time",
+                    error,
+                )
+            else:
+                if read.entries >= JOURNAL_MAX_LINES:
+                    log.warning(
+                        "More than %d journal lines arrived since the last read;"
+                        " the rest is read on the next ones",
+                        JOURNAL_MAX_LINES,
+                    )
+                return read
+
+        since = _parse_time(self._store.get_meta(JOURNAL_CURSOR_TIME_META_KEY))
+        if since is None:
+            return read_task_journal(n_lines=JOURNAL_SCAN_LINES)
+        read = read_task_journal(n_lines=JOURNAL_MAX_LINES, since=since - JOURNAL_OVERLAP)
+        if read.entries >= JOURNAL_MAX_LINES:
+            log.warning(
+                "More than %d journal lines arrived since %s; runs logged among the"
+                " oldest of them may be missing from the history",
+                JOURNAL_MAX_LINES,
+                since.isoformat(),
+            )
+        return read
 
     def _refresh_quietly(self) -> None:
         """Refresh before a read, serving what is stored if that fails.
@@ -180,6 +250,13 @@ def _read_legacy_rows(source: Path) -> list[TaskRow]:
         raise LegacyHistoryError(f"{source} holds no list of tasks")
     rows = [_row_from_legacy(item) for item in tasks if isinstance(item, dict)]
     return [row for row in rows if row]
+
+
+def _parse_time(value: str | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value) if value else None
+    except ValueError:
+        return None
 
 
 def _to_row(record: TaskTelemetryRecord) -> TaskRow:

@@ -8,7 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from app.services.log_parser import JournalReadError, extract_task_records
+from app.services.log_parser import (
+    JournalReadError,
+    TaskJournalRead,
+    extract_task_records,
+)
 from app.services.metrics.store import (
     CLEARED_AT_META_KEY,
     MetricsStore,
@@ -794,9 +798,9 @@ def test_refresh_from_logs_is_skipped_without_journalctl(store, monkeypatch):
 def test_refresh_from_logs_stores_every_journal_record(store, monkeypatch):
     monkeypatch.setattr("app.services.metrics.task_history.capabilities.cmd_journalctl", True)
     monkeypatch.setattr(
-        "app.services.metrics.task_history.parse_task_records",
-        lambda **kwargs: extract_task_records(
-            FIXTURE.read_text(encoding="utf-8").splitlines()
+        "app.services.metrics.task_history.read_task_journal",
+        lambda **kwargs: TaskJournalRead(
+            extract_task_records(FIXTURE.read_text(encoding="utf-8").splitlines())
         ),
     )
     history = TaskHistory(store)
@@ -811,7 +815,7 @@ def test_refresh_from_logs_reports_a_broken_journal(store, monkeypatch):
         raise JournalReadError("journalctl exited with status 1")
 
     monkeypatch.setattr("app.services.metrics.task_history.capabilities.cmd_journalctl", True)
-    monkeypatch.setattr("app.services.metrics.task_history.parse_task_records", explode)
+    monkeypatch.setattr("app.services.metrics.task_history.read_task_journal", explode)
     store.insert_tasks([make_row(0)])
     history = TaskHistory(store)
 

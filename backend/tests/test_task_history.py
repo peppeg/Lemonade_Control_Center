@@ -1,7 +1,11 @@
 import json
 from datetime import UTC, datetime, timedelta
 
-from app.services.log_parser import extract_task_records
+from app.services.log_parser import (
+    JournalReadError,
+    TaskJournalRead,
+    extract_task_records,
+)
 from app.services.metrics import task_history
 from app.services.metrics.store import MetricsStore
 from app.services.metrics.task_history import TaskHistory
@@ -11,7 +15,9 @@ def _history(monkeypatch, tmp_path, journals: list[list[str]]) -> TaskHistory:
     monkeypatch.setattr(task_history.capabilities, "cmd_journalctl", True)
     queue = iter(journals)
     monkeypatch.setattr(
-        task_history, "parse_task_records", lambda **_: extract_task_records(next(queue))
+        task_history,
+        "read_task_journal",
+        lambda **_: TaskJournalRead(extract_task_records(next(queue))),
     )
     return TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
 
@@ -163,8 +169,10 @@ def test_cleared_legacy_records_do_not_come_back_either(monkeypatch, tmp_path):
     windows = iter([4, 4, 8])
     monkeypatch.setattr(
         task_history,
-        "parse_task_records",
-        lambda **_: extract_task_records(lines[: (end := next(windows))], times[:end]),
+        "read_task_journal",
+        lambda **_: TaskJournalRead(
+            extract_task_records(lines[: (end := next(windows))], times[:end])
+        ),
     )
     history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
     history.refresh_from_logs()
@@ -186,8 +194,8 @@ def test_a_legacy_record_imported_from_the_json_history_is_not_stored_twice(
     history = _history(monkeypatch, tmp_path, [])
     monkeypatch.setattr(
         task_history,
-        "parse_task_records",
-        lambda **_: extract_task_records(lines[:4], times[:4]),
+        "read_task_journal",
+        lambda **_: TaskJournalRead(extract_task_records(lines[:4], times[:4])),
     )
     legacy = tmp_path / "task_history.json"
     legacy.write_text(json.dumps({"tasks": [{
@@ -210,14 +218,217 @@ def test_identical_legacy_runs_at_different_times_are_two_rows(monkeypatch, tmp_
     windows = iter([4, 8, 8])
     monkeypatch.setattr(
         task_history,
-        "parse_task_records",
-        lambda **_: extract_task_records(lines[: (end := next(windows))], times[:end]),
+        "read_task_journal",
+        lambda **_: TaskJournalRead(
+            extract_task_records(lines[: (end := next(windows))], times[:end])
+        ),
     )
 
     for _ in range(3):
         history.refresh_from_logs()
 
     assert history.count() == 2
+
+
+class FakeJournal:
+    """journalctl over a list of (received, message).
+
+    Honours -n, --since and --after-cursor the way systemd 259 does: -n keeps
+    the last entries of the journal or of a --since window, and the first
+    entries after a cursor. Cursors are "c<index>"; any other is refused.
+    """
+
+    def __init__(self):
+        self.entries: list[tuple[datetime, str]] = []
+        self.commands: list[list[str]] = []
+        self.fail = False
+
+    def add(self, received: datetime, message: str) -> None:
+        self.entries.append((received, message))
+
+    def run(self, command, **kwargs):
+        from types import SimpleNamespace
+
+        self.commands.append(command)
+        if self.fail:
+            return SimpleNamespace(returncode=1, stdout="", stderr="No journal files were found.")
+        limit = int(command[command.index("-n") + 1])
+        indexed = list(enumerate(self.entries))
+        cursor = next((arg.split("=", 1)[1] for arg in command if arg.startswith("--after-cursor=")), None)
+        if cursor is not None:
+            if not (cursor.startswith("c") and cursor[1:].isdigit()):
+                return SimpleNamespace(
+                    returncode=1, stdout="", stderr="Failed to seek to cursor: Invalid argument"
+                )
+            indexed = indexed[int(cursor[1:]) + 1:][:limit]
+        else:
+            if "--since" in command:
+                since = datetime.strptime(
+                    command[command.index("--since") + 1], "%Y-%m-%d %H:%M:%S UTC"
+                ).replace(tzinfo=UTC)
+                indexed = [item for item in indexed if item[1][0] >= since]
+            indexed = indexed[-limit:]
+        stdout = "\n".join(
+            json.dumps({
+                "MESSAGE": message,
+                "__CURSOR": f"c{index}",
+                "__REALTIME_TIMESTAMP": str(int(received.timestamp() * 1_000_000)),
+            })
+            for index, (received, message) in indexed
+        )
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+
+def _completion(received: datetime, input_tokens: int) -> str:
+    local = received.astimezone().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    return (
+        f"{local} [Info] (Telemetry) Inference completed: model=M, "
+        f"tokens={input_tokens + 7} (in={input_tokens}, out=7), ttft=0.08s, tps=32.28"
+    )
+
+
+def _journal(monkeypatch) -> FakeJournal:
+    journal = FakeJournal()
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", journal.run)
+    monkeypatch.setattr(task_history.capabilities, "cmd_journalctl", True)
+    return journal
+
+
+def _stored(history: TaskHistory) -> list[int]:
+    return sorted(row["input_tokens"] for row in history.get_recent(n=1000, refresh=False))
+
+
+def _cursor_of(command: list[str]) -> str | None:
+    return next((arg.split("=", 1)[1] for arg in command if arg.startswith("--after-cursor=")), None)
+
+
+def test_a_run_followed_by_a_burst_of_log_lines_is_not_lost(monkeypatch, tmp_path):
+    """A model load can log more than the 500-line window between two ticks."""
+    journal = _journal(monkeypatch)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(seconds=20), _completion(now - timedelta(seconds=20), 4))
+
+    assert history.refresh_from_logs() == 1
+
+    journal.add(now - timedelta(seconds=10), _completion(now - timedelta(seconds=10), 5))
+    for index in range(600):
+        journal.add(now - timedelta(seconds=9), f"llama_model_loader: - tensor {index}")
+
+    assert history.refresh_from_logs() == 1
+    assert _stored(history) == [4, 5]
+    assert _cursor_of(journal.commands[0]) is None
+    assert _cursor_of(journal.commands[1]) == "c0"
+
+
+def test_runs_logged_while_lcc_was_stopped_are_read_after_a_restart(monkeypatch, tmp_path):
+    """Reported in review: the read position was lost with the process."""
+    journal = _journal(monkeypatch)
+    database = tmp_path / "lcc_metrics.db"
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(minutes=30), _completion(now - timedelta(minutes=30), 4))
+    assert TaskHistory(MetricsStore(database)).refresh_from_logs() == 1
+
+    # LCC is stopped. Lemonade serves a run, then loads a model.
+    journal.add(now - timedelta(minutes=20), _completion(now - timedelta(minutes=20), 5))
+    for index in range(600):
+        journal.add(now - timedelta(minutes=19), f"llama_model_loader: - tensor {index}")
+
+    restarted = TaskHistory(MetricsStore(database))
+    assert restarted.refresh_from_logs() == 1
+    assert _stored(restarted) == [4, 5]
+
+
+def test_a_backlog_larger_than_one_read_is_read_over_several(monkeypatch, tmp_path, caplog):
+    """Reported in review: the line cap dropped the oldest lines of a backlog."""
+    journal = _journal(monkeypatch)
+    monkeypatch.setattr(task_history, "JOURNAL_MAX_LINES", 1000)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(minutes=50), _completion(now - timedelta(minutes=50), 4))
+    history.refresh_from_logs()
+    # Reads failed or LCC was stopped meanwhile.
+    journal.add(now - timedelta(minutes=40), _completion(now - timedelta(minutes=40), 5))
+    for index in range(1500):
+        journal.add(now - timedelta(minutes=39), f"noise {index}")
+    journal.add(now - timedelta(minutes=30), _completion(now - timedelta(minutes=30), 6))
+
+    with caplog.at_level("WARNING", logger=task_history.__name__):
+        history.refresh_from_logs()
+    assert "More than 1000 journal lines" in caplog.text
+    history.refresh_from_logs()
+
+    assert _stored(history) == [4, 5, 6]
+
+
+def test_a_failed_journal_read_does_not_move_the_cursor(monkeypatch, tmp_path):
+    journal = _journal(monkeypatch)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(minutes=5), _completion(now - timedelta(minutes=5), 4))
+    history.refresh_from_logs()
+    journal.add(now - timedelta(minutes=4), _completion(now - timedelta(minutes=4), 5))
+
+    journal.fail = True
+    try:
+        history.refresh_from_logs()
+    except JournalReadError:
+        pass
+    journal.fail = False
+    history.refresh_from_logs()
+
+    assert _stored(history) == [4, 5]
+    assert _cursor_of(journal.commands[-1]) == "c0"
+
+
+def test_an_unusable_cursor_is_replaced_by_a_read_by_time(monkeypatch, tmp_path):
+    """journalctl refuses a cursor it cannot seek to; the read falls back to time."""
+    journal = _journal(monkeypatch)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(minutes=30), _completion(now - timedelta(minutes=30), 4))
+    history.refresh_from_logs()
+    history.store.set_meta(task_history.JOURNAL_CURSOR_META_KEY, "s=gone;i=1")
+    journal.add(now - timedelta(minutes=20), _completion(now - timedelta(minutes=20), 5))
+    for index in range(600):
+        journal.add(now - timedelta(minutes=19), f"noise {index}")
+
+    assert history.refresh_from_logs() == 1
+    # Read from the saved receive time, two minutes earlier, not the last 500 lines.
+    assert "--since" in journal.commands[-1]
+    assert _stored(history) == [4, 5]
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c601"
+
+
+def test_a_legacy_record_split_across_two_reads_is_stored(monkeypatch, tmp_path):
+    """The next read starts again at the first line of a record still being written."""
+    journal = _journal(monkeypatch)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    first, rest = _legacy()[:2], _legacy()[2:]
+    for offset, line in enumerate(first):
+        journal.add(now - timedelta(seconds=30 - offset), line)
+
+    assert history.refresh_from_logs() == 0
+    for offset, line in enumerate(rest):
+        journal.add(now - timedelta(seconds=20 - offset), line)
+
+    assert history.refresh_from_logs() == 1
+    assert _stored(history) == [4]
+    assert history.refresh_from_logs() == 0
+
+
+def test_an_abandoned_legacy_record_does_not_hold_reads_back(monkeypatch, tmp_path):
+    journal = _journal(monkeypatch)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(minutes=10), _completion(now - timedelta(minutes=10), 4))
+    journal.add(now - timedelta(minutes=9), "Input tokens: 9")
+    journal.add(now - timedelta(minutes=5), "lemond stopped")
+
+    history.refresh_from_logs()
+
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c2"
 
 
 def _legacy_json(path, received: datetime, count: int = 1, step=timedelta(seconds=7)):

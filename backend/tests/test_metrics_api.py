@@ -287,7 +287,7 @@ async def test_clear_history_scope_deletes_and_reports_both_tables(empty_store):
 @pytest.mark.asyncio
 async def test_cleared_history_stays_cleared_when_tasks_are_read_again(empty_store, monkeypatch):
     """The read endpoints refresh from the journal, which still holds the tasks."""
-    from app.services.log_parser import TaskTelemetryRecord
+    from app.services.log_parser import TaskJournalRead, TaskTelemetryRecord
 
     moment = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
     record = TaskTelemetryRecord(
@@ -298,7 +298,8 @@ async def test_cleared_history_stays_cleared_when_tasks_are_read_again(empty_sto
         "app.services.metrics.task_history.capabilities.cmd_journalctl", True
     )
     monkeypatch.setattr(
-        "app.services.metrics.task_history.parse_task_records", lambda **_: [record]
+        "app.services.metrics.task_history.read_task_journal",
+        lambda **_: TaskJournalRead([record]),
     )
     assert len((await get_tasks(n=100, since=None, until=None))["tasks"]) == 1
 

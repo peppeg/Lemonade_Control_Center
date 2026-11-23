@@ -13,7 +13,7 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.models.schemas import (
     FinishReason,
@@ -565,27 +565,75 @@ class JournalReadError(RuntimeError):
     """The journal could not be read, as opposed to holding no records."""
 
 
+# A legacy record whose last lines have not arrived yet holds the next read
+# back to its first line, for this long at most; after that it counts as
+# abandoned (Lemonade stopped mid-record) and reads move on.
+OPEN_RECORD_GRACE = timedelta(minutes=2)
+
+
+@dataclass
+class TaskJournalRead:
+    """The task records of one journal read, and where the next read resumes."""
+
+    records: list[TaskTelemetryRecord]
+    # The next read continues after this journal entry. None when this read
+    # gives no reason to move on: nothing was read, or only the start of a
+    # record whose remaining lines are still on their way.
+    cursor: str | None = None
+    # When journald received the entry at `cursor`.
+    cursor_time: str | None = None
+    # Journal entries returned. When it reaches the line limit, more may follow.
+    entries: int = 0
+
+
 def parse_task_records(
     service: str = "lemond.service",
     n_lines: int = 500,
     timeout: float = 10,
+    since: datetime | None = None,
 ) -> list[TaskTelemetryRecord]:
     """Return every completed task in the journal window, oldest first.
 
+    See read_task_journal() for the window and the errors.
+    """
+    return read_task_journal(service, n_lines, timeout, since=since).records
+
+
+def read_task_journal(
+    service: str = "lemond.service",
+    n_lines: int = 500,
+    timeout: float = 10,
+    since: datetime | None = None,
+    after_cursor: str | None = None,
+) -> TaskJournalRead:
+    """Read the completed tasks in a journal window, oldest first.
+
+    The window is the last `n_lines` entries. With `after_cursor` it is the
+    first `n_lines` entries after that one, so a backlog larger than the limit
+    is read in order over several reads and none of it is skipped. With
+    `since` it is the entries journald received from then on, up to
+    `n_lines` of them.
+
     The journal is read as JSON so every line comes with the time journald
-    received it. Legacy per-field records carry no timestamp of their own,
-    and without that time they could only be dated by when they were read.
+    received it and its cursor. Legacy per-field records carry no timestamp
+    of their own, and without that time they could only be dated by when
+    they were read.
 
     Raises JournalReadError when the journal cannot be read, so the sampler
-    reports it instead of recording nothing without a word. --system makes
-    journalctl fail when the user may not read the system journal; without
-    it, journalctl shows only the user's own journal and succeeds with no
-    entries for lemond.service.
+    reports it instead of recording nothing without a word. That includes a
+    cursor journalctl cannot seek to. --system makes journalctl fail when the
+    user may not read the system journal; without it, journalctl shows only
+    the user's own journal and succeeds with no entries for lemond.service.
     """
     command = [
         "journalctl", "--system", "-u", service, "-n", str(n_lines),
         "-o", "json", "--output-fields=MESSAGE", "--no-pager",
     ]
+    if after_cursor is not None:
+        command.append(f"--after-cursor={after_cursor}")
+    elif since is not None:
+        # Whole seconds with an explicit zone: a form every systemd accepts.
+        command += ["--since", f"{_as_utc(since):%Y-%m-%d %H:%M:%S} UTC"]
     try:
         result = subprocess.run(
             command, capture_output=True, text=True, timeout=timeout, check=False,
@@ -599,18 +647,43 @@ def parse_task_records(
             + (f": {detail[0]}" if detail else "")
         )
     if not result.stdout.strip():
-        return []
+        return TaskJournalRead(records=[])
 
-    messages, journal_times = _journal_messages(result.stdout)
-    if not messages:
+    entries = _journal_entries(result.stdout)
+    if not entries.count:
         raise JournalReadError("journalctl output was not the JSON it was asked for")
-    return extract_task_records(messages, journal_times)
+    records, open_start = _extract_records(entries.messages, entries.times)
+    cursor, cursor_time = entries.last_cursor, entries.last_time
+    if open_start is not None and _still_open(entries, open_start):
+        if open_start > 0:
+            # Read the open record again from its first line next time.
+            cursor = entries.cursors[open_start - 1]
+            cursor_time = entries.times[open_start - 1]
+        elif entries.count < n_lines:
+            cursor = cursor_time = None
+        # A full read that is all one open record moves on regardless: read
+        # again, it would stop at the same place for ever.
+    return TaskJournalRead(
+        records=records, cursor=cursor, cursor_time=cursor_time, entries=entries.count
+    )
 
 
-def _journal_messages(output: str) -> tuple[list[str], list[str | None]]:
-    """Messages and their journald receive times from `journalctl -o json`."""
-    messages: list[str] = []
-    times: list[str | None] = []
+@dataclass
+class _JournalEntries:
+    """What `journalctl -o json` returned, one list item per message line."""
+
+    messages: list[str]
+    # When journald received each message, and its cursor.
+    times: list[str | None]
+    cursors: list[str | None]
+    # Every entry, including those without a usable message.
+    count: int = 0
+    last_cursor: str | None = None
+    last_time: str | None = None
+
+
+def _journal_entries(output: str) -> _JournalEntries:
+    entries = _JournalEntries(messages=[], times=[], cursors=[])
     for raw_line in output.splitlines():
         try:
             payload = json.loads(raw_line)
@@ -618,6 +691,12 @@ def _journal_messages(output: str) -> tuple[list[str], list[str | None]]:
             continue
         if not isinstance(payload, dict):
             continue
+        entries.count += 1
+        cursor = payload.get("__CURSOR")
+        cursor = cursor if isinstance(cursor, str) and cursor else None
+        received = _journal_timestamp(payload.get("__REALTIME_TIMESTAMP"))
+        if cursor is not None:
+            entries.last_cursor, entries.last_time = cursor, received
         message = payload.get("MESSAGE")
         if isinstance(message, list):
             # journald hands over messages that are not valid UTF-8 as bytes.
@@ -627,9 +706,20 @@ def _journal_messages(output: str) -> tuple[list[str], list[str | None]]:
                 continue
         if not isinstance(message, str):
             continue
-        messages.append(message)
-        times.append(_journal_timestamp(payload.get("__REALTIME_TIMESTAMP")))
-    return messages, times
+        entries.messages.append(message)
+        entries.times.append(received)
+        entries.cursors.append(cursor)
+    return entries
+
+
+def _still_open(entries: _JournalEntries, start: int) -> bool:
+    """Whether a record begun at `start` may still receive its last lines."""
+    try:
+        began = datetime.fromisoformat(entries.times[start] or "")
+        latest = datetime.fromisoformat(entries.last_time or "")
+    except ValueError:
+        return True
+    return latest - began <= OPEN_RECORD_GRACE
 
 
 def extract_task_records(
@@ -661,7 +751,20 @@ def extract_task_records(
 
     The records are split as for parse_last_task(); see _telemetry_records().
     """
+    return _extract_records(lines, journal_times)[0]
+
+
+def _extract_records(
+    lines: list[str],
+    journal_times: list[str | None] | None = None,
+) -> tuple[list[TaskTelemetryRecord], int | None]:
+    """extract_task_records(), plus where an incomplete last record begins.
+
+    The index is that of the first line of a last record that has its
+    input-token count but not yet all of its fields, or None.
+    """
     records: list[TaskTelemetryRecord] = []
+    open_start = None
     telemetry = _telemetry_records(lines)
     for position, found in enumerate(telemetry):
         if (
@@ -669,6 +772,7 @@ def extract_task_records(
             and not found.closed
             and not all(key in found.fields for key in _RECORD_FIELDS)
         ):
+            open_start = found.lines[0]
             continue
         # TTFT is kept as logged: Lemonade 2026.45 reports milliseconds
         # (0.485s), and the prompt rate is derived from it.
@@ -683,7 +787,7 @@ def extract_task_records(
         record = _build_task_record(pending)
         if record is not None:
             records.append(record)
-    return records
+    return records, open_start
 
 
 # The fields every telemetry record carries, in both spellings.
