@@ -41,8 +41,9 @@ class Settings(BaseSettings):
     # this key, and REQUIRE_AUTH can force the same behavior on localhost.
     lcc_api_key: str | None = None
     require_auth: bool = False
-    # Extra browser origins, comma-separated, for reverse proxies that do not
-    # forward the original Host header. The request host is always accepted.
+    # Extra browser origins allowed to open WebSockets and send state-changing
+    # requests, comma-separated. For reverse proxies that do not forward the
+    # original Host header. The request host is always accepted.
     allowed_origins: str = ""
 
     # ── Server ──

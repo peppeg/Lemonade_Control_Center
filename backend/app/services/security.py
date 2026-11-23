@@ -23,6 +23,9 @@ DEV_ORIGINS = (
     "http://localhost:3000",
 )
 
+# Methods that change state: audited, and refused when they come from another site.
+MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
@@ -88,15 +91,43 @@ def origin_allowed(origin: str | None, host: str | None) -> bool:
     Schemes are not compared with the request: a TLS proxy serves https to the
     browser while LCC sees http.
     """
-    if origin is None:
+    if origin is None or _origin_configured(origin):
         return True
     parsed = _parse_origin(origin)
     if parsed is None:
         return False
-    if any(parsed == _parse_origin(item) for item in (*DEV_ORIGINS, *_configured_origins())):
-        return True
     scheme, name, port = parsed
     return _parse_host(host, _DEFAULT_PORTS[scheme]) == (name, port)
+
+
+def cross_site_request(request: Request) -> bool:
+    """Return True for a state-changing request sent by another web site.
+
+    Localhost is trusted without a key, so a page open in a browser on this host
+    could otherwise send body-less POST requests that need no CORS preflight.
+
+    Browsers set Sec-Fetch-Site themselves and pages cannot forge it, so it is
+    authoritative when present; this also keeps proxies that rewrite Host
+    working. Without it (older browsers, plain-http LAN access) the Origin
+    decides. Non-browser clients send neither header and are not affected.
+    """
+    if request.method not in MUTATING_METHODS:
+        return False
+    origins = request.headers.getlist("origin")
+    if origins and all(_origin_configured(origin) for origin in origins):
+        return False
+    fetch_site = request.headers.get("sec-fetch-site")
+    if fetch_site is not None:
+        return fetch_site not in {"same-origin", "none"}
+    host = request.headers.get("host")
+    return not all(origin_allowed(origin, host) for origin in origins)
+
+
+def _origin_configured(origin: str) -> bool:
+    parsed = _parse_origin(origin)
+    return parsed is not None and any(
+        parsed == _parse_origin(item) for item in (*DEV_ORIGINS, *_configured_origins())
+    )
 
 
 def _configured_origins() -> list[str]:
@@ -169,7 +200,7 @@ def audit_write(
     authenticated: bool,
 ) -> None:
     """Append a compact audit record for mutating API requests."""
-    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+    if request.method not in MUTATING_METHODS:
         return
 
     AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)

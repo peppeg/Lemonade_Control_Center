@@ -7,6 +7,7 @@ from starlette.responses import JSONResponse, Response
 
 from app.services.security import (
     audit_write,
+    cross_site_request,
     evaluate_access,
     key_from_connection,
 )
@@ -21,10 +22,24 @@ class LccAccessControlMiddleware(BaseHTTPMiddleware):
 
     Static/frontend routes remain public so the browser can render the login
     prompt. API routes are protected whenever the request is remote or
-    REQUIRE_AUTH=true.
+    REQUIRE_AUTH=true. State-changing requests from other web sites are refused
+    on every path, whatever the client address or key.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
+        if cross_site_request(request):
+            response = JSONResponse(
+                {
+                    "detail": (
+                        "Cross-site request refused. If LCC runs behind a reverse proxy, "
+                        "add its address to ALLOWED_ORIGINS."
+                    )
+                },
+                status_code=403,
+            )
+            audit_write(request=request, status_code=response.status_code, authenticated=False)
+            return response
+
         path = request.url.path
         if not path.startswith("/api/") or path in PUBLIC_API_PATHS:
             return await call_next(request)
