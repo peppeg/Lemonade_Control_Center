@@ -258,3 +258,36 @@ def test_real_journal_slice_has_the_last_task(monkeypatch):
 
     assert f"in={stats.input_tokens}, out={stats.output_tokens})" in newest
     assert f"tps={stats.generation_tps}" in newest
+
+
+# ── No task, or a task that cannot be read ──
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected"),
+    [
+        pytest.param(["2026-11-23 16:00:00.000 [Info] (Server) Lemonade Server vN started"], False, id="fresh-start"),
+        pytest.param([_slot(1, "prompt processing, n_tokens = 512, progress = 0.5")], False, id="first-task-running"),
+        pytest.param(_task(1, 22, 7, 0.3), True, id="task"),
+        pytest.param([_eval(1, 7)], True, id="timings-only"),
+        pytest.param([_completed(22, 7)], True, id="telemetry-only"),
+        pytest.param(["[Info] (Telemetry) Inference completed: something new"], True, id="unknown-telemetry-format"),
+        pytest.param([_slot(1, "eval time = soon")], True, id="unknown-timings-format"),
+        pytest.param([_total(1, 0.3, 29)], True, id="total-only"),
+    ],
+)
+def test_a_log_without_tasks_is_told_from_a_task_that_cannot_be_read(monkeypatch, lines, expected):
+    _fake_journal(monkeypatch, lines)
+
+    stats = parse_last_task()
+
+    assert (stats.available, stats.found) == (True, expected)
+
+
+def test_an_empty_log_is_not_available(monkeypatch):
+    # Also what journalctl prints without the permission to read the journal.
+    _fake_journal(monkeypatch, [])
+
+    stats = parse_last_task()
+
+    assert (stats.available, stats.found) == (False, False)

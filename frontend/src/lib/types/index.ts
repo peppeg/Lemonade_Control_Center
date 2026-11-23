@@ -339,7 +339,10 @@ export interface LoadedModelInfo {
 }
 
 export interface LastTaskInfo {
+  /** A task was found in the log. */
   available: boolean;
+  /** Without a task: whether the log could be read at all. */
+  logReadable: boolean;
   inputTokens: number | null;
   outputTokens: number | null;
   promptEvalTps: number | null;

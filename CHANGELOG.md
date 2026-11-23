@@ -17,6 +17,7 @@ The project is under active development, so entries currently describe the evolv
 - System, the diagnostic bundle (now `llama_servers.json`) and Connection Doctor report every `llama-server` process. Connection Doctor could name one model with the process of another.
 - The Models page no longer shows an "Unknown" active model for a `llama-server` that Lemonade did not start, and says so when Lemonade does not answer.
 - Stop & Unload says that it unloads every loaded model.
+- Without any recent request, Dashboard and Logs & Stats say so instead of showing "Unavailable" and "UNKNOWN", which are kept for values that could not be read. (Reported by @dolaresko, #35)
 - The `llama-server` process is recognized by its executable. Any program whose command line mentioned `llama-server` (a shell, an editor, a `grep`) could be shown in its place, with its command line.
 - With several models loaded, Run Evidence and Bench Lab record the requested model and its own process (PID, backend, context, memory) instead of the first ones found, and Diagnostics describes the chat model. When LCC cannot tell, these fields are left unavailable. Bench Lab no longer refuses a loaded model because another one is listed first. (Reported by @dolaresko, #36)
 - Load evidence no longer falls back to the process that was running before the load.
