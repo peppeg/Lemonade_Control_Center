@@ -27,7 +27,7 @@ This is not a minimum requirement.
 | 10.8.x | not yet tested | Release notes reviewed; requires smoke testing before compatibility claim |
 | 10.9.0 | tested with caveats | Full test pass for LCC 0.3.0; probe, backend tests, frontend check/build, and basic LCC runtime smoke passed |
 | 11.x | not formally tested | Compatibility fixes for 11.7 telemetry, nested config keys, and saved model options are merged (see Changelog), without a full test pass. The next tested version is 2026.45.3 |
-| 2026.45.3 | tested with caveats | Test pass for LCC 0.3.1 on 2026-11-23; see [below](#lcc-031-on-lemonade-2026453) |
+| 2026.45.3 | tested with caveats | Test passes for LCC [0.3.1](#lcc-031-on-lemonade-2026453) and, with several models loaded, [0.3.2](#lcc-032-on-lemonade-2026453) on 2026-11-23 |
 
 Manual smoke tests on Lemonade `10.7.0` passed for:
 
@@ -89,10 +89,10 @@ Passed:
 
 Not tested: changing the Lemonade configuration, model download and deletion, backend installation, service restart, the NPU, access from the local network without a tunnel, and native Docker Compose. Loading several models was tested only against a stand-in server.
 
-Problems found, all present in 0.3.0 too and still open in 0.3.1:
+Problems found, all present in 0.3.0 too. All are fixed in 0.3.2, except the one after Clear, which waits for [#38](https://github.com/peppeg/Lemonade_Control_Center/pull/38):
 
 - The `llama-server` process is found by searching whole command lines, so another program that mentions it can be shown instead, with its command line.
-- When Lemonade drops a `total time` log line, the task gets the duration of an earlier one. In this host's journal, 9 of 241 completions since October had no such line. [#38](https://github.com/peppeg/Lemonade_Control_Center/pull/38) avoids this in the stored history, not in the last-task view.
+- When Lemonade drops a `total time` log line, the task gets the duration of an earlier one. In this host's journal, 9 of 241 completions since October had no such line.
 - After Clear, the latest task comes back from the journal.
 - With several models loaded, the first one is taken as the active one, and Run Evidence can name the wrong model ([#36](https://github.com/peppeg/Lemonade_Control_Center/issues/36)).
 - Dashboard and Diagnostics read the default backend from `llamacpp_backend`, which Lemonade now nests as `llamacpp.backend`.
@@ -105,6 +105,21 @@ Observed `2026.45.3` API notes:
 - `/internal/config` reports `config_version` 2, with backend settings in nested sections.
 - The backend is started without `-ngl` and `--mmap` options, so LCC shows GPU offload and mmap as unknown.
 - Log lines written by different threads can swap their `(Process)` and `(Telemetry)` tags.
+
+## LCC 0.3.2 On Lemonade 2026.45.3
+
+Tested on 2026-11-23 on the same machine and backend, with a chat model (`Qwen3.5-9B-GGUF`) and an embedding model (`nomic-embed-text-v1-GGUF`) loaded together. It covers the changes since 0.3.1 and does not repeat the whole 0.3.1 pass.
+
+Passed:
+
+- Run Evidence for loads and Smoke Tests, a Bench Lab quick run, telemetry, and Connection Doctor: model, PID, port, and context matched what Lemonade reports. The same held when the Smoke Test itself made Lemonade load the model.
+- Load and unload of each model while the other stays loaded, and unload of all of them.
+- Dashboard, Models, Bench Lab, Logs & Stats, and System in a headless browser, at desktop size and at 390 px, without console errors or failed requests.
+- Last task: correct on 247 completions from this host's journal, of which 0.3.1 got 8 wrong.
+- Log stream: no `journalctl` process left after a client closes it, and LCC stops in 0.3 s with a stream open.
+- Download of a small model (78 MB) through LCC.
+
+Not tested: two models of type `llm` at once (Lemonade keeps one model per type by default), Lemonade versions that do not report `type`, `pid`, and `backend_url` (covered by unit tests only), a real phone, and the items not tested for 0.3.1 other than the model download.
 
 ## Notes
 

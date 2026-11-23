@@ -28,7 +28,8 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - The 0.3.0 UI and operations closeout is implemented and merged on `main` through pull request [#18](https://github.com/peppeg/Lemonade_Control_Center/pull/18). It includes the cross-page UI review, clearer diagnostics, guarded backend install/update operations, documentation refresh, and final validation against Lemonade Server 10.9.0.
 - [LCC 0.3.0](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.0) was released on 2026-07-13. Steps 0–6 below describe the delivered 0.3.0 foundation.
 - Post-0.3.0 maintenance on `main` (pull requests #20–#34) added Lemonade 11.x compatibility fixes (11.7 telemetry parsing, nested config keys, `recipe_options` from the models API), AMD GTT/VRAM telemetry, the `lemonade_exposed` diagnostic, Authorization forwarding to Lemonade, and reasoning-model Smoke Tests. See the [Changelog](../CHANGELOG.md).
-- [LCC 0.3.1](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.1) was released on 2026-11-23, after a test pass on Lemonade 2026.45.3. The problems it found are listed in [Tested Environment](./tested-environment.md#lcc-031-on-lemonade-2026453) and, with the open issues, under [Open Defects](#open-defects).
+- [LCC 0.3.1](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.1) was released on 2026-11-23, after a test pass on Lemonade 2026.45.3.
+- [LCC 0.3.2](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.2) fixes the problems found by that pass and [#35](https://github.com/peppeg/Lemonade_Control_Center/issues/35), [#36](https://github.com/peppeg/Lemonade_Control_Center/issues/36), and [#37](https://github.com/peppeg/Lemonade_Control_Center/issues/37), in pull requests #50 to #56. What was tested is in [Tested Environment](./tested-environment.md#lcc-032-on-lemonade-2026453), what is left under [Open Defects](#open-defects).
 - A code audit on 2026-11-09 found access-control and hardening gaps, re-verified against the code on 2026-11-12. Step 7 (Security And Maintenance Hardening) is in progress; 7.1 to 7.4 are merged and released in 0.3.1, and 7.5 to 7.7 remain. Steps 8–10 follow in order: long-run performance history (adopted from a contributor fork), Bench Lab v2, then multi-host and agent readiness. Step 7 must land first, because every later step adds endpoints, stored state, or remote surface that those gaps affect.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
@@ -195,7 +196,7 @@ Status: merged in [#42](https://github.com/peppeg/Lemonade_Control_Center/pull/4
 
 - Replace silent `except Exception: pass` blocks (12 today, metrics collector loop first) with logged warnings, rate-limited where a loop could flood the log. Review the other broad `except Exception` handlers (15 files) and narrow them where the expected errors are known.
 - Share one `httpx.AsyncClient` per Lemonade runtime instead of creating one per call (12 call sites in `providers/lemonade.py`, `services/completion_runner.py`, `services/setup.py`, `services/huggingface_intake.py`, `routers/health.py`), keeping `trust_env=False`. Close and recreate the client when the active runtime, URL, or key changes.
-- Move blocking file I/O in async handlers (config save, Run Evidence, Bench storage) off the event loop where it can be slow. `routers/logs.py` uses a blocking `subprocess.Popen` inside the WebSocket handler; move it to `asyncio.create_subprocess_exec`. This has a visible effect today, see [Open Defects](#open-defects).
+- Move blocking file I/O in async handlers (config save, Run Evidence, Bench storage) off the event loop where it can be slow. The log stream in `routers/logs.py` already moved to `asyncio.create_subprocess_exec` in [#51](https://github.com/peppeg/Lemonade_Control_Center/pull/51).
 - Add a shared rate-limited logging helper here; step 8 reuses it for the metrics-history loops.
 
 Done when collector failures are visible in the LCC log and existing tests still pass.
@@ -508,15 +509,10 @@ These tasks should be handled when relevant but should not interrupt the executi
 
 ### Open Defects
 
-Known on 2026-11-23, after 0.3.1. Suggested order; none of them is scheduled for a release yet.
+Known on 2026-11-23, after 0.3.2. The earlier ones were fixed in #50 to #56.
 
-1. **Wrong `llama-server` process.** `find_llama_server()` in `services/process.py` searches whole command lines, so LCC can show another program, with its command line. Match the executable, and prefer the `pid` that Lemonade reports in `all_models_loaded`.
-2. **First model taken as the active one** ([#36](https://github.com/peppeg/Lemonade_Control_Center/issues/36)). It affects stored data: Run Evidence and Bench results can name the wrong model. First match the observed model and process to the requested one (`routers/lemonade.py`, `routers/bench.py`, `services/diagnostics/collectors.py`), then show every loaded model, then offer Smoke Test only for models that can chat.
-3. **Log stream left open.** A client that closes `/api/logs/ws/logs` while the journal is silent leaves a `journalctl` process behind, and LCC does not stop until the next log line. The LCC frontend does not use that stream. Same change as the `routers/logs.py` item in 7.5.
-4. **Default backend.** `services/diagnostics/collectors.py` and `frontend/src/lib/stores/dashboard.ts` read `llamacpp_backend`; Lemonade now nests it as `llamacpp.backend`. Keep the flat key as a fallback.
-5. **Last task duration.** `parse_last_task()` in `services/log_parser.py` scans the journal backwards without stopping at the task boundary, so a task whose `total time` line is missing gets the duration of an earlier one. It feeds the Dashboard, Logs & Stats, Diagnostics, and the diagnostic bundle. [#38](https://github.com/peppeg/Lemonade_Control_Center/pull/38) fixes the stored history only.
-6. **Empty state reads like an error** ([#35](https://github.com/peppeg/Lemonade_Control_Center/issues/35)).
-7. **Models table cut off on mobile** ([#37](https://github.com/peppeg/Lemonade_Control_Center/issues/37)).
+1. **Idle Heavy never appears.** The diagnostic `idle_heavy` is skipped whenever Lemonade's log can be read, because `collectors.py` takes `available` as "there was a recent task". Use `found`, added in [#55](https://github.com/peppeg/Lemonade_Control_Center/pull/55). It then shows up on hosts that have never seen it, so review its wording first.
+2. **Other pages on a phone.** On Models, the banner about the workflow profile breaks into narrow columns. The tables of Backends, Diagnostics, Bench Lab, and Run Evidence have not been checked; `ops-table-stack`, added in [#56](https://github.com/peppeg/Lemonade_Control_Center/pull/56), can be reused.
 
 Waiting for #38, which replaces the code involved: after Clear, the latest task comes back from the journal. #38 needs the cut-off described in 8.3.
 

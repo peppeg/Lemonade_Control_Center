@@ -27,5 +27,5 @@
     {/if}
   </div>
 
-  <span>LCC v{$healthData?.app_version ?? '0.3.1'}</span>
+  <span>LCC v{$healthData?.app_version ?? '0.3.2'}</span>
 </footer>

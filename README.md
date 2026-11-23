@@ -53,6 +53,17 @@ By default, LCC remains local to the Linux host and can be opened there at `http
 |---|---|
 | ![Diagnostics](screenshot/lemonadecc_003.jpg) | ![Hardware monitor](screenshot/lemonadecc_004.jpg) |
 
+## What's New In 0.3.2
+
+Version 0.3.2 fixes what LCC shows and records when Lemonade keeps several models loaded, for example a chat and an embedding model:
+
+- **Run Evidence, Bench Lab, Diagnostics, and Connection Doctor** use the right model and its own process, instead of the first ones found.
+- **Dashboard** shows every loaded model, **Models** lets you choose which one the actions apply to, and **Smoke Test** is offered for chat models only.
+- **The last task** is read from its own log lines only, and "no recent requests" is told from a value that could not be read.
+- **Models** works on a phone screen.
+
+Records stored by earlier versions are not changed: those made with several models loaded can name the wrong model. See the [Changelog](CHANGELOG.md).
+
 ## What's New In 0.3.1
 
 Version 0.3.1 is a security and compatibility release:
