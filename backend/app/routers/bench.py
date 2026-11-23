@@ -9,6 +9,7 @@ from app.dependencies import (
     get_completion_runner,
     get_provider,
 )
+from app.models.schemas import RunningModelInfo
 from app.models.setup import RuntimeConfig
 from app.providers.lemonade import LemonadeProvider
 from app.services.bench.models import (
@@ -20,6 +21,7 @@ from app.services.bench.runner import BenchRunner
 from app.services.bench.storage import BenchStorage
 from app.services.bench.suites import SUITES
 from app.services.completion_runner import CompletionRunner
+from app.services.loaded_models import find_loaded
 from app.services.run_evidence import _normalize_server_url
 
 router = APIRouter(prefix="/api/bench", tags=["bench"])
@@ -38,16 +40,17 @@ async def run_bench(
     provider: LemonadeProvider = Depends(get_provider),
     runtime: RuntimeConfig | None = Depends(get_active_runtime_config),
 ):
-    identity = await _bench_identity(request, provider, runtime)
-    observed_model = identity.get("observed_model_name")
-    if observed_model and observed_model != request.model:
+    running = await _running_models(provider)
+    observed = find_loaded(running, request.model)
+    if running and observed is None:
+        loaded = ", ".join(f"'{model.name}'" for model in running)
         raise HTTPException(
             409,
-            f"Bench requested model '{request.model}', but Lemonade reports '{observed_model}' as loaded.",
+            f"Bench requested model '{request.model}', but Lemonade reports {loaded} as loaded.",
         )
     if request.suite_id and not request.workflow_profile_id:
         raise HTTPException(400, "Apply a workflow profile to the selected model before running a suite.")
-    runner = BenchRunner(completion_runner, identity=identity)
+    runner = BenchRunner(completion_runner, identity=_bench_identity(request, observed, runtime), observed=observed)
     if request.suite_id:
         if request.suite_id not in SUITES:
             raise HTTPException(404, f"Suite '{request.suite_id}' not found")
@@ -136,19 +139,20 @@ async def clear_results():
     return {"cleared": True}
 
 
-async def _bench_identity(
+async def _running_models(provider: LemonadeProvider) -> list[RunningModelInfo]:
+    try:
+        return (await provider.get_running_models()).models
+    except Exception:
+        return []
+
+
+def _bench_identity(
     request: BenchRunRequest,
-    provider: LemonadeProvider,
+    observed: RunningModelInfo | None,
     runtime: RuntimeConfig | None,
 ) -> dict:
-    observed_model_name = None
-    try:
-        running = await provider.get_running_models()
-        observed_model_name = running.models[0].name if running.models else None
-    except Exception:
-        pass
     return {
-        "observed_model_name": observed_model_name,
+        "observed_model_name": observed.name if observed else None,
         "runtime_id": runtime.id if runtime else None,
         "runtime_label": runtime.name if runtime else None,
         "runtime_server_url": _normalize_server_url(runtime.url) if runtime else None,

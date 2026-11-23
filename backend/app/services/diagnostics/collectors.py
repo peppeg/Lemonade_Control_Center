@@ -7,8 +7,8 @@ from app.capabilities import capabilities
 from app.dependencies import get_provider
 from app.models.schemas import FinishReasonConfidence
 from app.services.diagnostics.engine import SystemState
+from app.services.loaded_models import llama_server_for, primary_model
 from app.services.log_parser import parse_last_task
-from app.services.process import find_llama_server
 
 
 async def collect_full_state() -> SystemState:
@@ -43,10 +43,11 @@ async def collect_full_state() -> SystemState:
     except Exception:
         state.server_healthy = False
 
+    model = None
     try:
         running = await provider.get_running_models()
-        if running.models:
-            model = running.models[0]
+        model = primary_model(running.models)
+        if model:
             state.loaded_model = model.name
             if model.size:
                 state.model_size_gb = model.size / (1024**3)
@@ -66,7 +67,7 @@ async def collect_full_state() -> SystemState:
         pass
 
     try:
-        info = find_llama_server()
+        info = llama_server_for(model)
         if info.found and info.process:
             state.llama_pid = info.process.pid
             state.llama_rss_gb = info.process.rss_gb

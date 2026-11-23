@@ -33,6 +33,7 @@ from app.models.schemas import (
     PullModelResponse,
     RunEvidenceListResponse,
     RunEvidenceSeed,
+    RunningModelInfo,
     RunningModelsResponse,
     SmokeTestRequest,
     SmokeTestResponse,
@@ -46,6 +47,7 @@ from app.services.backend_readiness import (
 )
 from app.services.completion_runner import CompletionRunner
 from app.services.lemonade_options import read_saved_options, saved_options_from_api
+from app.services.loaded_models import observed_model
 from app.services.run_evidence import (
     LoadEvidenceRecorder,
     RunEvidenceStorage,
@@ -144,7 +146,7 @@ async def load_model(
         request,
         response,
         started,
-        observed_model_name=await _observed_model_name(provider),
+        observed=await _observe(provider, request.model_name),
     )
     return response
 
@@ -160,7 +162,7 @@ async def smoke_test(
     return await SmokeTestRunner(
         completion_runner=completion_runner,
         runtime=runtime,
-    ).run(request, observed_model_name=await _observed_model_name(provider))
+    ).run(request, observe=lambda: _observe(provider, request.model_name))
 
 
 @router.get("/run-evidence", response_model=RunEvidenceListResponse)
@@ -217,13 +219,13 @@ async def export_run_evidence(
     )
 
 
-async def _observed_model_name(provider: LemonadeProvider) -> str | None:
-    """Read the canonical loaded model name when Lemonade exposes it."""
+async def _observe(provider: LemonadeProvider, requested: str) -> RunningModelInfo | None:
+    """Find the loaded model behind a request when Lemonade exposes it."""
     try:
         running = await provider.get_running_models()
     except Exception:
         return None
-    return running.models[0].name if running.models else None
+    return observed_model(running.models, requested)
 
 
 @router.post("/pull", response_model=PullModelResponse)

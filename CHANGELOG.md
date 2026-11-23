@@ -8,6 +8,9 @@ The project is under active development, so entries currently describe the evolv
 
 ### Fixed
 
+- The `llama-server` process is recognized by its executable. Any program whose command line mentioned `llama-server` (a shell, an editor, a `grep`) could be shown in its place, with its command line.
+- With several models loaded, Run Evidence and Bench Lab record the requested model and its own process (PID, backend, context, memory) instead of the first ones found, and Diagnostics describes the chat model. When LCC cannot tell, these fields are left unavailable. Bench Lab no longer refuses a loaded model because another one is listed first. (Reported by @dolaresko, #36)
+- Load evidence no longer falls back to the process that was running before the load.
 - The live log stream (`/api/logs/ws/logs`) notices a closed client and an LCC shutdown while Lemonade's log is silent. It left a `journalctl` process behind, and LCC did not stop until the next log line.
 
 ## 0.3.1 - 2026-11-23

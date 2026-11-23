@@ -104,6 +104,10 @@ class RunningModelInfo(BaseModel):
     expires_at: str | None = None
     size_vram: int | None = None
     details: dict | None = None
+    # From /api/v1/health, None when Lemonade does not report them.
+    type: str | None = None
+    pid: int | None = None
+    port: int | None = None
 
 
 class RunningModelsResponse(BaseModel):

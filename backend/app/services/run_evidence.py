@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -15,14 +16,15 @@ from app.models.schemas import (
     LoadModelRequest,
     LoadModelResponse,
     RunEvidenceSeed,
+    RunningModelInfo,
     SmokeTestRequest,
     SmokeTestResponse,
 )
 from app.models.setup import RuntimeConfig
 from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
+from app.services.loaded_models import find_loaded, llama_server_for
 from app.services.log_parser import get_logs_for_window
-from app.services.process import find_llama_server
 from app.services.state_files import write_private_text
 from app.services.telemetry import TelemetryManager
 
@@ -257,11 +259,16 @@ class SmokeTestRunner:
         self.runtime = runtime
         self.telemetry_manager = telemetry_manager or TelemetryManager()
 
-    async def run(self, request: SmokeTestRequest, observed_model_name: str | None = None) -> SmokeTestResponse:
+    async def run(
+        self,
+        request: SmokeTestRequest,
+        observe: Callable[[], Awaitable[RunningModelInfo | None]] | None = None,
+    ) -> SmokeTestResponse:
+        before_model = await observe() if observe else None
         started_at = datetime.now(UTC)
         telemetry_start = self.telemetry_manager.snapshot("start")
         before_hardware = _safe_hardware_snapshot()
-        before_process = _safe_process_snapshot()
+        before_process = _safe_process_snapshot(before_model)
 
         completion_request = CompletionRequest(
             model=request.model_name,
@@ -274,11 +281,17 @@ class SmokeTestRunner:
         result = await self.completion_runner.run(completion_request)
 
         after_hardware = _safe_hardware_snapshot()
-        after_process = _safe_process_snapshot()
         telemetry_end = self.telemetry_manager.snapshot("end")
         ended_at = datetime.now(UTC)
+        # Lemonade may load the requested model on demand, so look again after the
+        # run; a model unloaded meanwhile is still known from before it.
+        after_model = await observe() if observe else None
+        known = [model for model in (after_model, before_model) if model]
+        observed = find_loaded(known, request.model_name) or (known[0] if known else None)
+        process = _safe_process_snapshot(observed)
+        if process is None and _name(observed) == _name(before_model):
+            process = before_process
         log_capture = self.log_collector(started_at, ended_at)
-        process = after_process or before_process
         warnings: list[str] = []
 
         if not result.success:
@@ -293,7 +306,7 @@ class SmokeTestRunner:
             id=str(uuid.uuid4()),
             model_name=request.model_name,
             requested_model_name=request.model_name,
-            observed_model_name=observed_model_name,
+            observed_model_name=_name(observed),
             **_identity_fields(self.runtime, request.workflow_profile_id, request.workflow_profile_name),
             prompt=request.prompt,
             response_text=result.response_text,
@@ -362,7 +375,6 @@ class LoadEvidenceRecorder:
             "started_at": time.monotonic(),
             "wall_started_at": datetime.now(UTC),
             "hardware": _safe_hardware_snapshot(),
-            "process": _safe_process_snapshot(),
             "telemetry": self.telemetry_manager.snapshot("start"),
         }
 
@@ -371,14 +383,13 @@ class LoadEvidenceRecorder:
         request: LoadModelRequest,
         response: LoadModelResponse,
         started: dict,
-        observed_model_name: str | None = None,
+        observed: RunningModelInfo | None = None,
     ) -> RunEvidenceSeed:
         after_hardware = _safe_hardware_snapshot()
-        after_process = _safe_process_snapshot()
+        process = _safe_process_snapshot(observed)
         telemetry_end = self.telemetry_manager.snapshot("end")
         ended_at = datetime.now(UTC)
         log_capture = self.log_collector(started["wall_started_at"], ended_at)
-        process = after_process or started.get("process")
         warnings = _load_warnings(request, response, process)
         if log_capture["error"]:
             warnings.append(log_capture["error"])
@@ -388,7 +399,7 @@ class LoadEvidenceRecorder:
             kind="load_attempt",
             model_name=request.model_name,
             requested_model_name=request.model_name,
-            observed_model_name=observed_model_name,
+            observed_model_name=_name(observed),
             **_identity_fields(self.runtime, request.workflow_profile_id, request.workflow_profile_name),
             success=response.success,
             error=None if response.success else response.message,
@@ -430,6 +441,10 @@ class LoadEvidenceRecorder:
         return self.record_response(request, response, started)
 
 
+def _name(model: RunningModelInfo | None) -> str | None:
+    return model.name if model else None
+
+
 def _safe_hardware_snapshot() -> dict | None:
     try:
         hardware = get_hardware_info()
@@ -441,9 +456,9 @@ def _safe_hardware_snapshot() -> dict | None:
     }
 
 
-def _safe_process_snapshot() -> dict | None:
+def _safe_process_snapshot(model: RunningModelInfo | None) -> dict | None:
     try:
-        info = find_llama_server()
+        info = llama_server_for(model)
     except Exception:
         return None
     if not info.found or not info.process:

@@ -15,7 +15,7 @@ from app.models.telemetry import (
     TelemetrySnapshot,
 )
 from app.services.hardware import get_gpu_info
-from app.services.process import find_llama_server
+from app.services.process import find_llama_servers
 
 
 class LinuxTelemetryProvider:
@@ -49,16 +49,17 @@ class LinuxTelemetryProvider:
             )
 
         try:
-            process = find_llama_server()
-            if process.found and process.process:
+            servers = [server.process for server in find_llama_servers() if server.process]
+            for process in servers:
+                owner = f", PID {process.pid}" if len(servers) > 1 else ""
                 metrics.extend(
                     [
-                        self._metric("llama.pid", process.process.pid, None, "measured", "matching local process"),
-                        self._metric("llama.rss", process.process.rss_gb, "GB", "measured", "/proc process RSS"),
-                        self._metric("llama.cpu_busy", process.process.cpu_percent, "%", "measured", "/proc process CPU"),
+                        self._metric("llama.pid", process.pid, None, "measured", f"matching local process{owner}"),
+                        self._metric("llama.rss", process.rss_gb, "GB", "measured", f"/proc process RSS{owner}"),
+                        self._metric("llama.cpu_busy", process.cpu_percent, "%", "measured", f"/proc process CPU{owner}"),
                     ]
                 )
-            else:
+            if not servers:
                 metrics.append(self._metric("llama.rss", None, "GB", "unavailable", "llama-server process not found"))
         except Exception as exc:
             metrics.append(self._metric("llama.rss", None, "GB", "degraded", f"process probe failed: {exc}"))
