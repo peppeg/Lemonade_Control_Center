@@ -23,9 +23,13 @@ from app.routers import (
     system,
 )
 from app.routers import settings as settings_router
+from app.services.log_redaction import redact_key_in_logs
 from app.services.metrics.collector import start_collector, stop_collector
 from app.services.security import DEV_ORIGINS, is_loopback_host
 from app.services.state_files import protect_data_dir
+
+# Uvicorn sets up its loggers before it imports this module.
+redact_key_in_logs()
 
 
 @asynccontextmanager
