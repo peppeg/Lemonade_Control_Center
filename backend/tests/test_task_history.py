@@ -733,3 +733,41 @@ def test_an_open_record_with_an_unknown_time_does_not_hold_the_cursor(monkeypatc
     history.refresh_from_logs()
 
     assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c49"
+
+
+def test_a_locked_database_holds_the_cursor_until_the_write_succeeds(monkeypatch, tmp_path):
+    import sqlite3
+    from types import SimpleNamespace
+
+    path = tmp_path / "lcc_metrics.db"
+    store = MetricsStore(path)
+    real_connect = store._connect
+
+    def short_timeout(check_same_thread=True):
+        connection = real_connect(check_same_thread)
+        connection.execute("PRAGMA busy_timeout=50")
+        return connection
+
+    monkeypatch.setattr(store, "_connect", short_timeout)
+    history = TaskHistory(store)
+    store.set_meta(task_history.JOURNAL_CURSOR_META_KEY, "c0")
+    now = datetime.now(UTC)
+    entry = {"MESSAGE": _completion(now, 4), "__CURSOR": "c1",
+             "__REALTIME_TIMESTAMP": str(int(now.timestamp() * 1_000_000))}
+    monkeypatch.setattr(
+        "app.services.log_parser.subprocess.run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout=json.dumps(entry), stderr=""),
+    )
+    monkeypatch.setattr(task_history.capabilities, "cmd_journalctl", True)
+    blocker = sqlite3.connect(path, timeout=0)
+    blocker.execute("BEGIN IMMEDIATE")
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            history.refresh_from_logs()
+    finally:
+        blocker.rollback()
+        blocker.close()
+
+    assert store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c0"
+    assert history.refresh_from_logs() == 1
+    assert store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c1"
