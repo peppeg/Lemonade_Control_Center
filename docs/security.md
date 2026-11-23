@@ -125,5 +125,5 @@ Only the user running LCC can read these files: the directory has mode `0700`, a
 
 These are tracked in the [Roadmap](./roadmap.md) under Security And Maintenance Hardening:
 
-- The browser stores the LCC key in `localStorage` and sends it in the URL of WebSocket connections, because browsers cannot add headers to WebSockets. Avoid proxies that log full request URLs, or strip the `lcc_key` parameter from their logs.
+- The browser stores the LCC key in `localStorage` and sends it in the URL of WebSocket connections, because browsers cannot add headers to WebSockets. LCC replaces the key with `<redacted>` in its own log (0.3.0 and earlier wrote it there: if those logs were shared or are readable by others, change `LCC_API_KEY`). Other software sees the full URL: avoid proxies that log it, or strip the `lcc_key` parameter from their logs.
 - For remote use, the SSH tunnel is the recommended mode until the remaining hardening work lands.
