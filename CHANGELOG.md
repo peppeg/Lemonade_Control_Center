@@ -8,6 +8,7 @@ The project is under active development, so entries currently describe the evolv
 
 ### Fixed
 
+- Model Inventory fits a phone screen: each model is a block with its status and actions, and names are no longer broken every few letters. (Reported by @dolaresko, #37)
 - The `llama-server` process is recognized by its executable. Any program whose command line mentioned `llama-server` (a shell, an editor, a `grep`) could be shown in its place, with its command line.
 - With several models loaded, Run Evidence and Bench Lab record the requested model and its own process (PID, backend, context, memory) instead of the first ones found, and Diagnostics describes the chat model. When LCC cannot tell, these fields are left unavailable. Bench Lab no longer refuses a loaded model because another one is listed first. (Reported by @dolaresko, #36)
 - Load evidence no longer falls back to the process that was running before the load.

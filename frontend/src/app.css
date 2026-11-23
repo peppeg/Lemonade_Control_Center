@@ -409,6 +409,41 @@ code, pre, .font-mono {
   vertical-align: middle;
 }
 
+/* On a phone each row becomes a block: first and last cell on their own line. */
+@media (max-width: 767px) {
+  .ops-table-stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .ops-table-stack,
+  .ops-table-stack tbody {
+    display: block;
+  }
+
+  .ops-table-stack tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    border-bottom: 1px solid #2c3029;
+    padding: 14px 18px;
+  }
+
+  .ops-table-stack td {
+    border: 0;
+    padding: 0;
+  }
+
+  .ops-table-stack td:first-child,
+  .ops-table-stack td:last-child {
+    flex: 1 0 100%;
+  }
+}
+
 .ops-progress {
   height: 8px;
   overflow: hidden;

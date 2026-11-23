@@ -153,7 +153,7 @@
 
 <div class="space-y-6">
   <section class="ops-panel">
-    <div class="ops-card-header">
+    <div class="ops-card-header flex-wrap">
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-3">
           <h2 class="ops-title">Active Model</h2>
@@ -361,7 +361,7 @@
   {/if}
 
   <section class="ops-panel">
-    <div class="ops-card-header">
+    <div class="ops-card-header flex-wrap">
       <div>
         <h2 class="ops-title">Model Inventory</h2>
         <p class="ops-subtitle">
@@ -375,7 +375,7 @@
           <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
           Refresh Remote Catalog
         </button>
-        <label class="relative block w-full max-w-xs">
+        <label class="relative block w-full sm:max-w-xs">
           <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input class="ops-input ops-input-icon-left" placeholder="Filter models..." bind:value={filter} />
         </label>
@@ -388,7 +388,7 @@
       <div class="p-8 text-sm text-muted-foreground">No matching models found.</div>
     {:else}
       <div class="overflow-x-auto">
-        <table class="ops-table">
+        <table class="ops-table ops-table-stack">
           <thead>
             <tr>
               <th>Model Name</th>
@@ -414,7 +414,7 @@
                   {/if}
                 </td>
                 <td>
-                  <div class="flex justify-end gap-2">
+                  <div class="flex flex-wrap gap-2 md:flex-nowrap md:justify-end">
                     {#if !model.downloaded}
                       <button
                         class="ops-button ops-button-primary"
