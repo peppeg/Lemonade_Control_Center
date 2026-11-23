@@ -7,6 +7,7 @@ from app.models.schemas import (
     LoadModelRequest,
     LoadModelResponse,
     LogEntry,
+    RunningModelInfo,
     SmokeTestRequest,
 )
 from app.models.setup import RuntimeConfig
@@ -18,6 +19,10 @@ from app.services.run_evidence import (
     render_evidence_json,
     render_evidence_markdown,
 )
+
+EMBED = RunningModelInfo(name="embed", type="embedding", pid=111)
+CHAT = RunningModelInfo(name="chat", type="llm", pid=222)
+OTHER = RunningModelInfo(name="other", type="llm", pid=333)
 
 
 def test_run_evidence_storage_filters_and_keeps_newest(tmp_path):
@@ -147,7 +152,7 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
     )
     monkeypatch.setattr(
         "app.services.run_evidence._safe_process_snapshot",
-        lambda: {"pid": 1234, "rss_gb": 38.2, "backend": "vulkan", "ctx_size": 65536},
+        lambda model: {"pid": 1234, "rss_gb": 38.2, "backend": "vulkan", "ctx_size": 65536},
     )
 
     response = await runner.run(
@@ -159,9 +164,8 @@ async def test_smoke_test_runner_stores_process_and_memory_evidence(tmp_path, mo
             stop_sequences=["DONE"],
             workflow_profile_id="coding",
             workflow_profile_name="Coding Fast",
-        )
-        ,
-        observed_model_name="qwen-coder-canonical",
+        ),
+        observe=_observe(RunningModelInfo(name="qwen-coder-canonical")),
     )
 
     assert response.success is True
@@ -214,7 +218,7 @@ async def test_smoke_test_runner_stores_structured_completion_failure(tmp_path, 
         log_collector=FakeLogCollector(source="unavailable"),
     )
     monkeypatch.setattr("app.services.run_evidence._safe_hardware_snapshot", lambda: None)
-    monkeypatch.setattr("app.services.run_evidence._safe_process_snapshot", lambda: None)
+    monkeypatch.setattr("app.services.run_evidence._safe_process_snapshot", lambda model: None)
 
     response = await runner.run(SmokeTestRequest(model_name="qwen-coder"))
 
@@ -246,7 +250,7 @@ def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_pat
     )
     monkeypatch.setattr(
         "app.services.run_evidence._safe_process_snapshot",
-        lambda: {"pid": 4321, "rss_gb": 60.0, "backend": "vulkan", "ctx_size": 32768},
+        lambda model: {"pid": 4321, "rss_gb": 60.0, "backend": "vulkan", "ctx_size": 32768},
     )
 
     started = recorder.start()
@@ -263,7 +267,7 @@ def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_pat
         ),
         LoadModelResponse(success=True, message="loaded"),
         started,
-        observed_model_name="qwen-coder-canonical",
+        observed=RunningModelInfo(name="qwen-coder-canonical"),
     )
 
     assert evidence.kind == "load_attempt"
@@ -293,6 +297,94 @@ def test_load_evidence_recorder_stores_requested_and_observed_load_state(tmp_pat
     assert "Requested backend rocm, observed vulkan." in evidence.warnings
     assert "Requested ctx 65536, observed 32768." in evidence.warnings
     assert storage.get_all()[0].id == evidence.id
+
+
+def _observe(*answers):
+    """Stand-in for the model lookup: one answer per call, then the last one."""
+    remaining = list(answers)
+
+    async def observe():
+        return remaining.pop(0) if len(remaining) > 1 else remaining[0]
+
+    return observe
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("before", "after", "expected"),
+    [
+        pytest.param(EMBED, CHAT, CHAT, id="loaded-by-the-request"),
+        pytest.param(CHAT, None, CHAT, id="unloaded-during-the-run"),
+        pytest.param(CHAT, EMBED, CHAT, id="replaced-during-the-run"),
+        pytest.param(EMBED, EMBED, EMBED, id="mismatch-is-kept"),
+        pytest.param(EMBED, OTHER, OTHER, id="latest-mismatch"),
+        pytest.param(None, None, None, id="unknown"),
+    ],
+)
+async def test_smoke_test_records_the_model_and_process_that_answered(tmp_path, monkeypatch, before, after, expected):
+    monkeypatch.setattr("app.services.run_evidence._safe_hardware_snapshot", lambda: None)
+    monkeypatch.setattr(
+        "app.services.run_evidence._safe_process_snapshot",
+        lambda model: {"pid": model.pid, "rss_gb": 1.0, "backend": None, "ctx_size": None} if model else None,
+    )
+    runner = SmokeTestRunner(
+        completion_runner=FakeCompletionRunner(),
+        storage=RunEvidenceStorage(path=tmp_path / "run_evidence.json"),
+        log_collector=FakeLogCollector(),
+        telemetry_manager=FakeTelemetryManager(),
+    )
+
+    evidence = (await runner.run(SmokeTestRequest(model_name="chat"), observe=_observe(before, after))).evidence
+
+    assert evidence.observed_model_name == (expected.name if expected else None)
+    assert evidence.observed_pid == (expected.pid if expected else None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("before", "after", "expected_pid"),
+    [
+        pytest.param(CHAT, None, 222, id="gone"),
+        pytest.param(CHAT, EMBED, 222, id="replaced"),
+        pytest.param(CHAT, CHAT.model_copy(update={"size": 1}), 222, id="still-listed"),
+        pytest.param(None, None, 222, id="unknown-model"),
+        pytest.param(EMBED, CHAT, None, id="another-model"),
+    ],
+)
+async def test_smoke_test_uses_the_earlier_process_only_for_the_same_model(
+    tmp_path, monkeypatch, before, after, expected_pid
+):
+    snapshots = iter([{"pid": 222, "rss_gb": 1.0, "backend": None, "ctx_size": None}, None])
+    monkeypatch.setattr("app.services.run_evidence._safe_hardware_snapshot", lambda: None)
+    monkeypatch.setattr("app.services.run_evidence._safe_process_snapshot", lambda model: next(snapshots))
+    runner = SmokeTestRunner(
+        completion_runner=FakeCompletionRunner(),
+        storage=RunEvidenceStorage(path=tmp_path / "run_evidence.json"),
+        log_collector=FakeLogCollector(),
+        telemetry_manager=FakeTelemetryManager(),
+    )
+
+    evidence = (await runner.run(SmokeTestRequest(model_name="chat"), observe=_observe(before, after))).evidence
+
+    assert evidence.observed_pid == expected_pid
+
+
+def test_load_evidence_never_uses_the_process_from_before_the_load(tmp_path, monkeypatch):
+    asked = []
+    monkeypatch.setattr("app.services.run_evidence._safe_hardware_snapshot", lambda: None)
+    monkeypatch.setattr("app.services.run_evidence._safe_process_snapshot", lambda model: asked.append(model))
+    recorder = LoadEvidenceRecorder(
+        storage=RunEvidenceStorage(path=tmp_path / "run_evidence.json"),
+        log_collector=FakeLogCollector(),
+        telemetry_manager=FakeTelemetryManager(),
+    )
+
+    evidence = recorder.record_response(
+        LoadModelRequest(model_name="chat"), LoadModelResponse(success=True, message="loaded"), recorder.start(), observed=CHAT)
+
+    assert asked == [CHAT]
+    assert evidence.observed_pid is None
+    assert "Model loaded but no llama-server process evidence was available." in evidence.warnings
 
 
 class FakeCompletionRunner:

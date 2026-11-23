@@ -14,8 +14,10 @@ from app.models.profiles import (
     ProfileUpdateRequest,
     SmartRecommendation,
 )
+from app.models.schemas import LlamaServerInfoResponse
 from app.providers.lemonade import LemonadeProvider
-from app.services.process import find_llama_server
+from app.services.loaded_models import find_loaded, llama_server_for
+from app.services.process import find_llama_servers
 from app.services.profile_service import ProfileService
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
@@ -47,26 +49,20 @@ async def get_recommendation(
     provider: LemonadeProvider = Depends(get_provider),
 ):
     memory = psutil.virtual_memory()
-    model_loaded = False
     loaded_model_rss_gb: float | None = None
 
     try:
-        running = await provider.get_running_models()
-        model_loaded = any(
-            model.name == model_name or model.model == model_name
-            for model in running.models
-        )
+        loaded = find_loaded((await provider.get_running_models()).models, model_name)
     except Exception:
-        model_loaded = False
+        loaded = None
 
-    process = find_llama_server()
-    if process.found and process.params and process.params.model_path:
-        loaded_path = Path(process.params.model_path).name
-        if loaded_path == model_name or model_name in loaded_path or loaded_path in model_name:
-            model_loaded = True
-
-    if model_loaded and process.found and process.process:
-        loaded_model_rss_gb = process.process.rss_gb
+    if loaded:
+        server = llama_server_for(loaded)
+    else:
+        server = next((item for item in find_llama_servers() if _runs_file(item, model_name)), None)
+    model_loaded = loaded is not None or server is not None
+    if server and server.process:
+        loaded_model_rss_gb = server.process.rss_gb
 
     return service.compute_recommendation(
         model_name=model_name,
@@ -76,6 +72,13 @@ async def get_recommendation(
         model_loaded=model_loaded,
         loaded_model_rss_gb=loaded_model_rss_gb,
     )
+
+
+def _runs_file(server: LlamaServerInfoResponse, model_name: str) -> bool:
+    if not server.params or not server.params.model_path:
+        return False
+    file_name = Path(server.params.model_path).name
+    return model_name in file_name or file_name in model_name
 
 
 @router.get("/{model_name}/{profile_id}", response_model=Profile)
