@@ -11,6 +11,7 @@ from app.services.metrics.store import (
     bucket_hardware_rows,
     bucket_start,
     bucket_task_rows,
+    measurable_rate,
     percentile,
     resolve_range,
 )
@@ -517,3 +518,71 @@ def test_stored_finish_confidence_matches_the_rest_of_the_api(store):
 
     assert row["finish_reason"] == "stop"
     assert row["finish_confidence"] == "inferred"
+
+
+# ── Unmeasurable generation rates ──────────────────────────
+
+
+def test_single_token_completion_has_no_measurable_rate():
+    """Lemonade reports 1000000.0 t/s when there is no generation interval."""
+    assert measurable_rate(1000000.0, output_tokens=1) == 0.0
+    assert measurable_rate(29.3, output_tokens=1) == 0.0
+
+
+def test_implausible_or_broken_rates_are_rejected():
+    assert measurable_rate(1000000.0, output_tokens=50) == 0.0
+    assert measurable_rate(float("nan"), output_tokens=50) == 0.0
+    assert measurable_rate(float("inf"), output_tokens=50) == 0.0
+    assert measurable_rate(-1.0, output_tokens=50) == 0.0
+    assert measurable_rate("nonsense", output_tokens=50) == 0.0
+
+
+def test_real_rates_pass_through_untouched():
+    assert measurable_rate(29.3, output_tokens=61) == 29.3
+    assert measurable_rate(15.45, output_tokens=284) == 15.45
+
+
+def test_sentinel_rate_is_never_stored(store):
+    store.insert_tasks([make_row(0, gen_tps=1000000.0, output_tokens=1)])
+
+    [row] = store.get_tasks()
+    assert row["gen_tps"] == 0.0
+    assert row["output_tokens"] == 1
+
+
+def test_sentinel_row_is_kept_as_a_run_but_not_as_a_speed(store):
+    """The run happened and its ttft is real; only the rate is meaningless."""
+    store.insert_tasks([
+        make_row(0, gen_tps=20.0),
+        make_row(60, gen_tps=30.0),
+        make_row(120, gen_tps=1000000.0, output_tokens=1),
+    ])
+
+    window = store.task_window(BASE - timedelta(hours=1), BASE + timedelta(days=1), 3600)
+    summary = window["summary"]
+    [bucket] = window["buckets"]
+
+    assert summary["count"] == 3, "the run must still be counted"
+    assert summary["gen_tps_mean"] == 25.0, "the sentinel must not drag the mean"
+    assert summary["gen_tps_p95"] == 30.0
+    assert bucket["count"] == 3
+    assert bucket["gen_tps_mean"] == 25.0
+    assert bucket["gen_tps_p95"] == 30.0
+
+
+def test_legacy_import_drops_the_sentinel_rate(tmp_path, store):
+    legacy = tmp_path / "task_history.json"
+    legacy.write_text(json.dumps({"tasks": [
+        {
+            "timestamp": BASE.isoformat(), "model": "current",
+            "input_tokens": 15893, "output_tokens": 1, "prompt_tps": 900.0,
+            "gen_tps": 1000000.0, "ttft_seconds": 17.6, "total_seconds": 17.6,
+            "finish_reason": "length", "finish_confidence": "inferred",
+        },
+    ]}), encoding="utf-8")
+
+    assert TaskHistory(store).migrate_legacy_json(legacy) == 1
+
+    [row] = store.get_tasks()
+    assert row["gen_tps"] == 0.0
+    assert row["ttft_seconds"] == 17.6

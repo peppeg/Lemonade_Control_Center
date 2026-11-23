@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from app.services.log_parser import extract_task_records
 from app.services.metrics import task_history
 from app.services.metrics.store import MetricsStore
@@ -55,3 +57,21 @@ def test_task_history_marks_model_unknown_for_legacy_logs(monkeypatch, tmp_path)
     history.refresh_from_logs()
 
     assert history.get_recent(refresh=False)[0]["model"] == "unknown"
+
+
+def test_task_history_drops_the_single_token_sentinel_rate(monkeypatch, tmp_path):
+    """Lemonade logs tps=1000000.00 for a one-token completion."""
+    line = (
+        "2026-11-08 08:48:05.029 [Info] (Telemetry) Inference completed: "
+        "model=Qwen3.5-9B-GGUF, tokens=15894 (in=15893, out=1), ttft=17.60s, tps=1000000.00"
+    )
+    history = _history(monkeypatch, tmp_path, [[line]])
+
+    history.refresh_from_logs()
+
+    [record] = history.get_recent(refresh=False)
+    assert record["output_tokens"] == 1
+    assert record["gen_tps"] == 0.0
+    assert history.store.task_window(
+        datetime(2026, 11, 1, tzinfo=UTC), datetime(2026, 11, 30, tzinfo=UTC), 3600
+    )["summary"]["gen_tps_mean"] == 0.0

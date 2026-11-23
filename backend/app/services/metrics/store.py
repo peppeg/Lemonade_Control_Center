@@ -36,6 +36,31 @@ RANGE_WINDOWS: dict[str, tuple[timedelta, int]] = {
 
 DEFAULT_RANGE = "24h"
 
+# Generation rates above this are not measurements: Lemonade emits a sentinel
+# (1000000.0) when a completion is one token long and there is no elapsed
+# generation time to divide by.
+MAX_PLAUSIBLE_TPS = 10_000.0
+
+
+def measurable_rate(rate: float, output_tokens: int) -> float:
+    """Return the rate, or 0.0 when it cannot have been measured.
+
+    The run itself is kept: its token counts and TTFT are real. Only the rate
+    is dropped, and every aggregate skips non-positive rates.
+    """
+    try:
+        value = float(rate)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(value) or value <= 0.0:
+        return 0.0
+    if output_tokens < 2:
+        # One token out means no generation interval to measure across.
+        return 0.0
+    if value > MAX_PLAUSIBLE_TPS:
+        return 0.0
+    return value
+
 _TASK_COLUMNS = (
     "timestamp",
     "model",
@@ -148,7 +173,7 @@ class MetricsStore:
                 row.input_tokens,
                 row.output_tokens,
                 row.prompt_tps,
-                row.gen_tps,
+                measurable_rate(row.gen_tps, row.output_tokens),
                 row.ttft_seconds,
                 row.total_seconds,
                 row.finish_reason,
@@ -500,7 +525,7 @@ def bucket_task_rows(rows: list[dict], bucket_seconds: int) -> list[dict]:
     buckets: list[dict] = []
     for start in sorted(grouped):
         members = grouped[start]
-        gen_tps = [float(item["gen_tps"]) for item in members]
+        gen_tps = _measured_rates(members)
         ttft = [float(item["ttft_seconds"]) for item in members]
         input_tokens = sum(int(item["input_tokens"]) for item in members)
         output_tokens = sum(int(item["output_tokens"]) for item in members)
@@ -522,7 +547,7 @@ def bucket_task_rows(rows: list[dict], bucket_seconds: int) -> list[dict]:
 
 def summarize_task_rows(rows: list[dict]) -> dict:
     """Aggregate an entire window into one summary row."""
-    gen_tps = [float(row["gen_tps"]) for row in rows]
+    gen_tps = _measured_rates(rows)
     ttft = [float(row["ttft_seconds"]) for row in rows]
     input_tokens = sum(int(row["input_tokens"]) for row in rows)
     output_tokens = sum(int(row["output_tokens"]) for row in rows)
@@ -569,6 +594,11 @@ def bucket_hardware_rows(rows: list[dict], bucket_seconds: int) -> list[dict]:
             }
         )
     return buckets
+
+
+def _measured_rates(rows: list[dict]) -> list[float]:
+    """Generation rates that were measured; zeroed sentinels are skipped."""
+    return [rate for row in rows if (rate := float(row["gen_tps"])) > 0.0]
 
 
 def _numbers(rows: list[dict], key: str) -> list[float]:
