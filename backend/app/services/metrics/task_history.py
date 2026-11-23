@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,8 @@ from app.services.log_parser import (
     parse_task_records,
 )
 from app.services.metrics.store import MetricsStore, TaskRow
+
+log = logging.getLogger(__name__)
 
 HISTORY_FILE = Path(__file__).parent.parent.parent / "data" / "task_history.json"
 MIGRATION_META_KEY = "task_history_json_imported"
@@ -66,16 +69,25 @@ class TaskHistory:
         Returns the number of newly stored records. Records already known are
         dropped by the store's (timestamp, model, in, out) identity, so calling
         this on every poll and on every sampler tick is cheap and idempotent.
+
+        Raises when the journal cannot be read or the store cannot be written;
+        the task sampler logs it. Read endpoints use _refresh_quietly().
         """
         if not capabilities.cmd_journalctl:
             return 0
-        try:
-            records = parse_task_records(n_lines=JOURNAL_SCAN_LINES)
-        except Exception:
-            # A journal that cannot be read must never break the caller: the
-            # sampler keeps ticking and the endpoints keep serving what exists.
-            return 0
+        records = parse_task_records(n_lines=JOURNAL_SCAN_LINES)
         return self.ingest(records)
+
+    def _refresh_quietly(self) -> None:
+        """Refresh before a read, serving what is stored if that fails.
+
+        The task sampler runs the same refresh every few seconds and logs its
+        failures, so a read does not report them a second time.
+        """
+        try:
+            self.refresh_from_logs()
+        except Exception as error:
+            log.debug("Task history refresh before a read failed: %s", error)
 
     def ingest(self, records: list[TaskTelemetryRecord]) -> int:
         """Store already-parsed telemetry records."""
@@ -92,7 +104,7 @@ class TaskHistory:
         refresh: bool = True,
     ) -> list[dict]:
         if refresh:
-            self.refresh_from_logs()
+            self._refresh_quietly()
         return self._store.get_tasks(since=since, until=until, limit=n)
 
     def series(self, start: datetime, end: datetime, bucket_seconds: int) -> list[dict]:
@@ -120,7 +132,7 @@ class TaskHistory:
         refresh: bool = True,
     ) -> str:
         if refresh:
-            self.refresh_from_logs()
+            self._refresh_quietly()
         output = io.StringIO()
         writer = csv.DictWriter(output, fieldnames=list(TaskRecord.__annotations__.keys()))
         writer.writeheader()

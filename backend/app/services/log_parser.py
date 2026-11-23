@@ -558,6 +558,10 @@ class TaskTelemetryRecord:
         return (self.timestamp, self.model, self.input_tokens, self.output_tokens)
 
 
+class JournalReadError(RuntimeError):
+    """The journal could not be read, as opposed to holding no records."""
+
+
 def parse_task_records(
     service: str = "lemond.service",
     n_lines: int = 500,
@@ -568,20 +572,35 @@ def parse_task_records(
     The journal is read as JSON so every line comes with the time journald
     received it. Legacy per-field records carry no timestamp of their own,
     and without that time they could only be dated by when they were read.
+
+    Raises JournalReadError when the journal cannot be read, so the sampler
+    reports it instead of recording nothing without a word. --system makes
+    journalctl fail when the user may not read the system journal; without
+    it, journalctl shows only the user's own journal and succeeds with no
+    entries for lemond.service.
     """
+    command = [
+        "journalctl", "--system", "-u", service, "-n", str(n_lines),
+        "-o", "json", "--output-fields=MESSAGE", "--no-pager",
+    ]
     try:
         result = subprocess.run(
-            ["journalctl", "-u", service, "-n", str(n_lines),
-             "-o", "json", "--output-fields=MESSAGE", "--no-pager"],
-            capture_output=True, text=True, timeout=timeout,
-            check=False,
+            command, capture_output=True, text=True, timeout=timeout, check=False,
         )
-        if result.returncode != 0 or not result.stdout.strip():
-            return []
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise JournalReadError(f"journalctl could not be run: {error}") from error
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip().splitlines()
+        raise JournalReadError(
+            f"journalctl exited with status {result.returncode}"
+            + (f": {detail[0]}" if detail else "")
+        )
+    if not result.stdout.strip():
         return []
 
     messages, journal_times = _journal_messages(result.stdout)
+    if not messages:
+        raise JournalReadError("journalctl output was not the JSON it was asked for")
     return extract_task_records(messages, journal_times)
 
 

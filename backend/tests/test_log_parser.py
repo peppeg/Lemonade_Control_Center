@@ -4,8 +4,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from app.models.schemas import LogEntryLevel
 from app.services.log_parser import (
+    JournalReadError,
     _parse_log_line,
     extract_task_records,
     get_logs_for_window,
@@ -464,13 +467,55 @@ def test_parse_task_records_reads_messages_journald_stored_as_bytes(monkeypatch)
     assert record.input_tokens == 91
 
 
-def test_parse_task_records_returns_empty_without_journal(monkeypatch):
+def test_parse_task_records_reports_a_missing_journalctl(monkeypatch):
     def fake_run(*args, **kwargs):
         raise FileNotFoundError("journalctl")
 
     monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
 
-    assert parse_task_records() == []
+    with pytest.raises(JournalReadError, match="could not be run"):
+        parse_task_records()
+
+
+def test_parse_task_records_reports_a_journal_it_may_not_read(monkeypatch):
+    """journalctl --system fails, rather than showing nothing, without access."""
+    commands = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="No journal files were opened due to insufficient permissions.\n",
+        )
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
+
+    with pytest.raises(JournalReadError, match="insufficient permissions"):
+        parse_task_records()
+    assert "--system" in commands[0]
+
+
+def test_parse_task_records_reports_a_journalctl_timeout(monkeypatch):
+    def fake_run(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
+
+    with pytest.raises(JournalReadError):
+        parse_task_records()
+
+
+def test_parse_task_records_reports_output_it_cannot_read(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.log_parser.subprocess.run",
+        lambda command, **kwargs: SimpleNamespace(
+            returncode=0, stdout="journalctl: unrecognized option\n", stderr=""
+        ),
+    )
+
+    with pytest.raises(JournalReadError):
+        parse_task_records()
 
 
 def test_parse_task_records_returns_empty_on_a_quiet_journal(monkeypatch):

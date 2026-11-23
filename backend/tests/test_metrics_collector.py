@@ -239,3 +239,32 @@ async def test_the_rollup_keeps_gpu_memory_when_the_host_reports_it(store):
     assert first["gpu_gtt_used_gb"] == 42.0
     assert second["gpu_vram_used_gb"] is None
     assert second["gpu_gtt_used_gb"] is None
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_journal_is_logged_by_the_task_sampler(store, monkeypatch, caplog):
+    """Reported in review: the sampler counted an unreadable journal as success."""
+    from types import SimpleNamespace
+
+    from app.services.metrics import task_history as task_history_module
+
+    monkeypatch.setattr(task_history_module.capabilities, "cmd_journalctl", True)
+    monkeypatch.setattr(
+        "app.services.log_parser.subprocess.run",
+        lambda command, **kwargs: SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="No journal files were opened due to insufficient permissions.\n",
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger=collector.log.name):
+        assert await collector.sample_tasks_once() == 0
+
+    assert _warnings(caplog) == [
+        (
+            "Task history sampling failed: journalctl exited with status 1: "
+            "No journal files were opened due to insufficient permissions."
+        ),
+    ]
+    assert collector.task_sampler_failures.failures == 1

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.log_parser import extract_task_records
+from app.services.log_parser import JournalReadError, extract_task_records
 from app.services.metrics.store import (
     CLEARED_AT_META_KEY,
     MetricsStore,
@@ -721,14 +721,21 @@ def test_refresh_from_logs_stores_every_journal_record(store, monkeypatch):
     assert history.refresh_from_logs() == 0
 
 
-def test_refresh_from_logs_swallows_a_broken_journal(store, monkeypatch):
+def test_refresh_from_logs_reports_a_broken_journal(store, monkeypatch):
+    """The sampler has to see the failure to log it; a read does not."""
     def explode(**kwargs):
-        raise RuntimeError("journal exploded")
+        raise JournalReadError("journalctl exited with status 1")
 
     monkeypatch.setattr("app.services.metrics.task_history.capabilities.cmd_journalctl", True)
     monkeypatch.setattr("app.services.metrics.task_history.parse_task_records", explode)
+    store.insert_tasks([make_row(0)])
+    history = TaskHistory(store)
 
-    assert TaskHistory(store).refresh_from_logs() == 0
+    with pytest.raises(JournalReadError):
+        history.refresh_from_logs()
+    # The read endpoints still serve what is stored.
+    assert len(history.get_recent()) == 1
+    assert history.export_csv().count("\n") == 2
 
 
 def test_export_csv_carries_a_header_even_when_empty(store):
