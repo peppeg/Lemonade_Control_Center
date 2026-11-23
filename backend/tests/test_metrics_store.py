@@ -304,7 +304,9 @@ def test_writes_keep_the_wal_file_instead_of_recreating_it(store):
     assert store.count_tasks() == 30
 
 
-def test_closing_the_store_folds_the_wal_back_and_a_later_write_reopens_it(store):
+def test_closing_the_store_folds_the_wal_back_and_is_final(store, caplog):
+    """From review: a write still running at shutdown reopened the write
+    connection after close(), and nothing closed it again."""
     store.insert_tasks([make_row(0)])
     wal = store._files()[1]
     assert wal.exists()
@@ -312,8 +314,30 @@ def test_closing_the_store_folds_the_wal_back_and_a_later_write_reopens_it(store
     store.close()
 
     assert not wal.exists()
-    store.insert_tasks([make_row(60)])
-    assert store.count_tasks() == 2
+    with caplog.at_level("INFO", logger="app.services.metrics.store"):
+        assert store.insert_tasks([make_row(60)]) == 0
+        store.upsert_hardware_minute(_hardware_minute(BASE))
+        store.set_meta("key", "value")
+        assert store.prune(task_retention_days=1, now=BASE) == {"tasks": 0, "hardware": 0}
+    assert store._writer is None
+    assert not wal.exists()
+    assert "Dropped a write" in caplog.text
+    # Reads still work.
+    assert store.count_tasks() == 1
+
+
+def test_a_late_write_through_a_replaced_store_does_not_reopen_it(tmp_path):
+    """From review: a job holding the store use_store() replaced reopened it."""
+    old, new = MetricsStore(tmp_path / "a.db"), MetricsStore(tmp_path / "b.db")
+    history = TaskHistory(old)
+    old.insert_tasks([make_row(0)])
+    held = history.store
+
+    history.use_store(new)
+    held.upsert_hardware_minute(_hardware_minute(BASE))
+
+    assert old._writer is None
+    assert old.count_hardware() == 0
 
 
 def test_writes_from_several_threads_share_the_connection(store):

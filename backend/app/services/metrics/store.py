@@ -135,6 +135,8 @@ class MetricsStore:
         self._path = Path(db_path) if db_path is not None else Path(settings.metrics_db_path)
         self._lock = threading.Lock()
         self._ready = False
+        # Set by close(), for good; see _write().
+        self._closed = False
         # The connection every write goes through; see _writer_connection().
         self._writer: sqlite3.Connection | None = None
         # (st_dev, st_ino) of the file it was opened on.
@@ -246,20 +248,25 @@ class MetricsStore:
                 self._writer_file = None
 
     def close(self) -> None:
-        """Close the write connection; the next write opens it again.
+        """Close the write connection, for good.
 
         Called on shutdown, so the last connection closes and SQLite folds the
-        WAL back into the database.
+        WAL back into the database, and by TaskHistory.use_store() for the
+        store it replaces. A write still running then (the task sampler can
+        wait up to 10 s for journalctl on a worker thread that cancelling its
+        task does not stop) is dropped rather than reopening the connection,
+        which nothing would close again. Reads still work.
         """
         with self._lock:
+            self._closed = True
             self._close_writer()
 
     def initialize(self) -> None:
         """Create the schema once. Safe to call repeatedly."""
-        if self._ready:
+        if self._ready or self._closed:
             return
         with self._lock:
-            if self._ready:
+            if self._ready or self._closed:
                 return
             self._create_file()
             connection = self._writer_connection()
@@ -277,10 +284,16 @@ class MetricsStore:
                 raise
             self._ready = True
 
-    def _write(self, statements):
-        """Run a callable in one transaction on the write connection."""
+    def _write(self, statements, dropped=None):
+        """Run a callable in one transaction on the write connection.
+
+        After close() nothing is written and `dropped` is returned.
+        """
         self.initialize()
         with self._lock:
+            if self._closed:
+                log.info("Dropped a write to %s after it was closed", self._path)
+                return dropped
             connection = self._writer_connection()
             try:
                 # One transaction for the reads and writes of the callable, so a
@@ -387,7 +400,7 @@ class MetricsStore:
                 )
             return connection.total_changes - before
 
-        return self._write(run)
+        return self._write(run, dropped=0)
 
     def get_tasks(
         self,
@@ -589,7 +602,7 @@ class MetricsStore:
                 "hardware": delete_before(connection, "hardware_samples", hardware_days),
             }
 
-        return self._write(run)
+        return self._write(run, dropped={"tasks": 0, "hardware": 0})
 
     def clear(self, now: datetime | None = None) -> dict[str, int]:
         """Wipe both tables, reporting the rows removed from each.
@@ -608,7 +621,7 @@ class MetricsStore:
                 _set_meta(connection, CLEARED_AT_META_KEY, moment.isoformat())
             return {"tasks": max(0, tasks), "hardware": max(0, hardware)}
 
-        return self._write(run)
+        return self._write(run, dropped={"tasks": 0, "hardware": 0})
 
     def get_meta(self, key: str) -> str | None:
         row = self._read(

@@ -54,7 +54,9 @@ async def lifespan(app: FastAPI):
     start_collector(interval_seconds=10)
     yield
     stop_collector()
-    # Last, so a write still running on a worker thread finishes first.
+    # stop_collector() cancels the tasks but not their worker threads. close()
+    # waits for a write in progress and is final: one a thread starts later
+    # is dropped instead of reopening the database.
     await asyncio.to_thread(metrics_store().close)
     print("🍋 Shutting down...")
 
