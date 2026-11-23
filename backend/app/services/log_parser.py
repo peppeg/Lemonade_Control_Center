@@ -563,11 +563,16 @@ def parse_task_records(
     n_lines: int = 500,
     timeout: float = 10,
 ) -> list[TaskTelemetryRecord]:
-    """Return every completed task in the journal window, oldest first."""
+    """Return every completed task in the journal window, oldest first.
+
+    The journal is read as JSON so every line comes with the time journald
+    received it. Legacy per-field records carry no timestamp of their own,
+    and without that time they could only be dated by when they were read.
+    """
     try:
         result = subprocess.run(
             ["journalctl", "-u", service, "-n", str(n_lines),
-             "-o", "cat", "--no-pager"],
+             "-o", "json", "--output-fields=MESSAGE", "--no-pager"],
             capture_output=True, text=True, timeout=timeout,
             check=False,
         )
@@ -576,10 +581,39 @@ def parse_task_records(
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return []
 
-    return extract_task_records(result.stdout.splitlines())
+    messages, journal_times = _journal_messages(result.stdout)
+    return extract_task_records(messages, journal_times)
 
 
-def extract_task_records(lines: list[str]) -> list[TaskTelemetryRecord]:
+def _journal_messages(output: str) -> tuple[list[str], list[str | None]]:
+    """Messages and their journald receive times from `journalctl -o json`."""
+    messages: list[str] = []
+    times: list[str | None] = []
+    for raw_line in output.splitlines():
+        try:
+            payload = json.loads(raw_line)
+        except ValueError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        message = payload.get("MESSAGE")
+        if isinstance(message, list):
+            # journald hands over messages that are not valid UTF-8 as bytes.
+            try:
+                message = bytes(message).decode("utf-8", errors="replace")
+            except (TypeError, ValueError):
+                continue
+        if not isinstance(message, str):
+            continue
+        messages.append(message)
+        times.append(_journal_timestamp(payload.get("__REALTIME_TIMESTAMP")))
+    return messages, times
+
+
+def extract_task_records(
+    lines: list[str],
+    journal_times: list[str | None] | None = None,
+) -> list[TaskTelemetryRecord]:
     """Pull every telemetry record out of raw journal lines, oldest first.
 
     Handles both spellings parse_last_task() accepts: the Lemonade 11.7
@@ -599,7 +633,9 @@ def extract_task_records(lines: list[str]) -> list[TaskTelemetryRecord]:
       takes the fields of another whose input-token line was lost;
     * the last record is kept only once all four fields are there, since
       the rest of it may still be on its way to the journal;
-    * a record is dated by its own lines only, never by an earlier line.
+    * a record is dated by its own lines only, never by an earlier line:
+      by Lemonade's own timestamp where the line has one, otherwise by the
+      time journald received the line (`journal_times`, one per line).
 
     The records are split as for parse_last_task(); see _telemetry_records().
     """
@@ -615,9 +651,11 @@ def extract_task_records(lines: list[str]) -> list[TaskTelemetryRecord]:
         pending: dict[str, object] = dict(found.fields)
         if "ttft_seconds" in pending:
             pending["ttft_seconds"] = round(pending["ttft_seconds"], 2)
-        pending["timestamp"] = next(
-            (stamp for index in found.lines if (stamp := _line_timestamp(lines[index]))), None
-        )
+        for index in found.lines:
+            received = journal_times[index] if journal_times and index < len(journal_times) else None
+            if stamp := _line_timestamp(lines[index]) or received:
+                pending["timestamp"] = stamp
+                break
         record = _build_task_record(pending)
         if record is not None:
             records.append(record)

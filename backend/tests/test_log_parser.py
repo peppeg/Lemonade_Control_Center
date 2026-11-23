@@ -389,10 +389,79 @@ def test_extract_task_records_drops_records_without_output_tokens():
     ]) == []
 
 
-def test_parse_task_records_reads_the_journal_window(monkeypatch):
-    _fake_journal(monkeypatch, _fixture_lines())
+def _fake_json_journal(monkeypatch, lines, start_us=1_787_400_000_000_000):
+    """Make parse_task_records see these lines, received one second apart."""
+    commands = []
 
-    assert len(parse_task_records()) == 9
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        entries = [
+            {"MESSAGE": line, "__REALTIME_TIMESTAMP": str(start_us + index * 1_000_000)}
+            for index, line in enumerate(lines)
+        ]
+        return SimpleNamespace(
+            returncode=0, stdout="\n".join(json.dumps(entry) for entry in entries), stderr=""
+        )
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
+    return commands
+
+
+def _received(start_us: int, index: int) -> str:
+    return datetime.fromtimestamp(start_us / 1_000_000 + index, tz=UTC).isoformat()
+
+
+def test_parse_task_records_reads_the_journal_window(monkeypatch):
+    commands = _fake_json_journal(monkeypatch, _fixture_lines())
+
+    records = parse_task_records()
+
+    assert len(records) == 9
+    assert "json" in commands[0]
+    # Lemonade's own timestamp wins over the time journald received the line,
+    # so records keep the time main and the JSON history recorded for them.
+    assert [record.timestamp for record in records] == [
+        record.timestamp for record in extract_task_records(_fixture_lines())
+    ]
+
+
+def test_parse_task_records_dates_legacy_records_by_their_journal_entry(monkeypatch):
+    start_us = 1_787_400_000_000_000
+    _fake_json_journal(monkeypatch, LEGACY_WINDOW, start_us)
+
+    records = parse_task_records()
+
+    assert all(record.dated for record in records)
+    # Each record is dated by its Input tokens line, the 1st, 5th and 9th.
+    assert [record.timestamp for record in records] == [
+        _received(start_us, index) for index in (0, 4, 8)
+    ]
+
+
+def test_legacy_record_dates_do_not_depend_on_the_window(monkeypatch):
+    start_us = 1_787_400_000_000_000
+    _fake_json_journal(monkeypatch, LEGACY_WINDOW, start_us)
+    whole = parse_task_records()
+
+    _fake_json_journal(monkeypatch, LEGACY_WINDOW[2:], start_us + 2_000_000)
+    moved = parse_task_records()
+
+    assert [record.timestamp for record in moved] == [record.timestamp for record in whole[1:]]
+
+
+def test_parse_task_records_reads_messages_journald_stored_as_bytes(monkeypatch):
+    line = _fixture_lines()[-1]
+    entry = {"MESSAGE": list(line.encode()), "__REALTIME_TIMESTAMP": "1787400000000000"}
+    monkeypatch.setattr(
+        "app.services.log_parser.subprocess.run",
+        lambda command, **kwargs: SimpleNamespace(
+            returncode=0, stdout=json.dumps(entry), stderr=""
+        ),
+    )
+
+    [record] = parse_task_records()
+
+    assert record.input_tokens == 91
 
 
 def test_parse_task_records_returns_empty_without_journal(monkeypatch):
@@ -405,6 +474,6 @@ def test_parse_task_records_returns_empty_without_journal(monkeypatch):
 
 
 def test_parse_task_records_returns_empty_on_a_quiet_journal(monkeypatch):
-    _fake_journal(monkeypatch, [])
+    _fake_json_journal(monkeypatch, [])
 
     assert parse_task_records() == []
