@@ -6,6 +6,8 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+## 0.3.2 - 2026-11-24
+
 ### Added
 
 - Dashboard shows every loaded model, and the Models page lets you choose which one the actions apply to. Smoke Test is offered for chat models only. (Reported by @dolaresko, #36)

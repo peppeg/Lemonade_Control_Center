@@ -1,6 +1,6 @@
 [project]
 name = "lemonade-control-center-backend"
-version = "0.3.1"
+version = "0.3.2"
 description = "Backend API for Lemonade Control Center"
 requires-python = ">=3.11"
 dependencies = [
