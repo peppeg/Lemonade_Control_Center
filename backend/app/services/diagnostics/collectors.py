@@ -59,7 +59,7 @@ async def collect_full_state() -> SystemState:
         raw = config.raw
         state.ctx_size = _int(raw.get("ctx_size") or raw.get("context_size"))
         state.global_timeout = _int(raw.get("global_timeout"))
-        state.llamacpp_backend = _str(raw.get("llamacpp_backend") or raw.get("backend"))
+        state.llamacpp_backend = _configured_backend(raw)
         state.max_tokens = _int(raw.get("max_tokens"))
         state.temperature = _float(raw.get("temperature"))
         state.lemonade_host = state.lemonade_host or _str(raw.get("host"))
@@ -75,7 +75,8 @@ async def collect_full_state() -> SystemState:
             state.llama_uptime_s = info.process.uptime_seconds or 0
             if info.params:
                 state.ctx_size = state.ctx_size or info.params.ctx_size
-                state.llamacpp_backend = state.llamacpp_backend or info.params.backend
+                # What runs now says more than the configured default, often "auto".
+                state.llamacpp_backend = info.params.backend or state.llamacpp_backend
                 state.llama_mmap = info.params.mmap
                 state.llama_ngl = info.params.ngl
     except Exception:
@@ -99,6 +100,13 @@ async def collect_full_state() -> SystemState:
         pass
 
     return state
+
+
+def _configured_backend(config: dict) -> str | None:
+    """Default llama.cpp backend: nested since Lemonade 11.x, flat before."""
+    section = config.get("llamacpp")
+    nested = section.get("backend") if isinstance(section, dict) else None
+    return _str(nested or config.get("llamacpp.backend") or config.get("llamacpp_backend") or config.get("backend"))
 
 
 def _int(value: object) -> int | None:

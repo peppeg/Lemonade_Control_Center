@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from '$lib/api/client';
   import { notify } from '$lib/stores/notifications';
+  import { configuredBackend } from '$lib/utils/runtimeConfig';
   import { loadWorkflowDefaults, resetWorkflowDefaults, saveWorkflowDefaults } from '$lib/utils/workflowDefaults';
   import { AlertCircle, ServerCog, SlidersHorizontal } from 'lucide-svelte';
 
@@ -45,14 +46,7 @@
       runtimeConfig = result.data.raw ?? {};
       contextSize = Number(runtimeConfig.ctx_size ?? runtimeConfig.context_size ?? contextSize);
       globalTimeoutSeconds = Number(runtimeConfig.global_timeout ?? globalTimeoutSeconds);
-      const llamacppConfig = runtimeConfig.llamacpp as Record<string, unknown> | undefined;
-      primaryBackend = String(
-        llamacppConfig?.backend
-          ?? runtimeConfig['llamacpp.backend']
-          ?? runtimeConfig.llamacpp_backend
-          ?? runtimeConfig.backend
-          ?? primaryBackend
-      );
+      primaryBackend = configuredBackend(runtimeConfig) ?? primaryBackend;
       runtimeReadable = true;
     } else {
       runtimeReadable = false;
