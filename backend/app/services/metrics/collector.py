@@ -9,11 +9,16 @@ Three loops share this lifecycle:
 * the pruner, which enforces the retention windows on startup and hourly.
 
 Every SQLite call is pushed onto a worker thread, so nothing here blocks the
-event loop.
+event loop. A failing job never stops its loop, but it is logged: a warning on
+the first failure, at most one more every FAILURE_LOG_INTERVAL_SECONDS while it
+keeps failing, and a recovery message once it succeeds again.
 """
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import psutil
@@ -29,6 +34,66 @@ def store() -> MetricsStore:
     """The live store, resolved late so a rebind is picked up everywhere."""
     return task_history.store
 
+
+log = logging.getLogger(__name__)
+
+FAILURE_LOG_INTERVAL_SECONDS = 600.0
+
+
+class FailureLog:
+    """Rate-limited warnings for a background job that keeps failing.
+
+    Without this, an unwritable database stops the history silently: the
+    loops have to swallow errors to keep running, so nothing else reports it.
+    """
+
+    def __init__(
+        self,
+        job: str,
+        interval_seconds: float = FAILURE_LOG_INTERVAL_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.job = job
+        self.interval_seconds = interval_seconds
+        self._clock = clock
+        self.failures = 0
+        self._last_logged: float | None = None
+
+    def failed(self, error: BaseException) -> None:
+        self.failures += 1
+        now = self._clock()
+        if self._last_logged is not None and now - self._last_logged < self.interval_seconds:
+            return
+        self._last_logged = now
+        if self.failures == 1:
+            log.warning("%s failed: %s", self.job, error, exc_info=error)
+        else:
+            log.warning(
+                "%s still failing (%d failures so far): %s", self.job, self.failures, error
+            )
+
+    def succeeded(self) -> None:
+        if self.failures:
+            log.warning("%s recovered after %d failures", self.job, self.failures)
+        self.reset()
+
+    def reset(self) -> None:
+        self.failures = 0
+        self._last_logged = None
+
+
+live_failures = FailureLog("Hardware sampling")
+rollup_failures = FailureLog("Hardware history write")
+task_sampler_failures = FailureLog("Task history sampling")
+prune_failures = FailureLog("Metrics history pruning")
+migration_failures = FailureLog("Import of task_history.json")
+FAILURE_LOGS = (
+    live_failures,
+    rollup_failures,
+    task_sampler_failures,
+    prune_failures,
+    migration_failures,
+)
 
 buffer = TimeSeriesBuffer(retention_minutes=30, interval_seconds=5)
 
@@ -158,37 +223,47 @@ async def _persist_minute(point: DataPoint) -> None:
         row = _minute.as_row()
         try:
             await asyncio.to_thread(store().upsert_hardware_minute, row)
-        except Exception:
+        except Exception as error:
             # Losing a rollup must never stop the live stream.
-            pass
+            rollup_failures.failed(error)
+        else:
+            rollup_failures.succeeded()
 
 
 async def sample_tasks_once() -> int:
     """Record every finished inference the journal still carries."""
     try:
-        return await asyncio.to_thread(task_history.refresh_from_logs)
-    except Exception:
+        stored = await asyncio.to_thread(task_history.refresh_from_logs)
+    except Exception as error:
+        task_sampler_failures.failed(error)
         return 0
+    task_sampler_failures.succeeded()
+    return stored
 
 
 async def prune_once() -> dict[str, int]:
     """Apply both retention windows."""
     try:
-        return await asyncio.to_thread(
+        removed = await asyncio.to_thread(
             store().prune,
             settings.task_retention_days,
             settings.hardware_retention_days,
         )
-    except Exception:
+    except Exception as error:
+        prune_failures.failed(error)
         return {"tasks": 0, "hardware": 0}
+    prune_failures.succeeded()
+    return removed
 
 
 async def _collector_loop(interval_seconds: int) -> None:
     while True:
         try:
             await collect_once()
-        except Exception:
-            pass
+        except Exception as error:
+            live_failures.failed(error)
+        else:
+            live_failures.succeeded()
         await asyncio.sleep(interval_seconds)
 
 
@@ -196,8 +271,8 @@ async def _task_sampler_loop(interval_seconds: int) -> None:
     while True:
         try:
             await sample_tasks_once()
-        except Exception:
-            pass
+        except Exception as error:
+            task_sampler_failures.failed(error)
         await asyncio.sleep(interval_seconds)
 
 
@@ -205,8 +280,8 @@ async def _pruner_loop(interval_seconds: int) -> None:
     while True:
         try:
             await prune_once()
-        except Exception:
-            pass
+        except Exception as error:
+            prune_failures.failed(error)
         await asyncio.sleep(interval_seconds)
 
 
@@ -218,8 +293,8 @@ def start_collector(interval_seconds: int = 5) -> None:
     async def bootstrap() -> None:
         try:
             await asyncio.to_thread(task_history.migrate_legacy_json)
-        except Exception:
-            pass
+        except Exception as error:
+            migration_failures.failed(error)
         # The pruner loop prunes on its own first iteration, so bootstrap only
         # has to get the first batch of tasks in without waiting 15 seconds.
         await sample_tasks_once()

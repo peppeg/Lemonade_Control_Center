@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -18,10 +19,14 @@ def store(tmp_path):
     task_history.use_store(replacement)
     collector._minute = None
     collector.buffer.clear()
+    for failure_log in collector.FAILURE_LOGS:
+        failure_log.reset()
     yield replacement
     task_history.use_store(original)
     collector._minute = None
     collector.buffer.clear()
+    for failure_log in collector.FAILURE_LOGS:
+        failure_log.reset()
 
 
 def point(seconds: float, ram_percent: float, cpu: float = 10.0) -> DataPoint:
@@ -131,3 +136,89 @@ async def test_prune_once_reports_nothing_removed_when_the_store_fails(store, mo
     monkeypatch.setattr(store, "prune", explode)
 
     assert await collector.prune_once() == {"tasks": 0, "hardware": 0}
+
+
+# ── Failure logging ────────────────────────────────────────
+
+
+def _warnings(caplog) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == collector.log.name and record.levelno == logging.WARNING
+    ]
+
+
+def test_failure_log_warns_once_then_at_most_once_per_interval(caplog):
+    now = {"t": 0.0}
+    failure_log = collector.FailureLog("Job", interval_seconds=600, clock=lambda: now["t"])
+
+    with caplog.at_level(logging.WARNING, logger=collector.log.name):
+        failure_log.failed(RuntimeError("readonly database"))
+        for seconds in (15, 30, 599):
+            now["t"] = seconds
+            failure_log.failed(RuntimeError("readonly database"))
+        now["t"] = 600
+        failure_log.failed(RuntimeError("readonly database"))
+
+    assert _warnings(caplog) == [
+        "Job failed: readonly database",
+        "Job still failing (5 failures so far): readonly database",
+    ]
+
+
+def test_failure_log_reports_recovery_once(caplog):
+    failure_log = collector.FailureLog("Job", clock=lambda: 0.0)
+
+    with caplog.at_level(logging.WARNING, logger=collector.log.name):
+        failure_log.succeeded()  # Nothing failed: nothing to say.
+        failure_log.failed(RuntimeError("readonly database"))
+        failure_log.failed(RuntimeError("readonly database"))
+        failure_log.succeeded()
+        failure_log.succeeded()
+        failure_log.failed(RuntimeError("readonly database"))
+
+    assert _warnings(caplog) == [
+        "Job failed: readonly database",
+        "Job recovered after 2 failures",
+        "Job failed: readonly database",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_unwritable_store_is_logged_not_swallowed(store, monkeypatch, caplog):
+    def explode(_row):
+        raise RuntimeError("attempt to write a readonly database")
+
+    monkeypatch.setattr(store, "upsert_hardware_minute", explode)
+
+    with caplog.at_level(logging.WARNING, logger=collector.log.name):
+        for seconds in (0, 5, 10):
+            await collector._persist_minute(point(seconds, 30.0))
+        monkeypatch.undo()
+        task_history.use_store(store)
+        await collector._persist_minute(point(15, 30.0))
+
+    assert _warnings(caplog) == [
+        "Hardware history write failed: attempt to write a readonly database",
+        "Hardware history write recovered after 3 failures",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_task_sampler_and_pruner_failures_are_logged(store, monkeypatch, caplog):
+    def explode(*args, **kwargs):
+        raise RuntimeError("disk I/O error")
+
+    monkeypatch.setattr(task_history, "refresh_from_logs", explode)
+    monkeypatch.setattr(store, "prune", explode)
+
+    with caplog.at_level(logging.WARNING, logger=collector.log.name):
+        await collector.sample_tasks_once()
+        await collector.sample_tasks_once()
+        await collector.prune_once()
+
+    assert _warnings(caplog) == [
+        "Task history sampling failed: disk I/O error",
+        "Metrics history pruning failed: disk I/O error",
+    ]
