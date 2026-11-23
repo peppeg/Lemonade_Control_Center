@@ -1,9 +1,9 @@
 import json
-from typing import ClassVar
 
 import pytest
 from fastapi import HTTPException
 
+from app.models.schemas import RunningModelInfo, RunningModelsResponse
 from app.models.setup import RuntimeConfig
 from app.routers import bench as bench_router
 from app.services.bench.models import (
@@ -165,13 +165,7 @@ async def test_bench_annotation_and_comparison_endpoints(tmp_path, monkeypatch):
 async def test_bench_run_rejects_requested_observed_model_mismatch(monkeypatch):
     class Provider:
         async def get_running_models(self):
-            class Model:
-                name = "observed-model"
-
-            class Running:
-                models: ClassVar[list] = [Model()]
-
-            return Running()
+            return RunningModelsResponse(models=[RunningModelInfo(name="observed-model")])
 
     with pytest.raises(HTTPException) as exc_info:
         await bench_router.run_bench(
