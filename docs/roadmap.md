@@ -10,7 +10,7 @@ Make Lemonade easier to operate, then make the runtime behavior easier to prove.
 
 ## Current Execution Plan
 
-Last reviewed: 2026-11-23
+Last reviewed: 2026-11-24
 
 This section is the canonical handoff for ongoing implementation. The P0/P1/P2 sections below explain product direction and scope; this section defines the order in which the remaining work should be completed.
 
@@ -29,7 +29,7 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - [LCC 0.3.0](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.0) was released on 2026-07-13. Steps 0–6 below describe the delivered 0.3.0 foundation.
 - Post-0.3.0 maintenance on `main` (pull requests #20–#34) added Lemonade 11.x compatibility fixes (11.7 telemetry parsing, nested config keys, `recipe_options` from the models API), AMD GTT/VRAM telemetry, the `lemonade_exposed` diagnostic, Authorization forwarding to Lemonade, and reasoning-model Smoke Tests. See the [Changelog](../CHANGELOG.md).
 - [LCC 0.3.1](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.1) was released on 2026-11-23, after a test pass on Lemonade 2026.45.3.
-- [LCC 0.3.2](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.2) fixes the problems found by that pass and [#35](https://github.com/peppeg/Lemonade_Control_Center/issues/35), [#36](https://github.com/peppeg/Lemonade_Control_Center/issues/36), and [#37](https://github.com/peppeg/Lemonade_Control_Center/issues/37), in pull requests #50 to #56. What was tested is in [Tested Environment](./tested-environment.md#lcc-032-on-lemonade-2026453), what is left under [Open Defects](#open-defects).
+- [LCC 0.3.2](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.2) fixes the problems found by that pass and [#35](https://github.com/peppeg/Lemonade_Control_Center/issues/35), [#36](https://github.com/peppeg/Lemonade_Control_Center/issues/36), and [#37](https://github.com/peppeg/Lemonade_Control_Center/issues/37), in pull requests #50 to #56 and #58. What was tested is in [Tested Environment](./tested-environment.md#lcc-032-on-lemonade-2026453), what is left under [Open Defects](#open-defects).
 - A code audit on 2026-11-09 found access-control and hardening gaps, re-verified against the code on 2026-11-12. Step 7 (Security And Maintenance Hardening) is in progress; 7.1 to 7.4 are merged and released in 0.3.1, and 7.5 to 7.7 remain. Steps 8–10 follow in order: long-run performance history (adopted from a contributor fork), Bench Lab v2, then multi-host and agent readiness. Step 7 must land first, because every later step adds endpoints, stored state, or remote surface that those gaps affect.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
@@ -509,7 +509,7 @@ These tasks should be handled when relevant but should not interrupt the executi
 
 ### Open Defects
 
-Known on 2026-11-23, after 0.3.2. The earlier ones were fixed in #50 to #56.
+Known on 2026-11-24, after 0.3.2. The earlier ones were fixed in #50 to #56 and #58.
 
 1. **Idle Heavy never appears.** The diagnostic `idle_heavy` is skipped whenever Lemonade's log can be read, because `collectors.py` takes `available` as "there was a recent task". Use `found`, added in [#55](https://github.com/peppeg/Lemonade_Control_Center/pull/55). It then shows up on hosts that have never seen it, so review its wording first.
 2. **Other pages on a phone.** On Models, the banner about the workflow profile breaks into narrow columns. The tables of Backends, Diagnostics, Bench Lab, and Run Evidence have not been checked; `ops-table-stack`, added in [#56](https://github.com/peppeg/Lemonade_Control_Center/pull/56), can be reused.

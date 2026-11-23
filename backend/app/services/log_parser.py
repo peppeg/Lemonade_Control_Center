@@ -26,32 +26,36 @@ from app.models.schemas import (
 
 # ── Regex patterns for llama-server log parsing ────────────
 
+# Only what int() and float() can read. Anything else is a missing value.
+COUNT = r"(\d{1,15})(?!\d)"
+NUMBER = r"(\d{1,15}(?:\.\d{1,15})?)(?!\.?\d)"
+
 RE_PROMPT_EVAL = re.compile(
-    r"prompt eval time\s*=\s*[\d.]+\s*ms\s*/\s*(\d+)\s*tokens?\s*"
-    r"\([^)]*,\s*([\d.]+)\s*tokens?(?:/s|\s+per\s+second)\)"
+    rf"prompt eval time\s*=\s*[\d.]+\s*ms\s*/\s*{COUNT}\s*tokens?\s*"
+    rf"\([^)]*,\s*{NUMBER}\s*tokens?(?:/s|\s+per\s+second)\)"
 )
 
 RE_GENERATION = re.compile(
-    r"(?:generation|eval) (?:eval )?time\s*=\s*([\d.]+)\s*ms\s*/\s*(\d+)\s*tokens?\s*"
-    r"\([^)]*,\s*([\d.]+)\s*tokens?(?:/s|\s+per\s+second)\)"
+    rf"(?:generation|eval) (?:eval )?time\s*=\s*{NUMBER}\s*ms\s*/\s*{COUNT}\s*tokens?\s*"
+    rf"\([^)]*,\s*{NUMBER}\s*tokens?(?:/s|\s+per\s+second)\)"
 )
 
 RE_TOTAL_TIME = re.compile(
-    r"total time\s*=\s*([\d.]+)\s*ms\s*/\s*(\d+)\s*tokens?"
+    rf"total time\s*=\s*{NUMBER}\s*ms\s*/\s*{COUNT}\s*tokens?"
 )
 
 RE_SLOT_RELEASED = re.compile(r"slot\s+(?:released|freed)", re.IGNORECASE)
 RE_SLOT_PROCESSING = re.compile(r"slot\s+(?:is\s+)?processing", re.IGNORECASE)
-RE_SLOT_TRUNCATED = re.compile(r"truncated\s*=\s*(\d+)", re.IGNORECASE)
+RE_SLOT_TRUNCATED = re.compile(rf"truncated\s*=\s*{COUNT}", re.IGNORECASE)
 
 RE_TELEMETRY_INPUT = re.compile(
-    r"(?:\bInput tokens:\s*|\bin=)(\d+)", re.IGNORECASE)
+    rf"(?:\bInput tokens:\s*|\bin=){COUNT}", re.IGNORECASE)
 RE_TELEMETRY_OUTPUT = re.compile(
-    r"(?:\bOutput tokens:\s*|\bout=)(\d+)", re.IGNORECASE)
+    rf"(?:\bOutput tokens:\s*|\bout=){COUNT}", re.IGNORECASE)
 RE_TELEMETRY_TTFT = re.compile(
-    r"(?:\bTTFT\s*\(s\):\s*|\bttft=)([\d.]+)", re.IGNORECASE)
+    rf"(?:\bTTFT\s*\(s\):\s*|\bttft=){NUMBER}", re.IGNORECASE)
 RE_TELEMETRY_TPS = re.compile(
-    r"(?:\bTPS:\s*|\btps=)([\d.]+)", re.IGNORECASE)
+    rf"(?:\bTPS:\s*|\btps=){NUMBER}", re.IGNORECASE)
 RE_TELEMETRY_MODEL = re.compile(
     r"Inference completed:.*?\bmodel=([^,\s]+)", re.IGNORECASE)
 
