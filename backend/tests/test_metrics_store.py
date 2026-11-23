@@ -85,6 +85,43 @@ def test_store_creates_its_database_in_wal_mode(store):
     assert "idx_hardware_samples_ts" in indexes
 
 
+def test_a_write_holds_the_write_lock_from_its_first_statement(store):
+    """BEGIN IMMEDIATE: a check such as the clear cut-off holds for its inserts.
+
+    A deferred transaction would take the write lock only at its first write,
+    so another writer could commit between the check and the insert.
+    """
+    store.initialize()
+    other = sqlite3.connect(store.path, timeout=0, isolation_level=None)
+    outcome: list[str] = []
+
+    def check_only(connection):
+        connection.execute("SELECT COUNT(*) FROM metrics_meta").fetchone()
+        try:
+            other.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as error:
+            outcome.append(str(error))
+        else:
+            other.execute("ROLLBACK")
+            outcome.append("another writer got in")
+
+    try:
+        store._write(check_only)
+    finally:
+        other.close()
+
+    assert outcome == ["database is locked"]
+
+
+def test_every_connection_uses_synchronous_normal(store):
+    """The pragma is per connection; set only once, it applied to none of them."""
+    store.initialize()
+
+    assert store._read(
+        lambda connection: connection.execute("PRAGMA synchronous").fetchone()[0]
+    ) == 1  # NORMAL
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
 def test_database_files_are_owner_only(tmp_path):
     previous = os.umask(0o022)
@@ -102,6 +139,28 @@ def test_database_files_are_owner_only(tmp_path):
 
     assert modes == {path.name: 0o600 for path in paths}
     assert stat.S_IMODE(store.path.parent.stat().st_mode) == 0o700
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_a_new_database_is_created_owner_only_without_any_chmod(tmp_path, monkeypatch):
+    """The mode comes from creating the file, not from tightening it afterwards."""
+    chmods: list[object] = []
+    monkeypatch.setattr(os, "chmod", lambda target, *args, **kwargs: chmods.append(target))
+    previous = os.umask(0o002)
+    try:
+        store = MetricsStore(tmp_path / "lcc_metrics.db")
+        store.insert_tasks([make_row(0)])
+        # Hold a connection open so the WAL and shared-memory files exist.
+        connection = sqlite3.connect(store.path)
+        connection.execute("SELECT COUNT(*) FROM task_records").fetchone()
+        paths = [store.path, *(store.path.with_name(store.path.name + s) for s in ("-wal", "-shm"))]
+        modes = {path.name: stat.S_IMODE(path.stat().st_mode) for path in paths}
+        connection.close()
+    finally:
+        os.umask(previous)
+
+    assert chmods == []
+    assert modes == {path.name: 0o600 for path in paths}
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")

@@ -69,6 +69,27 @@ async def test_a_new_minute_starts_a_new_row(store):
 
 
 @pytest.mark.asyncio
+async def test_a_restart_mid_minute_keeps_the_samples_already_stored(store):
+    """A restart used to replace the minute's row with the samples after it."""
+    for seconds in (0, 5, 10, 15, 20):
+        sample = point(seconds, 90.0, cpu=10.0)
+        sample.gpu_gtt_used_gb = 40.0
+        await collector._persist_minute(sample)
+    collector._minute = None  # What a restart leaves behind.
+
+    await collector._persist_minute(point(30, 30.0, cpu=40.0))
+
+    [bucket] = store.hardware_series(MINUTE, MINUTE + timedelta(minutes=1), 60)
+    assert bucket["count"] == 6
+    assert bucket["ram_percent"] == 80.0          # (5 x 90 + 30) / 6
+    assert bucket["ram_percent_min"] == 30.0
+    assert bucket["ram_percent_max"] == 90.0
+    assert bucket["cpu_percent"] == 15.0          # (5 x 10 + 40) / 6
+    assert bucket["gpu_gtt_used_gb"] == 40.0      # Kept, though the new sample has none.
+    assert bucket["temps"] == {"k10temp/Tctl": 65.0}
+
+
+@pytest.mark.asyncio
 async def test_the_rollup_keeps_the_temperature_dictionary(store):
     await collector._persist_minute(point(0, 30.0, cpu=10.0))
     await collector._persist_minute(point(5, 30.0, cpu=20.0))

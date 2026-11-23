@@ -16,6 +16,7 @@ keeps failing, and a recovery message once it succeeds again.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -106,41 +107,67 @@ _subscribers: list[asyncio.Queue] = []
 class _MinuteAggregate:
     """Running aggregate for the minute currently being sampled.
 
-    Requirement R4 keeps the 5s buffer for the live view and persists one
-    downsampled row per minute. The row is upserted on every sample rather
-    than written when the minute closes, so a restart mid-minute keeps what
-    was already observed.
+    The 5s buffer stays as it is for the live view; one downsampled row per
+    minute is persisted. The row is upserted on every sample rather
+    than written when the minute closes, and a new aggregate starts from the
+    row already stored for its minute (see seed()), so a restart mid-minute
+    keeps what was already observed.
     """
+
+    _MEANS = ("ram_used_gb", "ram_total_gb", "ram_percent", "cpu_percent", "swap_used_gb")
+    _OPTIONAL = ("gpu_load_percent", "gpu_temp_c", "gpu_vram_used_gb", "gpu_gtt_used_gb")
 
     def __init__(self, minute_start: datetime) -> None:
         self.minute_start = minute_start
         self.count = 0
         self._sums: dict[str, float] = {}
-        self._optional: dict[str, list[float]] = {
-            "gpu_load_percent": [],
-            "gpu_temp_c": [],
-            "gpu_vram_used_gb": [],
-            "gpu_gtt_used_gb": [],
-        }
+        # Optional metrics and sensors: [sum, number of samples that had one].
+        self._optional: dict[str, list[float]] = {key: [0.0, 0] for key in self._OPTIONAL}
         self.ram_percent_min: float | None = None
         self.ram_percent_max: float | None = None
         self.temperatures: dict[str, list[float]] = {}
 
+    def seed(self, row: dict) -> None:
+        """Start from the stored row for this minute, written before a restart.
+
+        The stored means are weighted by the stored sample count. An optional
+        metric is taken to have been present in all of them.
+        """
+        count = int(row.get("sample_count") or 0)
+        if count <= 0:
+            return
+        self.count = count
+        for key in self._MEANS:
+            if row.get(key) is not None:
+                self._sums[key] = float(row[key]) * count
+        for key in self._OPTIONAL:
+            if row.get(key) is not None:
+                self._optional[key] = [float(row[key]) * count, count]
+        self.ram_percent_min = row.get("ram_percent_min")
+        self.ram_percent_max = row.get("ram_percent_max")
+        temperatures = row.get("temperatures") or {}
+        if isinstance(temperatures, str):
+            try:
+                temperatures = json.loads(temperatures)
+            except ValueError:
+                temperatures = {}
+        if isinstance(temperatures, dict):
+            for label, value in temperatures.items():
+                try:
+                    self.temperatures[label] = [float(value) * count, count]
+                except (TypeError, ValueError):
+                    continue
+
     def add(self, point: DataPoint) -> None:
         self.count += 1
-        for key, value in (
-            ("ram_used_gb", point.ram_used_gb),
-            ("ram_total_gb", point.ram_total_gb),
-            ("ram_percent", point.ram_percent),
-            ("cpu_percent", point.cpu_percent),
-            ("swap_used_gb", point.swap_used_gb),
-        ):
-            self._sums[key] = self._sums.get(key, 0.0) + value
+        for key in self._MEANS:
+            self._sums[key] = self._sums.get(key, 0.0) + getattr(point, key)
 
-        for key, values in self._optional.items():
+        for key, total in self._optional.items():
             value = getattr(point, key)
             if value is not None:
-                values.append(value)
+                total[0] += value
+                total[1] += 1
 
         self.ram_percent_min = (
             point.ram_percent
@@ -154,15 +181,17 @@ class _MinuteAggregate:
         )
 
         for label, value in point.temperatures.items():
-            self.temperatures.setdefault(label, []).append(value)
+            total = self.temperatures.setdefault(label, [0.0, 0])
+            total[0] += value
+            total[1] += 1
 
     def as_row(self) -> dict:
         def mean(key: str) -> float:
             return round(self._sums.get(key, 0.0) / self.count, 3) if self.count else 0.0
 
         def optional_mean(key: str) -> float | None:
-            values = self._optional[key]
-            return round(sum(values) / len(values), 2) if values else None
+            total, samples = self._optional[key]
+            return round(total / samples, 2) if samples else None
 
         return {
             "timestamp": self.minute_start.isoformat(),
@@ -179,9 +208,9 @@ class _MinuteAggregate:
             "gpu_vram_used_gb": optional_mean("gpu_vram_used_gb"),
             "gpu_gtt_used_gb": optional_mean("gpu_gtt_used_gb"),
             "temperatures": {
-                label: round(sum(values) / len(values), 1)
-                for label, values in self.temperatures.items()
-                if values
+                label: round(total / samples, 1)
+                for label, (total, samples) in self.temperatures.items()
+                if samples
             },
         }
 
@@ -226,6 +255,14 @@ async def _persist_minute(point: DataPoint) -> None:
     async with _minute_lock:
         if _minute is None or _minute.minute_start != minute_start:
             _minute = _MinuteAggregate(minute_start)
+            try:
+                stored = await asyncio.to_thread(store().get_hardware_minute, minute_start)
+            except Exception as error:
+                # The upsert below reports a database that cannot be used.
+                log.debug("Could not read the stored minute %s: %s", minute_start, error)
+            else:
+                if stored:
+                    _minute.seed(stored)
         _minute.add(point)
         row = _minute.as_row()
         try:

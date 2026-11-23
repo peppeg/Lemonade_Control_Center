@@ -182,6 +182,10 @@ class MetricsStore:
             f"{self._path.absolute().as_uri()}?mode=rw", uri=True, timeout=5.0
         )
         connection.row_factory = sqlite3.Row
+        # Per connection, unlike journal_mode. In WAL mode NORMAL cannot corrupt
+        # the database; a power cut may lose the last commits, which for
+        # metrics sampled every few seconds is not worth an fsync each time.
+        connection.execute("PRAGMA synchronous=NORMAL")
         return connection
 
     def initialize(self) -> None:
@@ -196,7 +200,6 @@ class MetricsStore:
             try:
                 # WAL keeps the sampler's writes from blocking API reads.
                 connection.execute("PRAGMA journal_mode=WAL")
-                connection.execute("PRAGMA synchronous=NORMAL")
                 connection.executescript(_SCHEMA)
                 connection.execute(
                     "INSERT OR IGNORE INTO metrics_meta (key, value) VALUES (?, ?)",
@@ -552,6 +555,16 @@ class MetricsStore:
             )
 
         self._write(run)
+
+    def get_hardware_minute(self, minute_start: datetime) -> dict | None:
+        """The stored row for one minute, if there is one."""
+        row = self._read(
+            lambda connection: connection.execute(
+                "SELECT * FROM hardware_samples WHERE ts_epoch = ?",
+                (minute_start.timestamp(),),
+            ).fetchone()
+        )
+        return dict(row) if row else None
 
     def count_hardware(self) -> int:
         return self._read(
