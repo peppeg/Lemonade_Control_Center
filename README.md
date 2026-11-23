@@ -146,7 +146,7 @@ LCC monitors the Linux machine that actually runs the models:
 - processes with the highest RAM consumption
 - `lemond.service` and journal state when systemd is available
 
-On unified-memory systems such as AMD Strix Halo, system RAM is the primary capacity signal. LCC does not currently present a separate VRAM-usage figure.
+On unified-memory systems such as AMD Strix Halo, system RAM is the primary capacity signal. LCC also shows GTT and VRAM usage where amdgpu reports them.
 
 ### Diagnose problems
 
