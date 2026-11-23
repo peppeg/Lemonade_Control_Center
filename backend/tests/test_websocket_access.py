@@ -1,8 +1,7 @@
-import re
 from types import SimpleNamespace
 
 import pytest
-from fastapi.routing import APIWebSocketRoute
+from app_routes import websocket_paths
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -16,13 +15,7 @@ FOREIGN = "https://evil.example"
 HOST = "127.0.0.1:17600"
 SAME_ORIGIN = f"http://{HOST}"
 
-
-def _websocket_paths() -> list[str]:
-    paths = [route.path for route in app.routes if isinstance(route, APIWebSocketRoute)]
-    return [re.sub(r"\{[^}]+\}", "x", path) for path in paths]
-
-
-WEBSOCKET_PATHS = _websocket_paths()
+WEBSOCKET_PATHS = websocket_paths()
 
 
 @pytest.fixture(autouse=True)
