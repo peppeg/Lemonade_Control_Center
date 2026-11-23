@@ -147,21 +147,20 @@ export async function refreshDashboard(): Promise<void> {
   let lastTask: LastTaskInfo | null = null;
   if (lastTaskResult.status === 'fulfilled' && lastTaskResult.value.ok) {
     const t = lastTaskResult.value.data as Record<string, unknown>;
-    if (t.available) {
-      const fr = t.finish_reason as Record<string, unknown> | null;
-      lastTask = {
-        available: true,
-        inputTokens: (t.input_tokens as number) ?? null,
-        outputTokens: (t.output_tokens as number) ?? null,
-        promptEvalTps: (t.prompt_eval_tps as number) ?? null,
-        generationTps: (t.generation_tps as number) ?? null,
-        ttftSeconds: (t.ttft_seconds as number) ?? null,
-        totalDurationSeconds: (t.total_duration_seconds as number) ?? null,
-        finishReason: (fr?.reason as string) ?? null,
-        finishConfidence: (fr?.confidence as 'confirmed' | 'inferred' | 'unknown') ?? 'unknown',
-        finishEvidence: (fr?.evidence as string) ?? null,
-      };
-    }
+    const fr = t.finish_reason as Record<string, unknown> | null;
+    lastTask = {
+      available: Boolean(t.available && t.found),
+      logReadable: Boolean(t.available),
+      inputTokens: (t.input_tokens as number) ?? null,
+      outputTokens: (t.output_tokens as number) ?? null,
+      promptEvalTps: (t.prompt_eval_tps as number) ?? null,
+      generationTps: (t.generation_tps as number) ?? null,
+      ttftSeconds: (t.ttft_seconds as number) ?? null,
+      totalDurationSeconds: (t.total_duration_seconds as number) ?? null,
+      finishReason: (fr?.reason as string) ?? null,
+      finishConfidence: (fr?.confidence as 'confirmed' | 'inferred' | 'unknown') ?? 'unknown',
+      finishEvidence: (fr?.evidence as string) ?? null,
+    };
   }
 
   // ── Parse Hardware ──

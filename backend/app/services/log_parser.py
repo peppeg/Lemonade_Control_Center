@@ -57,6 +57,9 @@ RE_TELEMETRY_MODEL = re.compile(
 
 RE_SLOT_TASK = re.compile(r"\bid\s+(\d+)\s*\|\s*task\s+(\d+)")
 
+# Present whenever a task ended, even where its numbers cannot be parsed.
+RE_TASK_END = re.compile(r"\b(?:inference completed|eval time|total time)\b", re.IGNORECASE)
+
 RE_MODEL_LOADED = re.compile(r"model\s+loaded|all\s+slots\s+are\s+idle", re.IGNORECASE)
 
 RE_ERROR = re.compile(r"\b(?:error|exception|fail|fatal)\b", re.IGNORECASE)
@@ -214,7 +217,7 @@ class _TaskTimings:
 
 
 def _read_last_task(lines: list[str], stats: LastTaskStats) -> None:
-    """Fill `stats` from the newest task only.
+    """Fill `stats` from the newest task only, and tell whether there is one.
 
     Lemonade logs from several threads: lines can be missing, and a few can land
     after the telemetry of their own task. So the llama.cpp lines are grouped by
@@ -227,6 +230,7 @@ def _read_last_task(lines: list[str], stats: LastTaskStats) -> None:
     else:
         timings = next((task for task in reversed(tasks) if task.output_tokens is not None), None)
 
+    stats.found = bool(record) or timings is not None or any(RE_TASK_END.search(line) for line in lines)
     for field, value in record.items():
         setattr(stats, field, value)
     if timings is None:

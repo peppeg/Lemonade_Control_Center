@@ -109,10 +109,10 @@
     </section>
   {/if}
 
-  {#if !lastTask?.available}
+  {#if lastTask && !lastTask.logReadable}
     <section class="ops-banner ops-banner-muted">
       <Info class="mt-0.5 h-5 w-5 shrink-0" />
-      <p class="text-sm text-[#d9dbcf]">No recent task stats available.</p>
+      <p class="text-sm text-[#d9dbcf]">Last task unavailable: Lemonade's log is empty or not readable.</p>
     </section>
   {/if}
 
@@ -235,7 +235,7 @@
       {:else}
         <div class="mt-6 flex h-40 flex-col items-center justify-center border border-dashed border-[#454936] bg-[#101211] text-center">
           <Clock3 class="mb-4 h-10 w-10 text-[#5a5f45]" />
-          <p class="text-sm text-muted-foreground">Waiting for incoming requests...</p>
+          <p class="text-sm text-muted-foreground">{lastTask?.logReadable ? 'No recent requests' : isLoading ? 'Loading...' : 'Unavailable'}</p>
         </div>
       {/if}
     </article>

@@ -423,7 +423,9 @@ class FinishReason(BaseModel):
 
 class LastTaskStats(BaseModel):
     """Parsed statistics from the last completed task."""
+    # The log could be read. It may hold no task, for example after a restart.
     available: bool = False
+    found: bool = False
     model: str | None = None
     completed_at: str | None = None
     input_tokens: int | None = None

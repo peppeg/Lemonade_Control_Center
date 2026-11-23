@@ -20,6 +20,7 @@
 
   interface LastTaskStats {
     available?: boolean;
+    found?: boolean;
     input_tokens?: number | null;
     output_tokens?: number | null;
     prompt_eval_tps?: number | null;
@@ -92,13 +93,24 @@
     loading = false;
   }
 
-  function metricNumber(value: number | null | undefined): string {
-    if (typeof value !== 'number') return 'Unavailable';
+  // The log was read and holds no task: nothing is missing, there is just nothing to show.
+  $: noTask = Boolean(lastTask?.available && !lastTask.found);
+  $: missing = noTask ? '—' : 'Unavailable';
+  $: finishReason = lastTask?.finish_reason?.reason && lastTask.finish_reason.reason !== 'unknown' ? lastTask.finish_reason.reason : null;
+  $: finishEvidence = noTask
+    ? 'No requests in the recent log.'
+    : lastTask && !lastTask.available
+      ? "Lemonade's log is empty or not readable."
+      : lastTask?.finish_reason?.evidence || 'Unavailable';
+  $: lastTaskLabel = noTask ? 'No recent requests' : 'Last Task';
+
+  function metricNumber(value: number | null | undefined, missing: string): string {
+    if (typeof value !== 'number') return missing;
     return formatNumber(value);
   }
 
-  function durationMs(seconds: number | null | undefined): string {
-    if (typeof seconds !== 'number') return 'Unavailable';
+  function durationMs(seconds: number | null | undefined, missing: string): string {
+    if (typeof seconds !== 'number') return missing;
     if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;
     return formatDuration(seconds);
   }
@@ -186,23 +198,23 @@
           <span class="ops-label">Input Tokens</span>
           <Activity class="h-4 w-4 text-muted-foreground" />
         </div>
-        <p class="mt-5 ops-value text-3xl font-bold">{metricNumber(lastTask?.input_tokens)}</p>
-        <p class="mt-4 text-sm text-muted-foreground">Last Task</p>
+        <p class="mt-5 ops-value text-3xl font-bold">{metricNumber(lastTask?.input_tokens, missing)}</p>
+        <p class="mt-4 text-sm text-muted-foreground">{lastTaskLabel}</p>
       </article>
       <article class="ops-card p-5">
         <div class="flex justify-between">
           <span class="ops-label">Output Tokens</span>
           <Activity class="h-4 w-4 text-muted-foreground" />
         </div>
-        <p class="mt-5 ops-value text-3xl font-bold">{metricNumber(lastTask?.output_tokens)}</p>
-        <p class="mt-4 text-sm text-muted-foreground">Last Task</p>
+        <p class="mt-5 ops-value text-3xl font-bold">{metricNumber(lastTask?.output_tokens, missing)}</p>
+        <p class="mt-4 text-sm text-muted-foreground">{lastTaskLabel}</p>
       </article>
       <article class="ops-card p-5">
         <div class="flex justify-between">
           <span class="ops-label">Time To First Token</span>
           <Timer class="h-4 w-4 text-muted-foreground" />
         </div>
-        <p class="mt-5 ops-value text-3xl font-bold">{durationMs(lastTask?.ttft_seconds)}</p>
+        <p class="mt-5 ops-value text-3xl font-bold">{durationMs(lastTask?.ttft_seconds, missing)}</p>
         <p class="mt-4 text-sm text-muted-foreground">TTFT</p>
       </article>
       <article class="ops-card p-5">
@@ -210,8 +222,8 @@
           <span class="ops-label">Total Duration</span>
           <TimerReset class="h-4 w-4 text-muted-foreground" />
         </div>
-        <p class="mt-5 ops-value text-3xl font-bold">{durationMs(lastTask?.total_duration_seconds)}</p>
-        <p class="mt-4 text-sm text-muted-foreground">Last Task</p>
+        <p class="mt-5 ops-value text-3xl font-bold">{durationMs(lastTask?.total_duration_seconds, missing)}</p>
+        <p class="mt-4 text-sm text-muted-foreground">{lastTaskLabel}</p>
       </article>
     </section>
 
@@ -224,11 +236,11 @@
         <div class="grid min-h-40 grid-cols-1 gap-8 p-6 md:grid-cols-2">
           <div class="md:border-r md:border-[#34382d]">
             <p class="text-sm">Prompt Evaluation</p>
-            <p class="mt-2 ops-value text-3xl">{lastTask?.prompt_eval_tps ? formatTPS(lastTask.prompt_eval_tps) : 'Unavailable'}</p>
+            <p class="mt-2 ops-value text-3xl">{lastTask?.prompt_eval_tps ? formatTPS(lastTask.prompt_eval_tps) : missing}</p>
           </div>
           <div>
             <p class="text-sm">Generation Speed</p>
-            <p class="mt-2 ops-value text-3xl">{lastTask?.generation_tps ? formatTPS(lastTask.generation_tps) : 'Unavailable'}</p>
+            <p class="mt-2 ops-value text-3xl">{lastTask?.generation_tps ? formatTPS(lastTask.generation_tps) : missing}</p>
           </div>
         </div>
       </article>
@@ -241,16 +253,16 @@
         <div class="space-y-5 p-5 text-sm">
           <div class="flex justify-between gap-4">
             <span>Finish Reason</span>
-            <span class="ops-badge ops-badge-ok">{lastTask?.finish_reason?.reason ?? 'unknown'}</span>
+            <span class="ops-badge {finishReason ? 'ops-badge-ok' : ''}">{finishReason ?? missing}</span>
           </div>
           <div class="flex justify-between gap-4">
             <span>Confidence</span>
-            <span class="ops-value">{confidenceLabel(lastTask?.finish_reason?.confidence)}</span>
+            <span class="ops-value">{finishReason ? confidenceLabel(lastTask?.finish_reason?.confidence) : missing}</span>
           </div>
           <div>
             <p>Evidence</p>
             <div class="mt-3 rounded border border-[#444936] bg-[#090a0a] p-3 ops-value">
-              {lastTask?.finish_reason?.evidence || 'Unavailable'}
+              {finishEvidence}
             </div>
           </div>
         </div>
