@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import math
 import os
 import sqlite3
@@ -24,7 +25,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app.config import settings
+from app.services.rate_limited_log import RateLimitedWarning
 from app.services.state_files import PRIVATE_FILE_MODE, ensure_private_dir
+
+log = logging.getLogger(__name__)
+_skipped_rows = RateLimitedWarning(log)
 
 SCHEMA_VERSION = 1
 
@@ -50,6 +55,15 @@ CLEARED_AT_META_KEY = "history_cleared_at"
 # dropped a genuine earlier run when an identical one came later. A run polled
 # later than this is stored twice, which loses nothing.
 POLL_MATCH_WINDOW_SECONDS = 5 * 60
+
+# A task time before this, or more than FUTURE_TOLERANCE ahead of now, is
+# not the time of a run: a clock that was never set, or a corrupt value. The
+# tolerance allows for a host clock that is a little ahead.
+EARLIEST_TASK_TIME = datetime(2000, 1, 1, tzinfo=UTC)
+FUTURE_TOLERANCE = timedelta(days=1)
+
+# The largest integer SQLite stores.
+SQLITE_MAX_INTEGER = 2**63 - 1
 
 # Generation rates above this are not measurements: Lemonade emits a sentinel
 # (1000000.0) when a completion is one token long and there is no elapsed
@@ -243,8 +257,13 @@ class MetricsStore:
         record scraped twice stays one. Timestamps are stored as aware UTC
         ISO strings, so one instant always has one spelling: a naive one, as
         early versions wrote to task_history.json with utcnow(), is read as
-        UTC. A row whose
-        timestamp cannot be parsed is skipped rather than dated by guesswork.
+        UTC.
+
+        A row that cannot be stored as it is, is skipped with a warning (see
+        _task_values()): a timestamp that cannot be parsed or lies outside
+        EARLIEST_TASK_TIME to FUTURE_TOLERANCE from now, a count that is not
+        an integer SQLite can hold, a number that is not finite or is
+        negative, text that is not valid Unicode. The other rows are stored.
 
         Rows completed at or before the last clear() are skipped: the journal
         still holds them, and they would otherwise come back on the next read.
@@ -277,24 +296,17 @@ class MetricsStore:
 
         accepted: list[TaskRow] = []
         payload = []
+        latest = datetime.now(UTC) + FUTURE_TOLERANCE
         for row in rows:
-            moment = _utc(row.timestamp)
-            if moment is None:
+            try:
+                values = _task_values(row, latest)
+            except ValueError as error:
+                # Skipped, not raised: one bad row would otherwise stop every
+                # row after it, on every read or import that meets it again.
+                _skipped_rows.warn("Skipped a task record that cannot be stored: %s", error)
                 continue
             accepted.append(row)
-            payload.append((
-                moment.isoformat(),
-                moment.timestamp(),
-                row.model,
-                row.input_tokens,
-                row.output_tokens,
-                row.prompt_tps,
-                measurable_rate(row.gen_tps, row.output_tokens),
-                row.ttft_seconds,
-                row.total_seconds,
-                row.finish_reason,
-                row.finish_confidence,
-            ))
+            payload.append(values)
 
         def run(connection: sqlite3.Connection) -> int:
             before = connection.total_changes
@@ -562,14 +574,75 @@ def resolve_range(name: str | None) -> tuple[str, timedelta]:
 
 
 def _utc(timestamp: str) -> datetime | None:
-    """Parse an ISO timestamp as aware UTC; a naive one is taken as UTC."""
+    """Parse an ISO timestamp as aware UTC; a naive one is taken as UTC.
+
+    None when it cannot be parsed, or not moved to UTC: a time at the edge of
+    the calendar ("0001-01-01T00:00:00+05:00") overflows.
+    """
     try:
         parsed = datetime.fromisoformat(timestamp)
-    except (TypeError, ValueError):
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+    except (OverflowError, TypeError, ValueError):
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+
+
+def _task_values(row: TaskRow, latest: datetime) -> tuple:
+    """The column values of a task row, or ValueError saying why it has none.
+
+    Every value is checked here, before SQLite sees it: binding an integer
+    above SQLITE_MAX_INTEGER raises OverflowError, text that is not valid
+    Unicode raises UnicodeEncodeError, and a non-finite number would be
+    stored and break every JSON response that includes it.
+    """
+    moment = _utc(row.timestamp)
+    if moment is None:
+        raise ValueError(f"timestamp {row.timestamp!r} is not a time")
+    if not EARLIEST_TASK_TIME <= moment <= latest:
+        raise ValueError(f"timestamp {row.timestamp!r} is out of range")
+    input_tokens = _count("input_tokens", row.input_tokens)
+    output_tokens = _count("output_tokens", row.output_tokens)
+    return (
+        moment.isoformat(),
+        moment.timestamp(),
+        _text("model", row.model),
+        input_tokens,
+        output_tokens,
+        _number("prompt_tps", row.prompt_tps),
+        measurable_rate(_number("gen_tps", row.gen_tps), output_tokens),
+        _number("ttft_seconds", row.ttft_seconds),
+        _number("total_seconds", row.total_seconds),
+        _text("finish_reason", row.finish_reason),
+        _text("finish_confidence", row.finish_confidence),
+    )
+
+
+def _count(name: str, value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} {value!r} is not an integer")  # noqa: TRY004 - skipped like any bad value
+    if not 0 <= value <= SQLITE_MAX_INTEGER:
+        raise ValueError(f"{name} {value} is out of range")
+    return value
+
+
+def _number(name: str, value: object) -> float:
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (OverflowError, TypeError, ValueError):
+        raise ValueError(f"{name} {value!r} is not a number") from None
+    if not math.isfinite(number) or number < 0:
+        raise ValueError(f"{name} {value!r} is out of range")
+    return number
+
+
+def _text(name: str, value: object) -> str:
+    text = str(value)
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ValueError(f"{name} {text!r} is not valid Unicode") from None
+    return text
 
 
 def _epoch(timestamp: str) -> float:

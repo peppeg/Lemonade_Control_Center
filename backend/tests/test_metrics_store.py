@@ -859,3 +859,76 @@ def test_legacy_import_drops_the_sentinel_rate(tmp_path, store):
     [row] = store.get_tasks()
     assert row["gen_tps"] == 0.0
     assert row["ttft_seconds"] == 17.6
+
+
+# ── Values that cannot be stored ───────────────────────────
+#
+# Reported in review: one such record raised from insert_tasks() (an integer
+# above 2**63 - 1 at bind, Infinity at int(), a date at the edge of the
+# calendar at astimezone()), and every later read or import met it again.
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"input_tokens": 2**63},
+        {"output_tokens": 10**30},
+        {"input_tokens": -1},
+        {"input_tokens": 4.0},
+        {"gen_tps": float("nan")},
+        {"prompt_tps": float("inf")},
+        {"ttft_seconds": float("-inf")},
+        {"total_seconds": 10**400},
+        {"total_seconds": -1.0},
+        {"timestamp": "0001-01-01T00:00:00+05:00"},
+        {"timestamp": "9999-12-31T23:59:59-05:00"},
+        {"timestamp": "0001-01-01T00:00:00"},
+        {"timestamp": "1970-01-01T00:00:00+00:00"},
+        {"timestamp": "9999-12-31T23:59:59+00:00"},
+        {"timestamp": "not a time"},
+        {"model": "bad \ud800 model"},
+    ],
+    ids=lambda change: next(iter(change)) + "=" + repr(next(iter(change.values())))[:24],
+)
+def test_a_row_that_cannot_be_stored_is_skipped_and_the_others_are_kept(store, caplog, change):
+    bad = replace(make_row(30), **change)
+
+    with caplog.at_level("WARNING", logger="app.services.metrics.store"):
+        stored = store.insert_tasks([make_row(0), bad, make_row(60, input_tokens=7)])
+
+    assert stored == 2
+    assert sorted(row["input_tokens"] for row in store.get_tasks()) == [7, 91]
+    assert "Skipped a task record that cannot be stored" in caplog.text
+
+
+def test_skipped_rows_are_warned_about_at_most_once_per_interval(store, caplog):
+    bad = replace(make_row(0), input_tokens=2**64)
+
+    with caplog.at_level("WARNING", logger="app.services.metrics.store"):
+        for _ in range(5):
+            store.insert_tasks([bad])
+
+    assert caplog.text.count("Skipped a task record") == 1
+
+
+def test_a_legacy_file_with_values_that_cannot_be_stored_is_still_imported(tmp_path, store):
+    legacy = tmp_path / "task_history.json"
+    entries = [
+        {**_legacy_entry(), "input_tokens": float("inf")},
+        {**_legacy_entry(), "output_tokens": 10**30},
+        {**_legacy_entry(), "gen_tps": float("nan")},
+        {**_legacy_entry(), "ttft_seconds": "Infinity"},
+        {**_legacy_entry(), "timestamp": "0001-01-01T00:00:00+05:00"},
+        {**_legacy_entry(), "timestamp": "9999-12-31T23:59:59-05:00"},
+        {**_legacy_entry(), "timestamp": "9999-12-31T23:59:59Z"},
+        {**_legacy_entry(), "model": "\ud800"},
+        {**_legacy_entry(), "input_tokens": 5},
+    ]
+    # json.dumps writes Infinity and NaN, which json.loads reads back.
+    legacy.write_text(json.dumps({"tasks": entries}), encoding="utf-8")
+    history = TaskHistory(store)
+
+    assert history.migrate_legacy_json(legacy) == 1
+    assert [row["input_tokens"] for row in store.get_tasks()] == [5]
+    assert store.get_meta(MIGRATION_META_KEY) is not None
+    assert history.migrate_legacy_json(legacy) == 0

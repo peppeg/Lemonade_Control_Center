@@ -370,7 +370,9 @@ def test_the_last_task_does_not_borrow_from_a_record_that_lost_its_input_line(mo
 
 def test_a_repeated_field_keeps_its_first_value_as_in_the_last_task():
     """Stored records are split like the last task (#52)."""
-    records = extract_task_records(["Input tokens: 80", "Output tokens: 24", "out=9, tps=12.0", "TTFT (s): 0.50"])
+    records = extract_task_records(
+        ["Input tokens: 80", "Output tokens: 24", "Output tokens: 9, TPS: 12.0", "TTFT (s): 0.50"]
+    )
 
     assert _identities(records) == [(80, 24, 12.0)]
 
@@ -600,3 +602,136 @@ def test_parse_task_records_returns_empty_on_a_quiet_journal(monkeypatch):
     _fake_json_journal(monkeypatch, [])
 
     assert parse_task_records() == []
+
+
+# ── Records that cannot be read ────────────────────────────
+#
+# Reported in review: float("28.30.") raised from the parser, and the next
+# read met the same line again. Such a record is skipped with a warning and
+# the records around it are kept.
+
+
+def _completed(second: int, fields: str) -> str:
+    return f"2026-08-22 10:00:{second:02d}.000 [Info] (Telemetry) Inference completed: model=M, {fields}"
+
+
+GOOD_FIELDS = "tokens=11 (in=4, out=7), ttft=0.08s, tps=32.28"
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        "tokens=11 (in=4, out=7), ttft=0.08s, tps=1.2.3",
+        "tokens=11 (in=99999999999999999999, out=7), ttft=0.08s, tps=32.28",
+        "tokens=11 (in=4, out=9223372036854775808), ttft=0.08s, tps=32.28",
+        "tokens=11 (in=4, out=7), ttft=0.08s, tps=1" + "0" * 400,
+        "tokens=11 (out=7), ttft=0.08s, tps=32.28",
+        "tokens=11 (in=4, out=7), tps=32.28",
+    ],
+    ids=["three-parts", "huge-input", "above-int64", "infinite", "no-input", "no-ttft"],
+)
+def test_a_record_that_cannot_be_read_is_skipped_and_its_neighbours_kept(caplog, fields):
+    with caplog.at_level("WARNING", logger="app.services.log_parser"):
+        records = extract_task_records([
+            _completed(1, GOOD_FIELDS.replace("in=4", "in=1")),
+            _completed(2, fields),
+            _completed(3, GOOD_FIELDS.replace("in=4", "in=3")),
+        ])
+
+    assert [record.input_tokens for record in records] == [1, 3]
+    assert "Skipped a task record in the Lemonade log" in caplog.text
+
+
+@pytest.mark.parametrize("value", ["28.30.", "32.28."])
+def test_a_number_with_a_stray_dot_is_read_up_to_the_dot(value):
+    """As the last task reads it (#58); it raised from float() before."""
+    records = extract_task_records([
+        _completed(1, GOOD_FIELDS.replace("in=4", "in=1")),
+        _completed(2, f"tokens=11 (in=2, out=7), ttft={value}s, tps={value}"),
+        _completed(3, GOOD_FIELDS.replace("in=4", "in=3")),
+    ])
+
+    assert [record.input_tokens for record in records] == [1, 2, 3]
+    assert (records[1].ttft_seconds, records[1].generation_tps) == (float(value[:-1]), float(value[:-1]))
+
+
+def test_an_unreadable_older_format_field_skips_its_record_only(caplog):
+    with caplog.at_level("WARNING", logger="app.services.log_parser"):
+        records = extract_task_records([
+            "Input tokens: 4", "Output tokens: 7", "TTFT (s): 1.2.3", "TPS: 32.28",
+            "Input tokens: 5", "Output tokens: 7", "TTFT (s): 0.08", "TPS: 32.28",
+        ])
+
+    assert [record.input_tokens for record in records] == [5]
+    assert "unreadable ttft_seconds" in caplog.text
+
+
+def test_compact_fields_are_read_from_inference_completed_lines_only():
+    """From review: `in=` or `tps=` on another line is not telemetry."""
+    lines = [
+        "2026-08-22 10:00:01.000 [Info] (Server) slot update: in=5, out=9, ttft=1.0s, tps=99.0",
+        _completed(2, GOOD_FIELDS),
+        "2026-08-22 10:00:03.000 [Info] (Server) note: in=6, out=9, ttft=1.0s, tps=99.0",
+    ]
+
+    records = extract_task_records(lines)
+
+    assert [(r.input_tokens, r.output_tokens, r.generation_tps) for r in records] == [(4, 7, 32.28)]
+
+
+def test_the_last_task_ignores_compact_fields_outside_inference_completed(monkeypatch):
+    output = "\n".join([_completed(2, GOOD_FIELDS), "[Info] (Server) note: in=6, out=9, tps=99.0"])
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout=output, stderr="")
+    )
+
+    stats = parse_last_task()
+
+    assert (stats.input_tokens, stats.output_tokens, stats.generation_tps) == (4, 7, 32.28)
+
+
+@pytest.fixture
+def local_zone(monkeypatch):
+    """Run in a given host time zone; year 1 and 9999 overflow only off UTC."""
+
+    def use(name: str) -> None:
+        monkeypatch.setenv("TZ", name)
+        time.tzset()
+
+    yield use
+    monkeypatch.undo()
+    time.tzset()
+
+
+EDGES = [
+    pytest.param("0001-01-01 00:00:00.000", "Asia/Kolkata", id="year-1-east"),
+    pytest.param("9999-12-31 23:59:59.999", "America/New_York", id="year-9999-west"),
+    # Raises OverflowError rather than ValueError.
+    pytest.param("0001-01-01T00:00:00+05:00", "UTC", id="iso-with-offset"),
+]
+
+
+@pytest.mark.parametrize(("stamp", "zone"), EDGES)
+def test_a_line_dated_at_the_edge_of_the_calendar_is_dated_by_journald(local_zone, stamp, zone):
+    local_zone(zone)
+    received = "2026-08-22T10:00:02+00:00"
+    line = f"{stamp} [Info] (Telemetry) Inference completed: model=M, {GOOD_FIELDS}"
+
+    records = extract_task_records([line], [received])
+
+    assert [(record.timestamp, record.journal_dated) for record in records] == [(received, True)]
+
+
+@pytest.mark.parametrize("text", ["28.30.", "nan", "inf", "-1", "1" + "0" * 400, ""])
+def test_read_number_refuses_what_cannot_be_stored(text):
+    from app.services.log_parser import read_number
+
+    assert read_number(text) is None
+
+
+@pytest.mark.parametrize("text", [str(2**63), "-1", "1.5", "9" * 5000, ""])
+def test_read_count_refuses_what_cannot_be_stored(text):
+    from app.services.log_parser import read_count
+
+    assert read_count(text) is None
+

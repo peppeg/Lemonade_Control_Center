@@ -234,7 +234,7 @@ def test_the_older_format_does_not_mix_two_records(monkeypatch):
 
 
 def test_the_older_format_keeps_the_first_value_of_each_field(monkeypatch):
-    _fake_journal(monkeypatch, ["Input tokens: 80", "Output tokens: 24", "out=9, tps=12.0"])
+    _fake_journal(monkeypatch, ["Input tokens: 80", "Output tokens: 24", "Output tokens: 9, TPS: 12.0"])
 
     stats = parse_last_task()
 

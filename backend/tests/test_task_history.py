@@ -1,6 +1,8 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.services.log_parser import (
     JournalReadError,
     TaskJournalRead,
@@ -534,3 +536,87 @@ def test_an_imported_run_long_after_a_stored_identical_one_is_kept(tmp_path):
         _polled_json(tmp_path / "task_history.json", first + timedelta(hours=1), 1, 0.0)
     ) == 1
     assert history.count() == 2
+
+
+# ── A record that cannot be read or stored ─────────────────
+
+
+def _poisoned(received: datetime, fields: str) -> str:
+    local = received.astimezone().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    return f"{local} [Info] (Telemetry) Inference completed: model=M, {fields}"
+
+
+@pytest.mark.parametrize(
+    ("fields", "unreadable"),
+    [
+        # Read up to the stray dot, as the last task reads it (#58).
+        ("tokens=11 (in=5, out=7), ttft=28.30.s, tps=32.28", False),
+        ("tokens=11 (in=5, out=7), ttft=0.08s, tps=32.28.", False),
+        ("tokens=11 (in=5, out=7), ttft=1.2.3s, tps=32.28", True),
+        ("tokens=11 (in=99999999999999999999, out=7), ttft=0.08s, tps=32.28", True),
+        ("tokens=11 (in=5, out=7), ttft=0.08s, tps=1" + "0" * 400, True),
+    ],
+    ids=["ttft-two-dots", "tps-trailing-dot", "ttft-three-parts", "huge-int", "infinite"],
+)
+def test_the_cursor_moves_past_a_record_that_cannot_be_read(
+    monkeypatch, tmp_path, caplog, fields, unreadable
+):
+    """Reported in review: the cursor stayed before the line, so every later
+    read stopped at it and the history ended there for good."""
+    journal = _journal(monkeypatch)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(seconds=30), _completion(now - timedelta(seconds=30), 4))
+    journal.add(now - timedelta(seconds=20), _poisoned(now - timedelta(seconds=20), fields))
+    journal.add(now - timedelta(seconds=10), _completion(now - timedelta(seconds=10), 6))
+
+    with caplog.at_level("WARNING"):
+        history.refresh_from_logs()
+
+    assert _stored(history) == ([4, 6] if unreadable else [4, 5, 6])
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c2"
+    assert ("Skipped a task record" in caplog.text) == unreadable
+
+    journal.add(now - timedelta(seconds=5), _completion(now - timedelta(seconds=5), 7))
+
+    assert history.refresh_from_logs() == 1
+    assert _cursor_of(journal.commands[-1]) == "c2"
+    assert _stored(history) == ([4, 6, 7] if unreadable else [4, 5, 6, 7])
+
+
+def test_the_cursor_moves_past_a_record_the_store_refuses(monkeypatch, tmp_path, caplog):
+    journal = _journal(monkeypatch)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(seconds=20), _completion(now - timedelta(seconds=20), 4))
+    # Parsed, but dated 1990 by a host clock that was never set.
+    journal.add(now - timedelta(seconds=10), (
+        "1990-01-01 00:00:00.000 [Info] (Telemetry) Inference completed: model=M,"
+        " tokens=12 (in=5, out=7), ttft=0.08s, tps=32.28"
+    ))
+    journal.add(now - timedelta(seconds=5), _completion(now - timedelta(seconds=5), 6))
+
+    with caplog.at_level("WARNING"):
+        assert history.refresh_from_logs() == 2
+
+    assert _stored(history) == [4, 6]
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) == "c2"
+    assert "out of range" in caplog.text
+
+
+def test_a_database_that_cannot_be_written_still_holds_the_cursor_back(monkeypatch, tmp_path):
+    """Skipping is for bad records only: a write failure loses nothing."""
+    import sqlite3
+
+    journal = _journal(monkeypatch)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    now = datetime.now(UTC)
+    journal.add(now - timedelta(seconds=10), _completion(now - timedelta(seconds=10), 4))
+
+    def locked(rows):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(history.store, "insert_tasks", locked)
+    with pytest.raises(sqlite3.OperationalError):
+        history.refresh_from_logs()
+    assert history.store.get_meta(task_history.JOURNAL_CURSOR_META_KEY) is None

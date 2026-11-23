@@ -9,7 +9,10 @@ Extracts structured information from raw log lines:
 - Finish reason (confirmed vs inferred)
 - Slot lifecycle events
 """
+import dataclasses
 import json
+import logging
+import math
 import re
 import subprocess
 from dataclasses import dataclass
@@ -23,6 +26,7 @@ from app.models.schemas import (
     LogEntryLevel,
     RecentLogsResponse,
 )
+from app.services.rate_limited_log import RateLimitedWarning
 
 # ── Regex patterns for llama-server log parsing ────────────
 
@@ -277,6 +281,11 @@ class _TelemetryLines:
     fields: dict
     # A line with nothing new for the record ended it.
     closed: bool = False
+    # Fields whose value is there but cannot be read as a number, or not as
+    # one that can be stored. Such a record is skipped, not stored with a gap.
+    invalid: set[str] = dataclasses.field(default_factory=set)
+    # An `Inference completed` line, which holds the whole record.
+    single_line: bool = False
 
     @property
     def end(self) -> int:
@@ -287,11 +296,14 @@ def _telemetry_records(lines: list[str]) -> list[_TelemetryLines]:
     """Split journal lines into telemetry records, oldest first.
 
     A record is one `Inference completed` line, or the older format with one
-    field per line (Input tokens, Output tokens, TTFT, TPS). Both begin with
-    the input tokens, so an input-token count always starts a new record,
-    and a window that starts inside a record cannot shift the fields of
-    later ones. Lines before the first input-token count belong to a record
-    whose start is not in the window, and are skipped.
+    field per line (Input tokens, Output tokens, TTFT, TPS). An `Inference
+    completed` line is a record of its own, even when its input-token count
+    cannot be read, and the compact fields (`in=`, `out=`, `ttft=`, `tps=`)
+    are read from such lines only. In the older format an input-token count
+    always starts a new record, so a window that starts inside a record
+    cannot shift the fields of later ones. Lines before the first
+    input-token count belong to a record whose start is not in the window,
+    and are skipped.
 
     A later line adds the fields the record does not have yet, and the first
     value of each field is kept. A line with nothing new ends the record:
@@ -301,29 +313,103 @@ def _telemetry_records(lines: list[str]) -> list[_TelemetryLines]:
     """
     records: list[_TelemetryLines] = []
     for index, line in enumerate(lines):
-        fields: dict = {}
-        if m := RE_TELEMETRY_INPUT.search(line):
-            fields["input_tokens"] = int(m.group(1))
-        if m := RE_TELEMETRY_OUTPUT.search(line):
-            fields["output_tokens"] = int(m.group(1))
-        if m := RE_TELEMETRY_TTFT.search(line):
-            fields["ttft_seconds"] = float(m.group(1))
-        if m := RE_TELEMETRY_TPS.search(line):
-            fields["generation_tps"] = float(m.group(1))
-        if m := RE_TELEMETRY_MODEL.search(line):
-            fields["model"] = m.group(1)
-
-        if "input_tokens" in fields:
-            records.append(_TelemetryLines(lines=[], fields={}))
-        elif not fields or not records or records[-1].closed:
+        completed = bool(RE_INFERENCE_COMPLETED.search(line))
+        fields, invalid = _telemetry_fields(line, completed)
+        if completed and (fields or invalid):
+            records.append(_TelemetryLines(
+                lines=[index], fields=fields, closed=True, invalid=invalid, single_line=True,
+            ))
             continue
-        elif fields.keys() <= records[-1].fields.keys():
+
+        if "input_tokens" in fields or "input_tokens" in invalid:
+            records.append(_TelemetryLines(lines=[], fields={}))
+        elif not (fields or invalid) or not records or records[-1].closed:
+            continue
+        elif (fields.keys() | invalid) <= (records[-1].fields.keys() | records[-1].invalid):
             records[-1].closed = True
             continue
         record = records[-1]
+        known = record.fields.keys() | record.invalid
         record.lines.append(index)
-        record.fields = fields | record.fields
+        record.fields |= {key: value for key, value in fields.items() if key not in known}
+        record.invalid |= invalid - known
     return records
+
+
+# The largest integer SQLite stores; a larger one cannot be bound.
+SQLITE_MAX_INTEGER = 2**63 - 1
+
+
+def read_count(text: str) -> int | None:
+    """A token count as logged, or None when it is not one that can be stored."""
+    try:
+        value = int(text)
+    except ValueError:
+        return None
+    return value if 0 <= value <= SQLITE_MAX_INTEGER else None
+
+
+def read_number(text: str) -> float | None:
+    """A finite, non-negative number as logged, or None.
+
+    float() reads "28.30." as an error and a long run of digits as infinity.
+    """
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    return value if math.isfinite(value) and value >= 0 else None
+
+
+def _telemetry_fields(line: str, completed: bool) -> tuple[dict, set[str]]:
+    """The telemetry fields of one line, and those present but unreadable."""
+    fields: dict = {}
+    invalid: set[str] = set()
+    for name, pattern, read in _TELEMETRY_FIELDS:
+        match = next(
+            (m for m in pattern.finditer(line) if completed or not _compact(m)), None
+        )
+        value = read(match.group(1)) if match else None
+        if value is not None:
+            fields[name] = value
+        elif match or _TELEMETRY_LABELS[name][0].search(line) or (
+            completed and _TELEMETRY_LABELS[name][1].search(line)
+        ):
+            # The field is there, but not as a number the pattern accepts.
+            invalid.add(name)
+    if completed and (m := RE_TELEMETRY_MODEL.search(line)):
+        fields["model"] = m.group(1)
+    return fields, invalid
+
+
+def _compact(match: re.Match) -> bool:
+    """Whether a field was matched in its `name=value` spelling."""
+    return match.group(0)[: match.start(1) - match.start(0)].endswith("=")
+
+
+# The line that holds a whole record in current Lemonade, and the only one
+# the compact spellings are read from: `in=` or `tps=` elsewhere is not
+# telemetry.
+RE_INFERENCE_COMPLETED = re.compile(r"\bInference completed\b", re.IGNORECASE)
+
+# Each field's label in the older spelling and in the compact one, to tell
+# a field that is not there from one whose value cannot be read.
+_TELEMETRY_LABELS = {
+    name: (re.compile(older, re.IGNORECASE), re.compile(compact, re.IGNORECASE))
+    for name, older, compact in (
+        ("input_tokens", r"\bInput tokens:", r"\bin="),
+        ("output_tokens", r"\bOutput tokens:", r"\bout="),
+        ("ttft_seconds", r"\bTTFT\s*\(s\):", r"\bttft="),
+        ("generation_tps", r"\bTPS:", r"\btps="),
+    )
+}
+
+_TELEMETRY_FIELDS = (
+    ("input_tokens", RE_TELEMETRY_INPUT, read_count),
+    ("output_tokens", RE_TELEMETRY_OUTPUT, read_count),
+    ("ttft_seconds", RE_TELEMETRY_TTFT, read_number),
+    ("generation_tps", RE_TELEMETRY_TPS, read_number),
+)
 
 
 def _task_timings(lines: list[str], start: int) -> list[_TaskTimings]:
@@ -530,6 +616,9 @@ def _parse_log_line(line: str) -> LogEntry:
 
 
 # ── Multi-record telemetry extraction ──────────────────────
+
+log = logging.getLogger(__name__)
+_skipped_records = RateLimitedWarning(log)
 
 # parse_last_task() above collapses the journal window to a single task, so any
 # inference that finished between two polls is lost. The helpers below walk the
@@ -767,27 +856,60 @@ def _extract_records(
     open_start = None
     telemetry = _telemetry_records(lines)
     for position, found in enumerate(telemetry):
-        if (
+        problem = _unusable(found)
+        if problem is None and (
             position == len(telemetry) - 1
             and not found.closed
             and not all(key in found.fields for key in _RECORD_FIELDS)
         ):
             open_start = found.lines[0]
             continue
-        # TTFT is kept as logged: Lemonade 2026.45 reports milliseconds
-        # (0.485s), and the prompt rate is derived from it.
-        pending: dict[str, object] = dict(found.fields)
-        for index in found.lines:
-            received = journal_times[index] if journal_times and index < len(journal_times) else None
-            own_timestamp = _line_timestamp(lines[index], received)
-            if own_timestamp or received:
-                pending["timestamp"] = own_timestamp or received
-                pending["journal_dated"] = own_timestamp is None
-                break
-        record = _build_task_record(pending)
+        if problem is None:
+            try:
+                record = _record_from_lines(found, lines, journal_times)
+            except (ArithmeticError, TypeError, ValueError) as error:
+                problem = str(error) or type(error).__name__
+        if problem is not None:
+            # Skipped, never raised: the next read would meet the same line
+            # and stop at it again.
+            _skipped_records.warn(
+                "Skipped a task record in the Lemonade log (%s): %s",
+                problem,
+                lines[found.lines[0]][:300] if found.lines else "",
+            )
+            continue
         if record is not None:
             records.append(record)
     return records, open_start
+
+
+def _unusable(found: _TelemetryLines) -> str | None:
+    """Why a record cannot be stored, or None."""
+    if found.invalid:
+        return "unreadable " + ", ".join(sorted(found.invalid))
+    if found.single_line:
+        missing = [key for key in _RECORD_FIELDS if key not in found.fields]
+        if missing:
+            return "no " + ", ".join(missing)
+    return None
+
+
+def _record_from_lines(
+    found: _TelemetryLines,
+    lines: list[str],
+    journal_times: list[str | None] | None,
+) -> TaskTelemetryRecord | None:
+    # TTFT is kept as logged: Lemonade 2026.45 reports milliseconds
+    # (0.485s), and the prompt rate is derived from it.
+    pending: dict[str, object] = dict(found.fields)
+    for index in found.lines:
+        received = journal_times[index] if journal_times and index < len(journal_times) else None
+        own_timestamp = _line_timestamp(lines[index], received)
+        if own_timestamp or received:
+            pending["timestamp"] = own_timestamp or received
+            pending["journal_dated"] = own_timestamp is None
+            break
+    return _build_task_record(pending)
 
 
 # The fields every telemetry record carries, in both spellings.
@@ -841,12 +963,15 @@ def _line_timestamp(line: str, received: str | None = None) -> str | None:
     `received` is when journald received the line, if known. It settles
     Lemonade's local times that occur twice when the clocks go back.
     """
+    # OverflowError: a time at the edge of the calendar (year 1 or 9999)
+    # cannot be moved to UTC. Like one that cannot be parsed, it is no time,
+    # and the caller falls back to when journald received the line.
     match = RE_TIMESTAMP.match(line)
     if match:
         raw = match.group(1)
         try:
             return _as_utc(datetime.fromisoformat(raw)).isoformat()
-        except ValueError:
+        except (OverflowError, ValueError):
             # Syslog-style "Mon 22 10:00:48" carries no year; it cannot be
             # resolved to an instant, so the caller falls back to now.
             return None
@@ -857,11 +982,11 @@ def _line_timestamp(line: str, received: str | None = None) -> str | None:
     try:
         # Lemonade stamps its own lines in host local time with no offset.
         parsed = datetime.fromisoformat(match.group(1).replace(" ", "T"))
-    except ValueError:
+        if parsed.tzinfo is None:
+            parsed = _local_instant(parsed, received)
+        return _as_utc(parsed).isoformat()
+    except (OverflowError, ValueError):
         return None
-    if parsed.tzinfo is None:
-        parsed = _local_instant(parsed, received)
-    return _as_utc(parsed).isoformat()
 
 
 def _local_instant(naive: datetime, received: str | None) -> datetime:

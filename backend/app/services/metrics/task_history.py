@@ -26,8 +26,10 @@ from app.services.log_parser import (
     read_task_journal,
 )
 from app.services.metrics.store import MetricsStore, TaskRow
+from app.services.rate_limited_log import RateLimitedWarning
 
 log = logging.getLogger(__name__)
+_skipped_records = RateLimitedWarning(log)
 
 HISTORY_FILE = Path(__file__).parent.parent.parent / "data" / "task_history.json"
 MIGRATION_META_KEY = "task_history_json_imported"
@@ -97,6 +99,10 @@ class TaskHistory:
         reads, and not when more lines arrived than one read takes. The cursor
         is saved only once the records are stored.
 
+        A record that cannot be read or stored is skipped with a warning (at
+        most one every few minutes), and the cursor moves past it with the
+        others: held back, it would stop every later read at the same line.
+
         Raises when the journal cannot be read or the store cannot be written;
         the task sampler logs it, and the next read starts from the same
         cursor. Read endpoints use _refresh_quietly().
@@ -161,8 +167,21 @@ class TaskHistory:
             log.debug("Task history refresh before a read failed: %s", error)
 
     def ingest(self, records: list[TaskTelemetryRecord]) -> int:
-        """Store already-parsed telemetry records."""
-        rows = [_to_row(record) for record in records if record.output_tokens]
+        """Store already-parsed telemetry records.
+
+        A record that cannot be turned into a row is skipped with a warning,
+        like one the store cannot hold: the cursor moves past both.
+        """
+        rows = []
+        for record in records:
+            if not record.output_tokens:
+                continue
+            try:
+                rows.append(_to_row(record))
+            except (ArithmeticError, TypeError, ValueError) as error:
+                _skipped_records.warn(
+                    "Skipped a task record that cannot be stored (%s): %r", error, record
+                )
         return self._store.insert_tasks(rows)
 
     # ── Reads ──────────────────────────────────────────────
@@ -218,7 +237,9 @@ class TaskHistory:
         file to import. A file that cannot be read or parsed raises
         LegacyHistoryError and is tried again on the next start; the collector
         logs it once per start, so a file that stays corrupt is not retried in
-        a loop. Single unusable entries in a readable file are skipped.
+        a loop. Single unusable entries in a readable file (a value that is
+        not a number, Infinity, an integer SQLite cannot hold, a date that is
+        out of range) are skipped with a warning, and the others imported.
         """
         if self._store.get_meta(MIGRATION_META_KEY):
             return 0
@@ -238,14 +259,21 @@ class LegacyHistoryError(Exception):
 def _read_legacy_rows(source: Path) -> list[TaskRow]:
     try:
         data = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        # ValueError covers both invalid JSON and invalid UTF-8.
+    except (OSError, RecursionError, ValueError) as error:
+        # ValueError covers both invalid JSON and invalid UTF-8;
+        # RecursionError, JSON nested too deeply to parse.
         raise LegacyHistoryError(f"cannot read {source}: {error}") from error
     tasks = data.get("tasks") if isinstance(data, dict) else None
     if not isinstance(tasks, list):
         raise LegacyHistoryError(f"{source} holds no list of tasks")
     rows = [_row_from_legacy(item) for item in tasks if isinstance(item, dict)]
-    return [row for row in rows if row]
+    usable = [row for row in rows if row]
+    if len(usable) < len(tasks):
+        log.warning(
+            "Skipped %d of the %d entries of %s that cannot be imported",
+            len(tasks) - len(usable), len(tasks), source,
+        )
+    return usable
 
 
 def _parse_time(value: str | None) -> datetime | None:
@@ -309,7 +337,8 @@ def _row_from_legacy(item: dict) -> TaskRow | None:
             finish_confidence=str(item.get("finish_confidence") or "unknown"),
             polled=True,
         )
-    except (KeyError, TypeError, ValueError):
+    except (ArithmeticError, KeyError, TypeError, ValueError):
+        # ArithmeticError: int() of Infinity, which json reads as a float.
         return None
 
 
