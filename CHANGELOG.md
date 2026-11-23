@@ -6,6 +6,10 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+### Fixed
+
+- The live log stream (`/api/logs/ws/logs`) notices a closed client and an LCC shutdown while Lemonade's log is silent. It left a `journalctl` process behind, and LCC did not stop until the next log line.
+
 ## 0.3.1 - 2026-11-23
 
 ### Added
