@@ -2,20 +2,27 @@
 from __future__ import annotations
 
 from app.models.completions import CompletionRequest
+from app.models.schemas import RunningModelInfo
 from app.services.bench.models import BenchPrompt, BenchResult, SuiteResult
 from app.services.bench.suites import SUITES
 from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
-from app.services.process import find_llama_server
+from app.services.loaded_models import llama_server_for
 
 
 class BenchRunner:
-    def __init__(self, completion_runner: CompletionRunner, identity: dict | None = None) -> None:
+    def __init__(
+        self,
+        completion_runner: CompletionRunner,
+        identity: dict | None = None,
+        observed: RunningModelInfo | None = None,
+    ) -> None:
         self.completion_runner = completion_runner
         self.identity = identity or {}
+        self.observed = observed
 
     async def run_prompt(self, prompt: BenchPrompt, model: str) -> BenchResult:
-        before = _resource_snapshot()
+        before = _resource_snapshot(self.observed)
         completion = await self.completion_runner.run(
             CompletionRequest(
                 model=model,
@@ -27,7 +34,7 @@ class BenchRunner:
                 stop_sequences=prompt.stop_sequences,
             )
         )
-        after = _resource_snapshot()
+        after = _resource_snapshot(self.observed)
         return BenchResult(
             prompt_id=prompt.id,
             prompt_name=prompt.name,
@@ -87,7 +94,7 @@ class BenchRunner:
         )
 
 
-def _resource_snapshot() -> dict:
+def _resource_snapshot(model: RunningModelInfo | None) -> dict:
     snapshot: dict = {}
     try:
         hardware = get_hardware_info()
@@ -95,7 +102,7 @@ def _resource_snapshot() -> dict:
     except Exception:
         pass
     try:
-        process = find_llama_server()
+        process = llama_server_for(model)
         if process.found and process.process:
             snapshot.update(pid=process.process.pid, rss_gb=process.process.rss_gb)
             if process.params:

@@ -4,6 +4,7 @@ Process monitoring service — finds and parses the llama-server process.
 Reads /proc/PID/cmdline to extract runtime parameters like ctx_size,
 backend, ngl, mmap, MTP, reasoning format, etc.
 """
+import re
 import subprocess
 from datetime import UTC, datetime
 
@@ -17,45 +18,75 @@ from app.models.schemas import (
 )
 
 
-def find_llama_server() -> LlamaServerInfoResponse:
-    """Find the llama-server process and parse its command line."""
+def find_llama_server(pid: int | None = None, port: int | None = None) -> LlamaServerInfoResponse:
+    """Find the llama-server process and parse its command line.
+
+    With `pid` or `port`, as reported by Lemonade for a model, only a process that
+    matches is returned. The port also works when Lemonade runs in its own PID
+    namespace, where its pids mean nothing here.
+    """
+    servers = find_llama_servers()
+    if pid is None and port is None:
+        return servers[0] if servers else LlamaServerInfoResponse(found=False)
+
+    def matches(server: LlamaServerInfoResponse) -> tuple[bool, bool]:
+        return (
+            port is not None and server.params is not None and server.params.port == port,
+            pid is not None and server.process is not None and server.process.pid == pid,
+        )
+
+    best = max(servers, key=matches, default=None)
+    return best if best is not None and any(matches(best)) else LlamaServerInfoResponse(found=False)
+
+
+def find_llama_servers() -> list[LlamaServerInfoResponse]:
+    """Find every llama-server process on this host, by executable."""
+    servers: list[LlamaServerInfoResponse] = []
     for proc in psutil.process_iter(["pid", "name", "cmdline", "status",
                                       "memory_info", "cpu_percent",
                                       "create_time"]):
         try:
             name = proc.info["name"] or ""
             cmdline = proc.info.get("cmdline") or []
-            cmdline_str = " ".join(cmdline)
+            if proc.info.get("status") == psutil.STATUS_ZOMBIE or not _is_llama_server(name, cmdline):
+                continue
 
-            if "llama-server" in name or "llama_server" in name or \
-               "llama-server" in cmdline_str or "llama_server" in cmdline_str:
-
-                mem = proc.info.get("memory_info") or proc.memory_info()
-                create_time = proc.info.get("create_time")
-                now = datetime.now(UTC).timestamp()
-
-                process_info = ProcessInfo(
-                    pid=proc.info["pid"],
-                    name=name,
-                    cpu_percent=proc.info.get("cpu_percent", 0) or 0,
-                    rss_gb=round(mem.rss / (1024**3), 2),
-                    vms_gb=round(mem.vms / (1024**3), 2),
-                    status=proc.info.get("status", "unknown"),
-                    create_time=datetime.fromtimestamp(create_time, tz=UTC) if create_time else None,
-                    uptime_seconds=round(now - create_time, 0) if create_time else None,
-                )
-
-                params = parse_cmdline(cmdline)
-
-                return LlamaServerInfoResponse(
+            mem = proc.info.get("memory_info") or proc.memory_info()
+            create_time = proc.info.get("create_time")
+            now = datetime.now(UTC).timestamp()
+            servers.append(
+                LlamaServerInfoResponse(
                     found=True,
-                    process=process_info,
-                    params=params,
+                    process=ProcessInfo(
+                        pid=proc.info["pid"],
+                        name=name,
+                        cpu_percent=proc.info.get("cpu_percent", 0) or 0,
+                        rss_gb=round(mem.rss / (1024**3), 2),
+                        vms_gb=round(mem.vms / (1024**3), 2),
+                        status=proc.info.get("status", "unknown"),
+                        create_time=datetime.fromtimestamp(create_time, tz=UTC) if create_time else None,
+                        uptime_seconds=round(now - create_time, 0) if create_time else None,
+                    ),
+                    params=parse_cmdline(cmdline),
                 )
+            )
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
 
-    return LlamaServerInfoResponse(found=False)
+    return servers
+
+
+def _is_llama_server(name: str, cmdline: list[str]) -> bool:
+    """True for a process whose own executable is llama-server.
+
+    Arguments are not considered: a shell, an editor, or a `grep` that mentions
+    llama-server is another program, and its command line may hold secrets.
+    """
+    candidates = [name, cmdline[0] if cmdline else ""]
+    return any(
+        re.split(r"[\\/]", candidate)[-1].lower().startswith(("llama-server", "llama_server"))
+        for candidate in candidates
+    )
 
 
 def parse_cmdline(cmdline: list[str]) -> LlamaServerParams:
