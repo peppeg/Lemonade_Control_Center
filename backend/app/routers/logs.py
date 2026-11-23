@@ -14,6 +14,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from app.capabilities import capabilities
 from app.models.schemas import LastTaskStats, RecentLogsResponse
 from app.services.log_parser import get_recent_logs, parse_last_task
+from app.services.security import authorize_websocket
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -37,6 +38,8 @@ async def last_task_stats(max_tokens: int | None = Query(default=None)):
 @router.websocket("/ws/logs")
 async def stream_logs(websocket: WebSocket):
     """WebSocket endpoint for live log streaming."""
+    if not await authorize_websocket(websocket):
+        return
     await websocket.accept()
 
     if not capabilities.cmd_journalctl:

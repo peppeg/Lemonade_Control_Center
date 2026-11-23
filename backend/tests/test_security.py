@@ -91,3 +91,24 @@ async def test_remote_access_accepts_header_and_bearer_keys(monkeypatch):
     assert missing.status_code == 401
     assert header.status_code == 200
     assert bearer.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_require_auth_applies_to_localhost(monkeypatch):
+    monkeypatch.setattr("app.config.settings.require_auth", True)
+    monkeypatch.setattr("app.config.settings.lcc_api_key", "test-secret")
+    middleware = LccAccessControlMiddleware(success_response)
+
+    missing = await middleware.dispatch(make_request("127.0.0.1"), success_response)
+    wrong = await middleware.dispatch(
+        make_request("127.0.0.1", [(b"x-lcc-api-key", b"wrong")]),
+        success_response,
+    )
+    valid = await middleware.dispatch(
+        make_request("127.0.0.1", [(b"x-lcc-api-key", b"test-secret")]),
+        success_response,
+    )
+
+    assert missing.status_code == 401
+    assert wrong.status_code == 401
+    assert valid.status_code == 200

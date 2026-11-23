@@ -3,16 +3,37 @@ from __future__ import annotations
 
 import hmac
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from ipaddress import ip_address
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from starlette.requests import Request
+from starlette.requests import HTTPConnection, Request
 from starlette.websockets import WebSocket
 
 from app.config import settings
 
 AUDIT_LOG = Path(__file__).parent.parent / "data" / "audit.jsonl"
+
+# Origins of the frontend development servers.
+DEV_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+)
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+@dataclass(frozen=True)
+class AccessDecision:
+    """Outcome of the key rules for one client."""
+
+    auth_required: bool
+    authenticated: bool
+    # A key is required but none is configured, so no client can supply it.
+    blocked: bool
 
 
 def is_loopback_host(host: str | None) -> bool:
@@ -42,32 +63,101 @@ def verify_key(value: str | None) -> bool:
     return hmac.compare_digest(value, settings.lcc_api_key)
 
 
-def key_from_request(request: Request) -> str | None:
-    auth = request.headers.get("authorization", "")
+def key_from_connection(connection: HTTPConnection) -> str | None:
+    """Read the LCC key from an HTTP request or a WebSocket handshake."""
+    auth = connection.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:].strip()
-    return request.headers.get("x-lcc-api-key") or request.query_params.get("lcc_key")
+    return connection.headers.get("x-lcc-api-key") or connection.query_params.get("lcc_key")
 
 
-def key_from_websocket(websocket: WebSocket) -> str | None:
-    auth = websocket.headers.get("authorization", "")
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-    return websocket.headers.get("x-lcc-api-key") or websocket.query_params.get("lcc_key")
+def evaluate_access(host: str | None, supplied_key: str | None) -> AccessDecision:
+    """Apply the key rules. HTTP and WebSocket clients share this decision."""
+    required = auth_required_for_host(host)
+    return AccessDecision(
+        auth_required=required,
+        authenticated=not required or verify_key(supplied_key),
+        blocked=required and not key_configured(),
+    )
+
+
+def origin_allowed(origin: str | None, host: str | None) -> bool:
+    """Return True when a browser Origin belongs to this LCC instance.
+
+    A missing Origin is accepted because non-browser clients do not send one.
+    Schemes are not compared with the request: a TLS proxy serves https to the
+    browser while LCC sees http.
+    """
+    if origin is None:
+        return True
+    parsed = _parse_origin(origin)
+    if parsed is None:
+        return False
+    if any(parsed == _parse_origin(item) for item in (*DEV_ORIGINS, *_configured_origins())):
+        return True
+    scheme, name, port = parsed
+    return _parse_host(host, _DEFAULT_PORTS[scheme]) == (name, port)
+
+
+def _configured_origins() -> list[str]:
+    return [item.strip() for item in settings.allowed_origins.split(",") if item.strip()]
+
+
+def _parse_origin(value: str) -> tuple[str, str, int] | None:
+    """Split an origin into scheme, host and port, or None when it is not one."""
+    try:
+        parts = urlsplit(value.strip())
+        port = parts.port
+    except ValueError:
+        return None
+    if parts.scheme not in _DEFAULT_PORTS or not parts.hostname or "@" in parts.netloc:
+        return None
+    if parts.path not in {"", "/"} or parts.query or parts.fragment:
+        return None
+    return parts.scheme, parts.hostname, _DEFAULT_PORTS[parts.scheme] if port is None else port
+
+
+def _parse_host(value: str | None, default_port: int) -> tuple[str, int] | None:
+    if not value:
+        return None
+    try:
+        parts = urlsplit(f"//{value.strip()}")
+        port = parts.port
+    except ValueError:
+        return None
+    if not parts.hostname or "@" in parts.netloc or parts.path:
+        return None
+    return parts.hostname, default_port if port is None else port
+
+
+async def authorize_websocket(websocket: WebSocket) -> bool:
+    """Check a WebSocket handshake, closing it when it is refused.
+
+    Every WebSocket route must call this before accept(). HTTP middleware never
+    sees WebSocket scopes, and browsers do not apply CORS to WebSockets, so the
+    Origin check is what keeps other sites from opening these sockets.
+    """
+    client_host = websocket.client.host if websocket.client else None
+    host_header = websocket.headers.get("host")
+    origins = websocket.headers.getlist("origin")
+    if (
+        all(origin_allowed(origin, host_header) for origin in origins)
+        and evaluate_access(client_host, key_from_connection(websocket)).authenticated
+    ):
+        return True
+    await websocket.close(code=1008)
+    return False
 
 
 def security_status(host: str | None, supplied_key: str | None = None) -> dict:
-    required = auth_required_for_host(host)
-    configured = key_configured()
-    authenticated = not required or verify_key(supplied_key)
-    blocked = required and not configured
+    access = evaluate_access(host, supplied_key)
     return {
-        "auth_required": required,
-        "authenticated": authenticated,
-        "key_configured": configured,
+        "auth_required": access.auth_required,
+        "authenticated": access.authenticated,
+        "key_configured": key_configured(),
         "lan_client": not is_loopback_host(host),
         "client_host": host,
-        "blocked": blocked,
+        "blocked": access.blocked,
         "mode": "localhost" if is_loopback_host(host) else "lan",
     }
 
