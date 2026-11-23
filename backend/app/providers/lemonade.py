@@ -7,7 +7,7 @@ available, raises a clean error or returns a degraded response.
 """
 import asyncio
 import shlex
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 from fastapi import HTTPException
@@ -257,9 +257,9 @@ class LemonadeProvider(LLMProvider):
         return ModelsListResponse(models=list(by_name.values()), source=source)
 
     async def get_running_models(self) -> RunningModelsResponse:
-        """Get currently loaded models via /api/ps."""
+        """Get currently loaded models via /api/ps, with the details of /api/v1/health."""
         self._require_capability("ollama_ps", "/api/ps")
-        resp = await self._get("/api/ps")
+        resp, loaded = await asyncio.gather(self._get("/api/ps"), self._loaded_model_details())
         if resp.status_code != 200:
             return RunningModelsResponse(models=[])
         data = resp.json()
@@ -275,7 +275,29 @@ class LemonadeProvider(LLMProvider):
             )
             for m in data.get("models", [])
         ]
+        for model in models:
+            for field, value in loaded.get(model.name, {}).items():
+                setattr(model, field, value)
         return RunningModelsResponse(models=models)
+
+    async def _loaded_model_details(self) -> dict[str, dict]:
+        """Type, pid, and port of each loaded model, where Lemonade reports them."""
+        try:
+            resp = await asyncio.wait_for(self._get("/api/v1/health", timeout=3.0), timeout=3.5)
+            loaded = resp.json().get("all_models_loaded") if resp.status_code == 200 else None
+        except Exception:
+            return {}
+        if not isinstance(loaded, list):
+            return {}
+        return {
+            _canonical_model_name(m["model_name"]): {
+                "type": m["type"] if isinstance(m.get("type"), str) else None,
+                "pid": m["pid"] if type(m.get("pid")) is int and m["pid"] > 0 else None,
+                "port": _url_port(m.get("backend_url")),
+            }
+            for m in loaded
+            if isinstance(m, dict) and m.get("model_name")
+        }
 
     async def show_model(self, name: str) -> ModelShowResponse:
         """Get detailed info about a model via /api/show."""
@@ -469,6 +491,13 @@ def _size_to_bytes(value: object) -> int | None:
             return int(value * (1024 ** 3))
         return int(value)
     return None
+
+
+def _url_port(value: object) -> int | None:
+    try:
+        return urlsplit(value).port if isinstance(value, str) else None
+    except ValueError:
+        return None
 
 
 def _canonical_model_name(value: object) -> str:

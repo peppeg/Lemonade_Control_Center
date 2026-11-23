@@ -12,6 +12,7 @@ Extracts structured information from raw log lines:
 import json
 import re
 import subprocess
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from app.models.schemas import (
@@ -53,6 +54,8 @@ RE_TELEMETRY_TPS = re.compile(
     r"(?:\bTPS:\s*|\btps=)([\d.]+)", re.IGNORECASE)
 RE_TELEMETRY_MODEL = re.compile(
     r"Inference completed:.*?\bmodel=([^,\s]+)", re.IGNORECASE)
+
+RE_SLOT_TASK = re.compile(r"\bid\s+(\d+)\s*\|\s*task\s+(\d+)")
 
 RE_MODEL_LOADED = re.compile(r"model\s+loaded|all\s+slots\s+are\s+idle", re.IGNORECASE)
 
@@ -185,6 +188,122 @@ def _journal_timestamp(value: object) -> str | None:
     return datetime.fromtimestamp(microseconds / 1_000_000, tz=UTC).isoformat()
 
 
+@dataclass
+class _TaskTimings:
+    """What llama.cpp logged about one task."""
+
+    first_line: int
+    prompt_tokens: int | None = None
+    prompt_tps: float | None = None
+    output_tokens: int | None = None
+    generation_tps: float | None = None
+    total_seconds: float | None = None
+    total_tokens: int | None = None
+    truncated: bool | None = None
+
+    def fits(self, record: dict) -> bool:
+        """Whether these timings can belong to a telemetry record."""
+        tokens_in, tokens_out = record.get("input_tokens"), record.get("output_tokens")
+        if self.output_tokens is not None and tokens_out is not None:
+            return self.output_tokens == tokens_out
+        if self.total_tokens is not None and tokens_out is not None:
+            prompt = self.prompt_tokens if self.prompt_tokens is not None else tokens_in
+            return prompt is not None and self.total_tokens == prompt + tokens_out
+        # The prompt may be partly cached, so fewer tokens than the request had.
+        return self.prompt_tokens is not None and tokens_in is not None and self.prompt_tokens <= tokens_in
+
+
+def _read_last_task(lines: list[str], stats: LastTaskStats) -> None:
+    """Fill `stats` from the newest task only.
+
+    Lemonade logs from several threads: lines can be missing, and a few can land
+    after the telemetry of their own task. So the llama.cpp lines are grouped by
+    task, and used only when their token counts fit the telemetry record.
+    """
+    record, start, end = _last_telemetry_record(lines)
+    tasks = _task_timings(lines, start)
+    if record:
+        timings = next((task for task in reversed(tasks) if task.first_line < end and task.fits(record)), None)
+    else:
+        timings = next((task for task in reversed(tasks) if task.output_tokens is not None), None)
+
+    for field, value in record.items():
+        setattr(stats, field, value)
+    if timings is None:
+        return
+    if stats.input_tokens is None:
+        stats.input_tokens = timings.prompt_tokens
+    if stats.output_tokens is None:
+        stats.output_tokens = timings.output_tokens
+    if stats.generation_tps is None:
+        stats.generation_tps = timings.generation_tps
+    stats.prompt_eval_tps = timings.prompt_tps
+    stats.total_duration_seconds = timings.total_seconds
+    stats.truncated = timings.truncated
+
+
+def _last_telemetry_record(lines: list[str]) -> tuple[dict, int, int]:
+    """The newest telemetry record, and the range of lines that can concern it.
+
+    A record is one `Inference completed` line, or the older format with one
+    field per line. Both begin with the input tokens. The range goes from the
+    end of the previous record to the end of this one.
+    """
+    record: dict = {}
+    start = end = 0
+    for index, line in enumerate(lines):
+        fields: dict = {}
+        if m := RE_TELEMETRY_INPUT.search(line):
+            fields["input_tokens"] = int(m.group(1))
+        if m := RE_TELEMETRY_OUTPUT.search(line):
+            fields["output_tokens"] = int(m.group(1))
+        if m := RE_TELEMETRY_TTFT.search(line):
+            fields["ttft_seconds"] = round(float(m.group(1)), 2)
+        if m := RE_TELEMETRY_TPS.search(line):
+            fields["generation_tps"] = float(m.group(1))
+        if m := RE_TELEMETRY_MODEL.search(line):
+            fields["model"] = m.group(1)
+            fields["completed_at"] = _lemonade_timestamp_iso(line)
+
+        if "input_tokens" in fields:
+            start, record = end, {}
+        elif not record or fields.keys() <= record.keys():
+            continue
+        record = fields | record
+        end = index + 1
+    return record, start, end
+
+
+def _task_timings(lines: list[str], start: int) -> list[_TaskTimings]:
+    """The llama.cpp tasks that logged something from line `start`, in order of their last line."""
+    tasks: dict[object, _TaskTimings] = {}
+    for index, line in enumerate(lines[start:], start):
+        values: dict = {}
+        if m := RE_PROMPT_EVAL.search(line):
+            values = {"prompt_tokens": int(m.group(1)), "prompt_tps": float(m.group(2))}
+        elif m := RE_GENERATION.search(line):
+            values = {"output_tokens": int(m.group(2)), "generation_tps": float(m.group(3))}
+        elif m := RE_TOTAL_TIME.search(line):
+            values = {"total_seconds": round(float(m.group(1)) / 1000, 1), "total_tokens": int(m.group(2))}
+        elif m := RE_SLOT_TRUNCATED.search(line):
+            values = {"truncated": bool(int(m.group(1)))}
+        if not values:
+            continue
+
+        m = RE_SLOT_TASK.search(line)
+        key = m.groups() if m else None
+        task = tasks.pop(key, None)
+        # Lines without a task id: a repeated field, or a new prompt, is a new task.
+        if key is None and task and ("prompt_tokens" in values or any(getattr(task, f) is not None for f in values)):
+            tasks[index] = task
+            task = None
+        task = task or _TaskTimings(first_line=index)
+        for field, value in values.items():
+            setattr(task, field, value)
+        tasks[key] = task
+    return list(tasks.values())
+
+
 def parse_last_task(
     service: str = "lemond.service",
     n_lines: int = 200,
@@ -208,47 +327,7 @@ def parse_last_task(
 
     stats = LastTaskStats(available=True, raw_log_lines=lines[-50:])
 
-    for line in reversed(lines):
-        m = RE_TELEMETRY_MODEL.search(line)
-        if m and stats.model is None and stats.input_tokens is None:
-            stats.model = m.group(1)
-            stats.completed_at = _lemonade_timestamp_iso(line)
-
-        m = RE_TELEMETRY_INPUT.search(line)
-        if m and stats.input_tokens is None:
-            stats.input_tokens = int(m.group(1))
-
-        m = RE_TELEMETRY_OUTPUT.search(line)
-        if m and stats.output_tokens is None:
-            stats.output_tokens = int(m.group(1))
-
-        m = RE_TELEMETRY_TTFT.search(line)
-        if m and stats.ttft_seconds is None:
-            stats.ttft_seconds = round(float(m.group(1)), 2)
-
-        m = RE_TELEMETRY_TPS.search(line)
-        if m and stats.generation_tps is None:
-            stats.generation_tps = float(m.group(1))
-
-        m = RE_SLOT_TRUNCATED.search(line)
-        if m and stats.truncated is None:
-            stats.truncated = bool(int(m.group(1)))
-
-        m = RE_PROMPT_EVAL.search(line)
-        if m and stats.input_tokens is None:
-            stats.input_tokens = int(m.group(1))
-            stats.prompt_eval_tps = float(m.group(2))
-        elif m and stats.prompt_eval_tps is None:
-            stats.prompt_eval_tps = float(m.group(2))
-
-        m = RE_GENERATION.search(line)
-        if m and stats.output_tokens is None:
-            stats.output_tokens = int(m.group(2))
-            stats.generation_tps = float(m.group(3))
-
-        m = RE_TOTAL_TIME.search(line)
-        if m and stats.total_duration_seconds is None:
-            stats.total_duration_seconds = round(float(m.group(1)) / 1000, 1)
+    _read_last_task(lines, stats)
 
     if stats.ttft_seconds is None and stats.prompt_eval_tps and stats.input_tokens:
         stats.ttft_seconds = round(stats.input_tokens / stats.prompt_eval_tps, 2)

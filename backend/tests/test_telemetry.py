@@ -15,11 +15,8 @@ def test_linux_provider_labels_measured_and_unsupported_metrics(monkeypatch):
     monkeypatch.setattr("app.services.telemetry.psutil.swap_memory", lambda: SimpleNamespace(used=2 * 1024**3))
     monkeypatch.setattr("app.services.telemetry.psutil.cpu_percent", lambda interval=None: 12.5)
     monkeypatch.setattr(
-        "app.services.telemetry.find_llama_server",
-        lambda: SimpleNamespace(
-            found=True,
-            process=SimpleNamespace(pid=42, rss_gb=3.5, cpu_percent=8.0),
-        ),
+        "app.services.telemetry.find_llama_servers",
+        lambda: [SimpleNamespace(process=SimpleNamespace(pid=42, rss_gb=3.5, cpu_percent=8.0))],
     )
     monkeypatch.setattr(
         "app.services.telemetry.get_gpu_info",
@@ -44,6 +41,24 @@ def test_linux_provider_labels_measured_and_unsupported_metrics(monkeypatch):
     assert (gtt.value, gtt.unit, gtt.evidence) == (8.58, "GB", "AMDGPU sysfs mem_info_gtt_used")
 
 
+def test_linux_provider_names_each_llama_server_when_several_run(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.telemetry.find_llama_servers",
+        lambda: [
+            SimpleNamespace(process=SimpleNamespace(pid=pid, rss_gb=rss, cpu_percent=0.0))
+            for pid, rss in ((42, 0.5), (43, 60.0))
+        ],
+    )
+    monkeypatch.setattr("app.services.telemetry.get_gpu_info", lambda: {"gpu_available": False})
+
+    metrics = LinuxTelemetryProvider().sample().metrics
+
+    assert [(m.value, m.evidence) for m in metrics if m.name == "llama.rss"] == [
+        (0.5, "/proc process RSS, PID 42"),
+        (60.0, "/proc process RSS, PID 43"),
+    ]
+
+
 def test_optional_command_provider_reports_unsupported_when_missing(monkeypatch):
     monkeypatch.setattr("app.services.telemetry.shutil.which", lambda executable: None)
     provider = JsonCommandTelemetryProvider("amdgpu_top", "amdgpu_top", "amdgpu_top", ["--json", "-n", "1"], "amdgpu")
@@ -60,8 +75,8 @@ def test_container_scope_does_not_claim_host_or_accelerator_metrics(monkeypatch)
     monkeypatch.setattr("app.services.telemetry.psutil.swap_memory", lambda: SimpleNamespace(used=0))
     monkeypatch.setattr("app.services.telemetry.psutil.cpu_percent", lambda interval=None: 4.0)
     monkeypatch.setattr(
-        "app.services.telemetry.find_llama_server",
-        lambda: SimpleNamespace(found=False, process=None),
+        "app.services.telemetry.find_llama_servers",
+        list,
     )
     monkeypatch.setattr(
         "app.services.telemetry.get_gpu_info",
