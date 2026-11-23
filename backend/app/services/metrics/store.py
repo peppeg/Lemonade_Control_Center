@@ -376,8 +376,9 @@ class MetricsStore:
                 "INSERT INTO hardware_samples ("
                 "timestamp, ts_epoch, sample_count, ram_used_gb, ram_total_gb,"
                 " ram_percent, ram_percent_min, ram_percent_max, cpu_percent,"
-                " swap_used_gb, gpu_load_percent, gpu_temp_c, temperatures"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                " swap_used_gb, gpu_load_percent, gpu_temp_c, gpu_vram_used_gb,"
+                " gpu_gtt_used_gb, temperatures"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT(timestamp) DO UPDATE SET"
                 " sample_count=excluded.sample_count,"
                 " ram_used_gb=excluded.ram_used_gb,"
@@ -389,6 +390,8 @@ class MetricsStore:
                 " swap_used_gb=excluded.swap_used_gb,"
                 " gpu_load_percent=excluded.gpu_load_percent,"
                 " gpu_temp_c=excluded.gpu_temp_c,"
+                " gpu_vram_used_gb=excluded.gpu_vram_used_gb,"
+                " gpu_gtt_used_gb=excluded.gpu_gtt_used_gb,"
                 " temperatures=excluded.temperatures",
                 (
                     aggregate["timestamp"],
@@ -403,6 +406,8 @@ class MetricsStore:
                     aggregate["swap_used_gb"],
                     aggregate["gpu_load_percent"],
                     aggregate["gpu_temp_c"],
+                    aggregate.get("gpu_vram_used_gb"),
+                    aggregate.get("gpu_gtt_used_gb"),
                     json.dumps(aggregate.get("temperatures") or {}),
                 ),
             )
@@ -428,8 +433,8 @@ class MetricsStore:
             return connection.execute(
                 "SELECT ts_epoch, sample_count, ram_used_gb, ram_total_gb, ram_percent,"
                 " ram_percent_min, ram_percent_max, cpu_percent, swap_used_gb,"
-                " gpu_load_percent, gpu_temp_c, temperatures"
-                " FROM hardware_samples WHERE ts_epoch >= ? AND ts_epoch <= ?"
+                " gpu_load_percent, gpu_temp_c, gpu_vram_used_gb, gpu_gtt_used_gb,"
+                " temperatures FROM hardware_samples WHERE ts_epoch >= ? AND ts_epoch <= ?"
                 " ORDER BY ts_epoch ASC",
                 (start.timestamp(), end.timestamp()),
             ).fetchall()
@@ -632,6 +637,8 @@ def bucket_hardware_rows(rows: list[dict], bucket_seconds: int) -> list[dict]:
                 "swap_used_gb": _mean(_numbers(members, "swap_used_gb")),
                 "gpu_load_percent": _optional_mean(members, "gpu_load_percent"),
                 "gpu_temp_c": _optional_mean(members, "gpu_temp_c"),
+                "gpu_vram_used_gb": _optional_mean(members, "gpu_vram_used_gb"),
+                "gpu_gtt_used_gb": _optional_mean(members, "gpu_gtt_used_gb"),
                 "temps": _merge_temperatures(members),
             }
         )
@@ -758,6 +765,10 @@ CREATE TABLE IF NOT EXISTS hardware_samples (
     swap_used_gb REAL,
     gpu_load_percent REAL,
     gpu_temp_c REAL,
+    -- amdgpu memory in use; NULL where the host does not report it. On APUs
+    -- most of a model lives in GTT rather than dedicated VRAM.
+    gpu_vram_used_gb REAL,
+    gpu_gtt_used_gb REAL,
     temperatures TEXT NOT NULL DEFAULT '{}'
 );
 

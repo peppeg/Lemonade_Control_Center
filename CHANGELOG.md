@@ -8,7 +8,7 @@ The project is under active development, so entries currently describe the evolv
 
 ### Added
 
-- Persisted run history: every completed inference in the Lemonade journal and a per-minute hardware rollup are stored in SQLite (`backend/app/data/lcc_metrics.db`, task records kept indefinitely and hardware rollups for 30 days by default; `TASK_RETENTION_DAYS` and `HARDWARE_RETENTION_DAYS` set a limit, 0 means none), sampled in the background so history accrues with no UI open. New endpoints `/api/metrics/tasks/series`, `/api/metrics/tasks/scale`, `/api/metrics/hardware/series` and `/api/metrics/history/summary`; `/api/metrics/tasks` and the CSV export accept a time range. An existing `task_history.json` is imported once.
+- Persisted run history: every completed inference in the Lemonade journal and a per-minute hardware rollup (including GTT and VRAM in use, where amdgpu reports them) are stored in SQLite (`backend/app/data/lcc_metrics.db`, task records kept indefinitely and hardware rollups for 30 days by default; `TASK_RETENTION_DAYS` and `HARDWARE_RETENTION_DAYS` set a limit, 0 means none), sampled in the background so history accrues with no UI open. New endpoints `/api/metrics/tasks/series`, `/api/metrics/tasks/scale`, `/api/metrics/hardware/series` and `/api/metrics/history/summary`; `/api/metrics/tasks` and the CSV export accept a time range. An existing `task_history.json` is imported once.
 
 ### Changed
 

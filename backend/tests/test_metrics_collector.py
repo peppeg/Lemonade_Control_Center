@@ -222,3 +222,20 @@ async def test_task_sampler_and_pruner_failures_are_logged(store, monkeypatch, c
         "Task history sampling failed: disk I/O error",
         "Metrics history pruning failed: disk I/O error",
     ]
+
+
+@pytest.mark.asyncio
+async def test_the_rollup_keeps_gpu_memory_when_the_host_reports_it(store):
+    for seconds, gtt in ((0, 40.0), (5, 44.0)):
+        sample = point(seconds, 30.0)
+        sample.gpu_vram_used_gb = 0.5
+        sample.gpu_gtt_used_gb = gtt
+        await collector._persist_minute(sample)
+    await collector._persist_minute(point(65, 30.0))  # Next minute: not reported.
+
+    first, second = store.hardware_series(MINUTE, MINUTE + timedelta(minutes=2), 60)
+
+    assert first["gpu_vram_used_gb"] == 0.5
+    assert first["gpu_gtt_used_gb"] == 42.0
+    assert second["gpu_vram_used_gb"] is None
+    assert second["gpu_gtt_used_gb"] is None

@@ -116,7 +116,12 @@ class _MinuteAggregate:
         self.minute_start = minute_start
         self.count = 0
         self._sums: dict[str, float] = {}
-        self._optional: dict[str, list[float]] = {"gpu_load_percent": [], "gpu_temp_c": []}
+        self._optional: dict[str, list[float]] = {
+            "gpu_load_percent": [],
+            "gpu_temp_c": [],
+            "gpu_vram_used_gb": [],
+            "gpu_gtt_used_gb": [],
+        }
         self.ram_percent_min: float | None = None
         self.ram_percent_max: float | None = None
         self.temperatures: dict[str, list[float]] = {}
@@ -132,10 +137,10 @@ class _MinuteAggregate:
         ):
             self._sums[key] = self._sums.get(key, 0.0) + value
 
-        if point.gpu_load_percent is not None:
-            self._optional["gpu_load_percent"].append(point.gpu_load_percent)
-        if point.gpu_temp_c is not None:
-            self._optional["gpu_temp_c"].append(point.gpu_temp_c)
+        for key, values in self._optional.items():
+            value = getattr(point, key)
+            if value is not None:
+                values.append(value)
 
         self.ram_percent_min = (
             point.ram_percent
@@ -171,6 +176,8 @@ class _MinuteAggregate:
             "swap_used_gb": mean("swap_used_gb"),
             "gpu_load_percent": optional_mean("gpu_load_percent"),
             "gpu_temp_c": optional_mean("gpu_temp_c"),
+            "gpu_vram_used_gb": optional_mean("gpu_vram_used_gb"),
+            "gpu_gtt_used_gb": optional_mean("gpu_gtt_used_gb"),
             "temperatures": {
                 label: round(sum(values) / len(values), 1)
                 for label, values in self.temperatures.items()

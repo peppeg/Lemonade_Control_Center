@@ -105,6 +105,17 @@ def test_an_existing_world_readable_database_is_tightened(tmp_path):
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
+def test_hardware_samples_have_nullable_gpu_memory_columns(store):
+    store.initialize()
+    connection = sqlite3.connect(store.path)
+    columns = {row[1]: row for row in connection.execute("PRAGMA table_info(hardware_samples)")}
+    connection.close()
+
+    for name in ("gpu_vram_used_gb", "gpu_gtt_used_gb"):
+        assert columns[name][2] == "REAL"
+        assert columns[name][3] == 0  # Nullable.
+
+
 def test_empty_store_returns_empty_series_not_errors(store):
     end = datetime.now(UTC)
     start = end - timedelta(days=30)
