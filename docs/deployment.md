@@ -19,7 +19,7 @@ You can open that address directly in a browser on the Linux host. If LCC runs o
 ssh -N -L 17600:127.0.0.1:17600 USER@LCC_HOST
 ```
 
-The SSH tunnel reflects the maintainer's usual remote setup, but it is not required for local use. A deliberately exposed trusted-LAN or reverse-proxy deployment is also possible; follow the authentication and network guidance in the README and security documentation rather than publishing the default service directly to the internet.
+The SSH tunnel reflects the maintainer's usual remote setup, but it is not required for local use. A deliberately exposed trusted-LAN or reverse-proxy deployment is also possible; follow the authentication and network guidance in the README and [Security](./security.md#reverse-proxy) rather than publishing the default service directly to the internet. If you run LCC directly on the host (not in the container) behind a reverse proxy, set `LCC_API_KEY` and `REQUIRE_AUTH=true`: clients of a proxy that sends no forwarding headers otherwise appear as localhost.
 
 For Lemonade on the Docker host, the default URL is `http://host.docker.internal:13305`. For a remote server:
 

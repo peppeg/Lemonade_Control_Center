@@ -25,7 +25,8 @@ This is not a minimum requirement.
 | 10.6.x | not yet tested | No public compatibility claim yet |
 | 10.7.0 | tested | Previous active test target |
 | 10.8.x | not yet tested | Release notes reviewed; requires smoke testing before compatibility claim |
-| 10.9.0 | tested with caveats | Current active test target; probe, backend tests, frontend check/build, and basic LCC runtime smoke passed |
+| 10.9.0 | tested with caveats | Last fully tested release; probe, backend tests, frontend check/build, and basic LCC runtime smoke passed |
+| 11.x | not yet formally tested | Compatibility fixes for 11.7 telemetry, nested config keys, and saved model options are merged (see Changelog). A full smoke pass is pending before a compatibility claim |
 
 Manual smoke tests on Lemonade `10.7.0` passed for:
 
