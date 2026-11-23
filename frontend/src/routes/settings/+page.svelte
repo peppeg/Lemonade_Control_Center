@@ -776,7 +776,7 @@
           <div class="ops-banner {$securityStatus?.blocked ? 'ops-banner-danger' : 'ops-banner-muted'}">
             <CircleAlert class="mt-0.5 h-5 w-5 shrink-0 text-status-warn" />
             <p class="text-sm">
-              Localhost can use LCC without login. LAN or remote API clients require <code class="ops-mono">LCC_API_KEY</code>.
+              Localhost can use LCC without login. LAN, remote and proxied API clients require <code class="ops-mono">LCC_API_KEY</code>.
               {$securityStatus?.blocked ? ' Remote access is currently blocked because the backend key is not configured.' : ''}
             </p>
           </div>

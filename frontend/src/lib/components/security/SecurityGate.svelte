@@ -48,8 +48,8 @@
         </div>
         <p class="ops-subtitle mt-2">
           {blocked
-            ? 'This request is coming from LAN/remote, but the backend has no LCC_API_KEY configured.'
-            : 'This browser is not on localhost. Enter the LCC API key to continue.'}
+            ? 'This browser is not connected directly from the LCC host, and the backend has no LCC_API_KEY configured.'
+            : 'This browser is not connected directly from the LCC host. Enter the LCC API key to continue.'}
         </p>
       </div>
 
@@ -57,8 +57,8 @@
         {#if blocked}
           <div class="ops-banner ops-banner-danger">
             <p class="text-sm">
-              Set <code class="ops-mono">LCC_API_KEY</code> in <code class="ops-mono">backend/.env</code> or bind the app to
-              <code class="ops-mono">127.0.0.1</code>.
+              Set <code class="ops-mono">LCC_API_KEY</code> in <code class="ops-mono">backend/.env</code>, or open LCC
+              directly from its own host.
             </p>
           </div>
         {:else}

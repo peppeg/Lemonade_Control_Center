@@ -7,9 +7,8 @@ from starlette.responses import JSONResponse, Response
 
 from app.services.security import (
     audit_write,
+    connection_access,
     cross_site_request,
-    evaluate_access,
-    key_from_connection,
 )
 
 PUBLIC_API_PATHS = {
@@ -18,11 +17,11 @@ PUBLIC_API_PATHS = {
 
 
 class LccAccessControlMiddleware(BaseHTTPMiddleware):
-    """Require LCC_API_KEY for non-loopback API clients.
+    """Require LCC_API_KEY for API clients that are not directly on this host.
 
     Static/frontend routes remain public so the browser can render the login
-    prompt. API routes are protected whenever the request is remote or
-    REQUIRE_AUTH=true. State-changing requests from other web sites are refused
+    prompt. API routes are protected whenever the request is remote, forwarded
+    by a proxy, or REQUIRE_AUTH=true. State-changing requests from other web sites are refused
     on every path, whatever the client address or key.
     """
 
@@ -44,15 +43,14 @@ class LccAccessControlMiddleware(BaseHTTPMiddleware):
         if not path.startswith("/api/") or path in PUBLIC_API_PATHS:
             return await call_next(request)
 
-        host = request.client.host if request.client else None
-        access = evaluate_access(host, key_from_connection(request))
+        access = connection_access(request)
 
         if access.blocked:
             response = JSONResponse(
                 {
                     "detail": (
                         "LAN/API access is blocked because LCC_API_KEY is not configured. "
-                        "Set LCC_API_KEY or bind the app to 127.0.0.1."
+                        "Set LCC_API_KEY, or connect to LCC directly from its own host."
                     )
                 },
                 status_code=503,

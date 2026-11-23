@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from ipaddress import ip_address
@@ -13,6 +14,8 @@ from starlette.requests import HTTPConnection, Request
 from starlette.websockets import WebSocket
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 AUDIT_LOG = Path(__file__).parent.parent / "data" / "audit.jsonl"
 
@@ -26,7 +29,11 @@ DEV_ORIGINS = (
 # Methods that change state: audited, and refused when they come from another site.
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
+# Headers a proxy adds to name the client it speaks for.
+FORWARDING_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip")
+
 _DEFAULT_PORTS = {"http": 80, "https": 443}
+_warned_about_forwarding = False
 
 
 @dataclass(frozen=True)
@@ -51,9 +58,22 @@ def is_loopback_host(host: str | None) -> bool:
         return False
 
 
-def auth_required_for_host(host: str | None) -> bool:
-    """Localhost is trusted unless REQUIRE_AUTH=true; LAN clients need a key."""
-    return settings.require_auth or not is_loopback_host(host)
+def auth_required_for_host(host: str | None, *, forwarded: bool = False) -> bool:
+    """Localhost is trusted unless REQUIRE_AUTH=true; other clients need a key.
+
+    Localhost trust covers direct connections only. A forwarded request comes
+    from whoever the proxy speaks for, and the headers that name that client
+    may be the client's own, so no forwarded address is ever trusted as local.
+    """
+    return settings.require_auth or forwarded or not is_loopback_host(host)
+
+
+def client_host(connection: HTTPConnection) -> str | None:
+    return connection.client.host if connection.client else None
+
+
+def forwarded_by_proxy(connection: HTTPConnection) -> bool:
+    return any(header in connection.headers for header in FORWARDING_HEADERS)
 
 
 def key_configured() -> bool:
@@ -74,9 +94,32 @@ def key_from_connection(connection: HTTPConnection) -> str | None:
     return connection.headers.get("x-lcc-api-key") or connection.query_params.get("lcc_key")
 
 
-def evaluate_access(host: str | None, supplied_key: str | None) -> AccessDecision:
+def connection_access(connection: HTTPConnection) -> AccessDecision:
     """Apply the key rules. HTTP and WebSocket clients share this decision."""
-    required = auth_required_for_host(host)
+    forwarded = forwarded_by_proxy(connection)
+    if forwarded:
+        _warn_about_forwarding()
+    return evaluate_access(
+        client_host(connection), key_from_connection(connection), forwarded=forwarded
+    )
+
+
+def _warn_about_forwarding() -> None:
+    """Explain once why a proxied setup asks for a key."""
+    global _warned_about_forwarding
+    if _warned_about_forwarding or settings.require_auth or settings.trusted_proxy_ips.strip():
+        return
+    _warned_about_forwarding = True
+    logger.warning(
+        "A request was forwarded by a proxy. Forwarded clients always need LCC_API_KEY. "
+        "Set TRUSTED_PROXY_IPS to the proxy address to record the real client address."
+    )
+
+
+def evaluate_access(
+    host: str | None, supplied_key: str | None, *, forwarded: bool = False
+) -> AccessDecision:
+    required = auth_required_for_host(host, forwarded=forwarded)
     return AccessDecision(
         auth_required=required,
         authenticated=not required or verify_key(supplied_key),
@@ -168,28 +211,30 @@ async def authorize_websocket(websocket: WebSocket) -> bool:
     sees WebSocket scopes, and browsers do not apply CORS to WebSockets, so the
     Origin check is what keeps other sites from opening these sockets.
     """
-    client_host = websocket.client.host if websocket.client else None
     host_header = websocket.headers.get("host")
     origins = websocket.headers.getlist("origin")
     if (
         all(origin_allowed(origin, host_header) for origin in origins)
-        and evaluate_access(client_host, key_from_connection(websocket)).authenticated
+        and connection_access(websocket).authenticated
     ):
         return True
     await websocket.close(code=1008)
     return False
 
 
-def security_status(host: str | None, supplied_key: str | None = None) -> dict:
-    access = evaluate_access(host, supplied_key)
+def security_status(
+    host: str | None, supplied_key: str | None = None, *, forwarded: bool = False
+) -> dict:
+    access = evaluate_access(host, supplied_key, forwarded=forwarded)
+    local = is_loopback_host(host) and not forwarded
     return {
         "auth_required": access.auth_required,
         "authenticated": access.authenticated,
         "key_configured": key_configured(),
-        "lan_client": not is_loopback_host(host),
+        "lan_client": not local,
         "client_host": host,
         "blocked": access.blocked,
-        "mode": "localhost" if is_loopback_host(host) else "lan",
+        "mode": "localhost" if local else "lan",
     }
 
 
@@ -209,9 +254,9 @@ def audit_write(
         "method": request.method,
         "path": request.url.path,
         "status_code": status_code,
-        "client_host": request.client.host if request.client else None,
+        "client_host": client_host(request),
         "authenticated": authenticated,
-        "local": is_loopback_host(request.client.host if request.client else None),
+        "local": is_loopback_host(client_host(request)) and not forwarded_by_proxy(request),
     }
     with AUDIT_LOG.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, separators=(",", ":")) + "\n")
