@@ -135,6 +135,10 @@ class MetricsStore:
         self._path = Path(db_path) if db_path is not None else Path(settings.metrics_db_path)
         self._lock = threading.Lock()
         self._ready = False
+        # The connection every write goes through; see _writer_connection().
+        self._writer: sqlite3.Connection | None = None
+        # (st_dev, st_ino) of the file it was opened on.
+        self._writer_file: tuple[int, int] | None = None
 
     @property
     def path(self) -> Path:
@@ -184,12 +188,15 @@ class MetricsStore:
             self._path.with_name(name + "-shm"),
         )
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self, check_same_thread: bool = True) -> sqlite3.Connection:
         # mode=rw: SQLite must not create the file itself. If it disappears
         # while LCC runs, the jobs fail and say so instead of SQLite quietly
         # recreating it with the umask's permissions. The next start creates it.
         connection = sqlite3.connect(
-            f"{self._path.absolute().as_uri()}?mode=rw", uri=True, timeout=5.0
+            f"{self._path.absolute().as_uri()}?mode=rw",
+            uri=True,
+            timeout=5.0,
+            check_same_thread=check_same_thread,
         )
         connection.row_factory = sqlite3.Row
         # Per connection, unlike journal_mode. In WAL mode NORMAL cannot corrupt
@@ -197,6 +204,55 @@ class MetricsStore:
         # metrics sampled every few seconds is not worth an fsync each time.
         connection.execute("PRAGMA synchronous=NORMAL")
         return connection
+
+    def _writer_connection(self) -> sqlite3.Connection:
+        """The connection all writes share. The caller holds self._lock.
+
+        It stays open until close(). SQLite checkpoints the WAL and deletes
+        the -wal and -shm files when the last connection to the database
+        closes, so a connection per write paid for a checkpoint and a
+        recreated WAL on every write: synchronous=NORMAL saved nothing, and
+        the 5 s hardware sampler alone synced the disk tens of thousands of
+        times a day. With this one open, reads still open short connections
+        of their own, and closing those checkpoints nothing.
+
+        A file removed or replaced while LCC runs would keep receiving writes
+        through this connection, unseen. So the file is checked before each
+        write (a stat(), which opens nothing), and when it is no longer the
+        one this connection was opened on, the connection is dropped and the
+        next is opened with mode=rw, which fails for a missing file as
+        before.
+        """
+        try:
+            info = os.stat(self._path)
+            current: tuple[int, int] | None = (info.st_dev, info.st_ino)
+        except FileNotFoundError:
+            current = None
+        if self._writer is not None and current != self._writer_file:
+            self._close_writer()
+        if self._writer is None:
+            # Used from the worker threads of asyncio.to_thread(), one at a
+            # time under self._lock.
+            self._writer = self._connect(check_same_thread=False)
+            self._writer_file = current
+        return self._writer
+
+    def _close_writer(self) -> None:
+        if self._writer is not None:
+            try:
+                self._writer.close()
+            finally:
+                self._writer = None
+                self._writer_file = None
+
+    def close(self) -> None:
+        """Close the write connection; the next write opens it again.
+
+        Called on shutdown, so the last connection closes and SQLite folds the
+        WAL back into the database.
+        """
+        with self._lock:
+            self._close_writer()
 
     def initialize(self) -> None:
         """Create the schema once. Safe to call repeatedly."""
@@ -206,7 +262,7 @@ class MetricsStore:
             if self._ready:
                 return
             self._create_file()
-            connection = self._connect()
+            connection = self._writer_connection()
             try:
                 # WAL keeps the sampler's writes from blocking API reads.
                 connection.execute("PRAGMA journal_mode=WAL")
@@ -216,15 +272,16 @@ class MetricsStore:
                     ("schema_version", str(SCHEMA_VERSION)),
                 )
                 connection.commit()
-            finally:
-                connection.close()
+            except BaseException:
+                self._close_writer()
+                raise
             self._ready = True
 
     def _write(self, statements):
-        """Run a callable against a connection under the write lock."""
+        """Run a callable in one transaction on the write connection."""
         self.initialize()
         with self._lock:
-            connection = self._connect()
+            connection = self._writer_connection()
             try:
                 # One transaction for the reads and writes of the callable, so a
                 # check such as the clear cut-off holds for the rows it lets in.
@@ -236,8 +293,6 @@ class MetricsStore:
                 with contextlib.suppress(sqlite3.Error):
                     connection.rollback()
                 raise
-            finally:
-                connection.close()
 
     def _read(self, statements):
         self.initialize()

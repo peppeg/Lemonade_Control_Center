@@ -285,6 +285,78 @@ def test_a_database_removed_while_running_is_not_recreated_with_the_umask(tmp_pa
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
 
 
+def test_writes_keep_the_wal_file_instead_of_recreating_it(store):
+    """Reported in review: a connection per write was the last one to close,
+    so SQLite checkpointed and deleted the -wal and -shm files every time and
+    synchronous=NORMAL saved no sync at all."""
+    store.initialize()
+    wal = store._files()[1]
+    store.upsert_hardware_minute(_hardware_minute(BASE))
+    inode = wal.stat().st_ino
+
+    for second in range(30):
+        store.upsert_hardware_minute({**_hardware_minute(BASE), "sample_count": second + 2})
+        store.insert_tasks([make_row(second)])
+        store.get_meta("schema_version")  # A read in between closes its own connection.
+        assert wal.exists()
+        assert wal.stat().st_ino == inode
+
+    assert store.count_tasks() == 30
+
+
+def test_closing_the_store_folds_the_wal_back_and_a_later_write_reopens_it(store):
+    store.insert_tasks([make_row(0)])
+    wal = store._files()[1]
+    assert wal.exists()
+
+    store.close()
+
+    assert not wal.exists()
+    store.insert_tasks([make_row(60)])
+    assert store.count_tasks() == 2
+
+
+def test_writes_from_several_threads_share_the_connection(store):
+    import threading
+
+    store.initialize()
+    errors: list[BaseException] = []
+
+    def write(offset: int) -> None:
+        try:
+            for index in range(10):
+                store.insert_tasks([make_row(offset * 100 + index)])
+        except BaseException as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=write, args=(offset,)) for offset in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert errors == []
+    assert store.count_tasks() == 40
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_a_database_replaced_while_running_is_written_through_a_new_connection(tmp_path):
+    store = MetricsStore(tmp_path / "lcc_metrics.db")
+    store.insert_tasks([make_row(0)])
+    replacement = tmp_path / "replacement.db"
+    other = MetricsStore(replacement)
+    other.initialize()
+    other.close()
+    os.replace(replacement, store.path)
+    for leftover in store._files()[1:]:
+        leftover.unlink(missing_ok=True)
+
+    store.insert_tasks([make_row(60)])
+
+    # Written to the file now at the path, not to the one that was replaced.
+    assert MetricsStore(store.path).count_tasks() == 1
+
+
 def test_hardware_samples_have_nullable_gpu_memory_columns(store):
     store.initialize()
     connection = sqlite3.connect(store.path)

@@ -82,7 +82,9 @@ class TaskHistory:
     def use_store(self, store: MetricsStore) -> None:
         """Point the history at a different database (tests, relocation)."""
         with self._read_lock:
-            self._store = store
+            previous, self._store = self._store, store
+        if previous is not store:
+            previous.close()
 
     # ── Ingestion ──────────────────────────────────────────
 

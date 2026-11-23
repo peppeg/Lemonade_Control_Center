@@ -1,6 +1,7 @@
 """
 Lemonade Control Center — Backend API
 """
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -25,6 +26,7 @@ from app.routers import (
 from app.routers import settings as settings_router
 from app.services.log_redaction import redact_key_in_logs
 from app.services.metrics.collector import start_collector, stop_collector
+from app.services.metrics.collector import store as metrics_store
 from app.services.security import DEV_ORIGINS, is_loopback_host
 from app.services.state_files import protect_data_dir
 
@@ -52,6 +54,8 @@ async def lifespan(app: FastAPI):
     start_collector(interval_seconds=10)
     yield
     stop_collector()
+    # Last, so a write still running on a worker thread finishes first.
+    await asyncio.to_thread(metrics_store().close)
     print("🍋 Shutting down...")
 
 
