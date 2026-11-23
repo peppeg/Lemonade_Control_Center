@@ -51,16 +51,19 @@ def _connect():
 
 def _running(pid):
     try:
-        return psutil.Process(pid).status() != psutil.STATUS_ZOMBIE
+        # A killed process is briefly a zombie, or dead, until it is reaped.
+        return psutil.Process(pid).status() not in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD}
     except psutil.NoSuchProcess:
         return False
 
 
 def _stopped(pid, timeout=5):
     deadline = time.monotonic() + timeout
-    while _running(pid) and time.monotonic() < deadline:
+    while _running(pid):
+        if time.monotonic() > deadline:
+            return False
         time.sleep(0.02)
-    return not _running(pid)
+    return True
 
 
 def _messages(stream):
