@@ -28,7 +28,7 @@ This section is the canonical handoff for ongoing implementation. The P0/P1/P2 s
 - The 0.3.0 UI and operations closeout is implemented and merged on `main` through pull request [#18](https://github.com/peppeg/Lemonade_Control_Center/pull/18). It includes the cross-page UI review, clearer diagnostics, guarded backend install/update operations, documentation refresh, and final validation against Lemonade Server 10.9.0.
 - [LCC 0.3.0](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.0) was released on 2026-07-13. Steps 0–6 below describe the delivered 0.3.0 foundation.
 - Post-0.3.0 maintenance on `main` (pull requests #20–#34) added Lemonade 11.x compatibility fixes (11.7 telemetry parsing, nested config keys, `recipe_options` from the models API), AMD GTT/VRAM telemetry, the `lemonade_exposed` diagnostic, Authorization forwarding to Lemonade, and reasoning-model Smoke Tests. See the [Changelog](../CHANGELOG.md).
-- A code audit on 2026-11-09 found access-control and hardening gaps, re-verified against the code on 2026-11-12. Step 7 (Security And Maintenance Hardening) is in progress; 7.1, 7.2, and 7.4 are merged. Steps 8–10 follow in order: long-run performance history (adopted from a contributor fork), Bench Lab v2, then multi-host and agent readiness. Step 7 must land first, because every later step adds endpoints, stored state, or remote surface that those gaps affect.
+- A code audit on 2026-11-09 found access-control and hardening gaps, re-verified against the code on 2026-11-12. Step 7 (Security And Maintenance Hardening) is in progress; 7.1 to 7.4 are merged. Steps 8–10 follow in order: long-run performance history (adopted from a contributor fork), Bench Lab v2, then multi-host and agent readiness. Step 7 must land first, because every later step adds endpoints, stored state, or remote surface that those gaps affect.
 - Existing evidence records remain backward compatible. Records created before journal or identity linkage show those optional fields as unavailable.
 
 ### Execution Order
@@ -171,7 +171,7 @@ Status: merged in [#41](https://github.com/peppeg/Lemonade_Control_Center/pull/4
 
 ##### 7.3 Protect local secrets and state files
 
-Status: in review, [#45](https://github.com/peppeg/Lemonade_Control_Center/pull/45)
+Status: merged in [#45](https://github.com/peppeg/Lemonade_Control_Center/pull/45) on 2026-11-23
 
 - Every state writer uses `services/state_files.py`: a temporary file in the same directory, `fsync`, and `os.replace`, with mode `0600`.
 - The data directory is created with mode `0700`. On startup an existing one is tightened, together with `config.json`.
