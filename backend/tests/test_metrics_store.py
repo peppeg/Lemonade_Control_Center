@@ -20,7 +20,11 @@ from app.services.metrics.store import (
     percentile,
     resolve_range,
 )
-from app.services.metrics.task_history import MIGRATION_META_KEY, TaskHistory
+from app.services.metrics.task_history import (
+    MIGRATION_META_KEY,
+    LegacyHistoryError,
+    TaskHistory,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "lemond_journal_11_7.log"
 BASE = datetime(2026, 8, 22, 10, 0, tzinfo=UTC)
@@ -673,13 +677,64 @@ def test_migration_without_a_legacy_file_is_a_no_op(tmp_path, store):
     assert store.count_tasks() == 0
 
 
-def test_migration_survives_a_corrupt_legacy_file(tmp_path, store):
+@pytest.mark.parametrize(
+    "content",
+    [b"{not json", b'{"tasks": "none"}', b"[]", b"\xff\xfe not utf-8"],
+    ids=["invalid-json", "tasks-not-a-list", "not-an-object", "not-utf-8"],
+)
+def test_a_legacy_file_that_cannot_be_read_is_imported_on_a_later_start(
+    tmp_path, store, content
+):
+    """Reported in review: a failed import was marked done and never retried."""
     legacy = tmp_path / "task_history.json"
-    legacy.write_text("{not json", encoding="utf-8")
+    legacy.write_bytes(content)
     history = TaskHistory(store)
 
-    assert history.migrate_legacy_json(legacy) == 0
-    assert store.count_tasks() == 0
+    with pytest.raises(LegacyHistoryError):
+        history.migrate_legacy_json(legacy)
+    assert store.get_meta(MIGRATION_META_KEY) is None
+
+    legacy.write_text(json.dumps({"tasks": [_legacy_entry()]}), encoding="utf-8")
+
+    assert history.migrate_legacy_json(legacy) == 1
+    assert store.get_meta(MIGRATION_META_KEY) is not None
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX permissions")
+def test_a_legacy_file_that_cannot_be_opened_is_not_marked_imported(tmp_path, store):
+    legacy = tmp_path / "task_history.json"
+    legacy.write_text(json.dumps({"tasks": [_legacy_entry()]}), encoding="utf-8")
+    legacy.chmod(0)
+    try:
+        with pytest.raises(LegacyHistoryError):
+            TaskHistory(store).migrate_legacy_json(legacy)
+    finally:
+        legacy.chmod(0o600)
+
+    assert store.get_meta(MIGRATION_META_KEY) is None
+
+
+def test_a_failed_insert_does_not_mark_the_import_done(tmp_path, store, monkeypatch):
+    legacy = tmp_path / "task_history.json"
+    legacy.write_text(json.dumps({"tasks": [_legacy_entry()]}), encoding="utf-8")
+
+    def unwritable(rows):
+        raise sqlite3.OperationalError("attempt to write a readonly database")
+
+    monkeypatch.setattr(store, "insert_tasks", unwritable)
+
+    with pytest.raises(sqlite3.OperationalError):
+        TaskHistory(store).migrate_legacy_json(legacy)
+    assert store.get_meta(MIGRATION_META_KEY) is None
+
+
+def _legacy_entry() -> dict:
+    return {
+        "timestamp": BASE.isoformat(), "model": "current",
+        "input_tokens": 91, "output_tokens": 61, "prompt_tps": 73.39,
+        "gen_tps": 13.84, "ttft_seconds": 1.24, "total_seconds": 5.6,
+        "finish_reason": "stop", "finish_confidence": "inferred",
+    }
 
 
 def test_migration_skips_unusable_legacy_entries(tmp_path, store):

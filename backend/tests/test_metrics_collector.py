@@ -268,3 +268,22 @@ async def test_an_unreadable_journal_is_logged_by_the_task_sampler(store, monkey
         ),
     ]
     assert collector.task_sampler_failures.failures == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failed_legacy_import_is_logged_once_per_start(store, monkeypatch, caplog, tmp_path):
+    legacy = tmp_path / "task_history.json"
+    legacy.write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr("app.services.metrics.task_history.HISTORY_FILE", legacy)
+    monkeypatch.setattr(collector, "sample_tasks_once", _no_tasks)
+
+    with caplog.at_level(logging.WARNING, logger=collector.log.name):
+        await collector.bootstrap()
+
+    [warning] = _warnings(caplog)
+    assert warning.startswith("Import of task_history.json failed: cannot read")
+    assert store.get_meta("task_history_json_imported") is None
+
+
+async def _no_tasks() -> int:
+    return 0

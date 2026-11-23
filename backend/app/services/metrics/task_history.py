@@ -147,24 +147,39 @@ class TaskHistory:
 
         The file itself is left in place: it is the previous version's data and
         removing it would make a downgrade lossy.
+
+        The import is marked done only once it succeeded, or when there is no
+        file to import. A file that cannot be read or parsed raises
+        LegacyHistoryError and is tried again on the next start; the collector
+        logs it once per start, so a file that stays corrupt is not retried in
+        a loop. Single unusable entries in a readable file are skipped.
         """
         if self._store.get_meta(MIGRATION_META_KEY):
             return 0
         source = path or HISTORY_FILE
         imported = 0
         if source.exists():
-            try:
-                data = json.loads(source.read_text(encoding="utf-8"))
-                rows = [
-                    _row_from_legacy(item)
-                    for item in data.get("tasks", [])
-                    if isinstance(item, dict)
-                ]
-                imported = self._store.insert_tasks([row for row in rows if row])
-            except (OSError, TypeError, ValueError):
-                imported = 0
+            rows = _read_legacy_rows(source)
+            imported = self._store.insert_tasks(rows)
         self._store.set_meta(MIGRATION_META_KEY, datetime.now(UTC).isoformat())
         return imported
+
+
+class LegacyHistoryError(Exception):
+    """task_history.json exists but cannot be imported."""
+
+
+def _read_legacy_rows(source: Path) -> list[TaskRow]:
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        # ValueError covers both invalid JSON and invalid UTF-8.
+        raise LegacyHistoryError(f"cannot read {source}: {error}") from error
+    tasks = data.get("tasks") if isinstance(data, dict) else None
+    if not isinstance(tasks, list):
+        raise LegacyHistoryError(f"{source} holds no list of tasks")
+    rows = [_row_from_legacy(item) for item in tasks if isinstance(item, dict)]
+    return [row for row in rows if row]
 
 
 def _to_row(record: TaskTelemetryRecord) -> TaskRow:
