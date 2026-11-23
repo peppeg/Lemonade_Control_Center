@@ -23,6 +23,7 @@ from app.services.completion_runner import CompletionRunner
 from app.services.hardware import get_hardware_info
 from app.services.log_parser import get_logs_for_window
 from app.services.process import find_llama_server
+from app.services.state_files import write_private_text
 from app.services.telemetry import TelemetryManager
 
 EVIDENCE_FILE = Path(__file__).parent.parent / "data" / "run_evidence.json"
@@ -38,10 +39,9 @@ class RunEvidenceStorage:
     def add(self, evidence: RunEvidenceSeed) -> None:
         results = self.get_all()
         results.insert(0, evidence)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
+        write_private_text(
+            self.path,
             json.dumps([item.model_dump(mode="json") for item in results[: self.max_results]], indent=2),
-            encoding="utf-8",
         )
 
     def get_all(

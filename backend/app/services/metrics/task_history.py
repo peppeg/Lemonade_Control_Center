@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.capabilities import capabilities
 from app.services.log_parser import parse_last_task
+from app.services.state_files import write_private_text
 
 HISTORY_FILE = Path(__file__).parent.parent.parent / "data" / "task_history.json"
 
@@ -94,10 +95,9 @@ class TaskHistory:
             pass
 
     def _save(self) -> None:
-        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        HISTORY_FILE.write_text(
+        write_private_text(
+            HISTORY_FILE,
             json.dumps({"tasks": [asdict(task) for task in self._tasks]}, indent=2),
-            encoding="utf-8",
         )
 
 

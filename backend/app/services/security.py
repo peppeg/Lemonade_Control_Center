@@ -14,10 +14,13 @@ from starlette.requests import HTTPConnection, Request
 from starlette.websockets import WebSocket
 
 from app.config import settings
+from app.services.state_files import append_private_line
 
 logger = logging.getLogger(__name__)
 
 AUDIT_LOG = Path(__file__).parent.parent / "data" / "audit.jsonl"
+AUDIT_MAX_BYTES = 5 * 1024 * 1024
+AUDIT_BACKUPS = 3
 
 # Origins of the frontend development servers.
 DEV_ORIGINS = (
@@ -287,7 +290,6 @@ def audit_write(
     if request.method not in MUTATING_METHODS:
         return
 
-    AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "timestamp": datetime.now(UTC).isoformat(),
         "method": request.method,
@@ -297,5 +299,9 @@ def audit_write(
         "authenticated": authenticated,
         "local": is_loopback_host(client_host(request)) and direct_connection(request),
     }
-    with AUDIT_LOG.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+    append_private_line(
+        AUDIT_LOG,
+        json.dumps(record, separators=(",", ":")),
+        max_bytes=AUDIT_MAX_BYTES,
+        backups=AUDIT_BACKUPS,
+    )

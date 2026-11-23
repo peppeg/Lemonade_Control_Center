@@ -33,6 +33,7 @@ from app.models.setup import (
     SystemConfig,
 )
 from app.services.process import find_llama_server
+from app.services.state_files import ensure_private_dir, write_private_text
 
 CONFIG_FILE = Path(__file__).parent.parent / "data" / "config.json"
 LEMONADE_BEACON_PORT = 13305
@@ -53,7 +54,7 @@ class SetupService:
 
     def __init__(self, config_file: Path = CONFIG_FILE):
         self.config_file = config_file
-        self.config_file.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.config_file.parent)
 
     def get_config(self) -> LccConfig:
         if not self.config_file.exists():
@@ -69,7 +70,7 @@ class SetupService:
         return self._redact(self.get_config())
 
     def save_config(self, config: LccConfig) -> None:
-        self.config_file.write_text(config.model_dump_json(indent=2), encoding="utf-8")
+        write_private_text(self.config_file, config.model_dump_json(indent=2))
 
     def is_setup_complete(self) -> bool:
         return self.get_config().setup_complete
