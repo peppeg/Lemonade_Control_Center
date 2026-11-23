@@ -33,7 +33,7 @@ MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 FORWARDING_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip")
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
-_warned_about_forwarding = False
+_warned: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -58,22 +58,51 @@ def is_loopback_host(host: str | None) -> bool:
         return False
 
 
-def auth_required_for_host(host: str | None, *, forwarded: bool = False) -> bool:
-    """Localhost is trusted unless REQUIRE_AUTH=true; other clients need a key.
-
-    Localhost trust covers direct connections only. A forwarded request comes
-    from whoever the proxy speaks for, and the headers that name that client
-    may be the client's own, so no forwarded address is ever trusted as local.
-    """
-    return settings.require_auth or forwarded or not is_loopback_host(host)
+def auth_required_for_host(host: str | None, *, direct: bool = True) -> bool:
+    """Localhost is trusted unless REQUIRE_AUTH=true; other clients need a key."""
+    return settings.require_auth or not direct or not is_loopback_host(host)
 
 
 def client_host(connection: HTTPConnection) -> str | None:
     return connection.client.host if connection.client else None
 
 
+def direct_connection(connection: HTTPConnection) -> bool:
+    """Return True when localhost trust can apply to this connection.
+
+    A forwarded request comes from whoever the proxy speaks for, and the headers
+    that name that client may be the client's own, so no forwarded address is
+    ever trusted as local.
+
+    A site can point its own domain at 127.0.0.1 (DNS rebinding). Its pages then
+    connect from this host with matching Origin and Host, but Host still carries
+    that domain.
+    """
+    return not forwarded_by_proxy(connection) and host_allowed(connection.headers.get("host"))
+
+
 def forwarded_by_proxy(connection: HTTPConnection) -> bool:
     return any(header in connection.headers for header in FORWARDING_HEADERS)
+
+
+def host_allowed(value: str | None) -> bool:
+    """Return True for a Host that no other site can point at this machine.
+
+    Browsers always send Host; a client that does not is not a browser.
+    """
+    if value is None:
+        return True
+    parsed = _parse_host(value, _DEFAULT_PORTS["http"])
+    if parsed is None:
+        return False
+    name, _port = parsed
+    if name == "localhost" or name.endswith(".localhost"):
+        return True
+    try:
+        ip_address(name)
+    except ValueError:
+        return name in _configured_list(settings.allowed_hosts.lower())
+    return True
 
 
 def key_configured() -> bool:
@@ -96,30 +125,39 @@ def key_from_connection(connection: HTTPConnection) -> str | None:
 
 def connection_access(connection: HTTPConnection) -> AccessDecision:
     """Apply the key rules. HTTP and WebSocket clients share this decision."""
-    forwarded = forwarded_by_proxy(connection)
-    if forwarded:
-        _warn_about_forwarding()
-    return evaluate_access(
-        client_host(connection), key_from_connection(connection), forwarded=forwarded
-    )
+    direct = direct_connection(connection)
+    if not direct and not settings.require_auth:
+        _explain_key_requirement(connection)
+    return evaluate_access(client_host(connection), key_from_connection(connection), direct=direct)
 
 
-def _warn_about_forwarding() -> None:
-    """Explain once why a proxied setup asks for a key."""
-    global _warned_about_forwarding
-    if _warned_about_forwarding or settings.require_auth or settings.trusted_proxy_ips.strip():
-        return
-    _warned_about_forwarding = True
-    logger.warning(
-        "A request was forwarded by a proxy. Forwarded clients always need LCC_API_KEY. "
-        "Set TRUSTED_PROXY_IPS to the proxy address to record the real client address."
-    )
+def _explain_key_requirement(connection: HTTPConnection) -> None:
+    """Log once, per reason, why a client on this host is asked for a key."""
+    if forwarded_by_proxy(connection):
+        if not settings.trusted_proxy_ips.strip():
+            _warn_once(
+                "forwarded",
+                "A request was forwarded by a proxy. Forwarded clients always need LCC_API_KEY. "
+                "Set TRUSTED_PROXY_IPS to the proxy address to record the real client address.",
+            )
+    elif is_loopback_host(client_host(connection)):
+        _warn_once(
+            "host",
+            "LCC was opened from this host under a name it does not know. Such requests need "
+            "LCC_API_KEY. Use localhost, or add the name to ALLOWED_HOSTS if it is yours.",
+        )
+
+
+def _warn_once(reason: str, message: str) -> None:
+    if reason not in _warned:
+        _warned.add(reason)
+        logger.warning(message)
 
 
 def evaluate_access(
-    host: str | None, supplied_key: str | None, *, forwarded: bool = False
+    host: str | None, supplied_key: str | None, *, direct: bool = True
 ) -> AccessDecision:
-    required = auth_required_for_host(host, forwarded=forwarded)
+    required = auth_required_for_host(host, direct=direct)
     return AccessDecision(
         auth_required=required,
         authenticated=not required or verify_key(supplied_key),
@@ -169,12 +207,13 @@ def cross_site_request(request: Request) -> bool:
 def _origin_configured(origin: str) -> bool:
     parsed = _parse_origin(origin)
     return parsed is not None and any(
-        parsed == _parse_origin(item) for item in (*DEV_ORIGINS, *_configured_origins())
+        parsed == _parse_origin(item)
+        for item in (*DEV_ORIGINS, *_configured_list(settings.allowed_origins))
     )
 
 
-def _configured_origins() -> list[str]:
-    return [item.strip() for item in settings.allowed_origins.split(",") if item.strip()]
+def _configured_list(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _parse_origin(value: str) -> tuple[str, str, int] | None:
@@ -223,10 +262,10 @@ async def authorize_websocket(websocket: WebSocket) -> bool:
 
 
 def security_status(
-    host: str | None, supplied_key: str | None = None, *, forwarded: bool = False
+    host: str | None, supplied_key: str | None = None, *, direct: bool = True
 ) -> dict:
-    access = evaluate_access(host, supplied_key, forwarded=forwarded)
-    local = is_loopback_host(host) and not forwarded
+    access = evaluate_access(host, supplied_key, direct=direct)
+    local = is_loopback_host(host) and direct
     return {
         "auth_required": access.auth_required,
         "authenticated": access.authenticated,
@@ -256,7 +295,7 @@ def audit_write(
         "status_code": status_code,
         "client_host": client_host(request),
         "authenticated": authenticated,
-        "local": is_loopback_host(client_host(request)) and not forwarded_by_proxy(request),
+        "local": is_loopback_host(client_host(request)) and direct_connection(request),
     }
     with AUDIT_LOG.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, separators=(",", ":")) + "\n")

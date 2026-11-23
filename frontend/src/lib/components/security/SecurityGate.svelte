@@ -58,7 +58,7 @@
           <div class="ops-banner ops-banner-danger">
             <p class="text-sm">
               Set <code class="ops-mono">LCC_API_KEY</code> in <code class="ops-mono">backend/.env</code>, or open LCC
-              directly from its own host.
+              directly on its own host as <code class="ops-mono">localhost</code>.
             </p>
           </div>
         {:else}

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request
 
 from app.services.security import (
     client_host,
-    forwarded_by_proxy,
+    direct_connection,
     key_from_connection,
     security_status,
 )
@@ -18,5 +18,5 @@ async def get_security_status(request: Request):
     return security_status(
         client_host(request),
         key_from_connection(request),
-        forwarded=forwarded_by_proxy(request),
+        direct=direct_connection(request),
     )
