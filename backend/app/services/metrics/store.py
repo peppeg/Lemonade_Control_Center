@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app.config import settings
+from app.services.state_files import PRIVATE_FILE_MODE, ensure_private_dir
 
 SCHEMA_VERSION = 1
 
@@ -110,30 +111,55 @@ class MetricsStore:
 
     # ── Connection handling ────────────────────────────────
 
-    def _prepare_file(self) -> None:
-        """Create the database file readable by its owner only.
+    def _create_file(self) -> None:
+        """Create the database file if it is missing, readable by its owner only.
 
         sqlite3.connect() would create it with the process umask, typically
-        0644. Creating it first with 0600 is enough for the -wal and -shm
-        files too: SQLite gives them the main file's permissions. A file left
-        by an earlier version with wider permissions is tightened.
+        0644. SQLite gives the -wal and -shm files the main file's permissions,
+        so creating the main file with 0600 covers them too. Files left by an
+        earlier version with wider permissions are tightened by path.
+
+        This runs once, from initialize(), before this store opens its first
+        connection. An existing file is never opened here: closing any
+        descriptor of an SQLite file drops every POSIX lock the process holds
+        on it, including those of connections open in other threads
+        (https://www.sqlite.org/howtocorrupt.html, section 2.2). A new file
+        cannot carry locks yet, so creating it with O_EXCL is safe.
         """
-        self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.close(os.open(self._path, os.O_RDWR | os.O_CREAT, 0o600))
-        for path in (
-            self._path,
-            self._path.with_name(self._path.name + "-wal"),
-            self._path.with_name(self._path.name + "-shm"),
-        ):
+        ensure_private_dir(self._path.parent)
+        if not self._path.exists():
+            try:
+                descriptor = os.open(
+                    self._path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, PRIVATE_FILE_MODE
+                )
+            except FileExistsError:
+                # Created by someone else in the meantime: not ours to open.
+                pass
+            else:
+                os.close(descriptor)
+        for path in self._files():
             try:
                 if stat.S_IMODE(path.stat().st_mode) & 0o077:
-                    path.chmod(0o600)
+                    path.chmod(PRIVATE_FILE_MODE)
             except FileNotFoundError:
                 continue
 
+    def _files(self) -> tuple[Path, Path, Path]:
+        """The database file and the WAL and shared-memory files beside it."""
+        name = self._path.name
+        return (
+            self._path,
+            self._path.with_name(name + "-wal"),
+            self._path.with_name(name + "-shm"),
+        )
+
     def _connect(self) -> sqlite3.Connection:
-        self._prepare_file()
-        connection = sqlite3.connect(self._path, timeout=5.0)
+        # mode=rw: SQLite must not create the file itself. If it disappears
+        # while LCC runs, the jobs fail and say so instead of SQLite quietly
+        # recreating it with the umask's permissions. The next start creates it.
+        connection = sqlite3.connect(
+            f"{self._path.absolute().as_uri()}?mode=rw", uri=True, timeout=5.0
+        )
         connection.row_factory = sqlite3.Row
         return connection
 
@@ -144,6 +170,7 @@ class MetricsStore:
         with self._lock:
             if self._ready:
                 return
+            self._create_file()
             connection = self._connect()
             try:
                 # WAL keeps the sampler's writes from blocking API reads.

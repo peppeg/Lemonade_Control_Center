@@ -105,6 +105,122 @@ def test_an_existing_world_readable_database_is_tightened(tmp_path):
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_wal_and_shm_files_left_by_an_earlier_run_are_tightened(tmp_path, monkeypatch):
+    path = tmp_path / "lcc_metrics.db"
+    sqlite3.connect(path).close()
+    leftovers = [path.with_name(path.name + suffix) for suffix in ("-wal", "-shm")]
+    for leftover in leftovers:
+        leftover.touch()
+        leftover.chmod(0o644)
+    # SQLite removes both files when its last connection closes, so record the
+    # modes they are given instead of reading them back afterwards.
+    modes: dict[Path, int] = {}
+    real_chmod = os.chmod
+
+    def spy_chmod(target, mode, *args, **kwargs):
+        modes[Path(target)] = mode
+        return real_chmod(target, mode, *args, **kwargs)
+
+    monkeypatch.setattr(os, "chmod", spy_chmod)
+
+    MetricsStore(path).initialize()
+
+    assert [modes.get(leftover) for leftover in leftovers] == [0o600, 0o600]
+
+
+@pytest.fixture
+def opened_paths(monkeypatch):
+    """Every path Python itself opens, as opposed to SQLite's own opens."""
+    opened: list[Path] = []
+    real_os_open = os.open
+    real_open = open
+
+    def spy_os_open(path, *args, **kwargs):
+        opened.append(Path(path))
+        return real_os_open(path, *args, **kwargs)
+
+    def spy_open(file, *args, **kwargs):
+        if isinstance(file, (str, os.PathLike)):
+            opened.append(Path(file))
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", spy_os_open)
+    monkeypatch.setattr("builtins.open", spy_open)
+    return opened
+
+
+def _exercise(store: MetricsStore) -> None:
+    store.insert_tasks([make_row(0), make_row(60)])
+    store.get_tasks()
+    store.upsert_hardware_minute(
+        {
+            "timestamp": BASE.isoformat(),
+            "sample_count": 1,
+            "ram_used_gb": 1.0,
+            "ram_total_gb": 2.0,
+            "ram_percent": 50.0,
+            "ram_percent_min": 50.0,
+            "ram_percent_max": 50.0,
+            "cpu_percent": 1.0,
+            "swap_used_gb": 0.0,
+            "gpu_load_percent": None,
+            "gpu_temp_c": None,
+        }
+    )
+    store.history_summary()
+    store.set_meta("key", "value")
+    store.get_meta("key")
+    store.prune(task_retention_days=1, hardware_retention_days=1, now=BASE)
+    store.clear()
+
+
+def test_connections_never_open_the_database_file_outside_sqlite(store, opened_paths):
+    """Closing any descriptor of the file would drop SQLite's POSIX locks.
+
+    SQLite holds those locks per process, so a close() in one thread releases
+    the locks of connections open in other threads.
+    """
+    store.initialize()
+    opened_paths.clear()
+
+    _exercise(store)
+
+    assert not set(opened_paths) & set(store._files())
+
+
+def test_an_existing_database_is_not_opened_outside_sqlite_on_start(tmp_path, opened_paths):
+    path = tmp_path / "lcc_metrics.db"
+    MetricsStore(path).insert_tasks([make_row(0)])
+    opened_paths.clear()
+
+    restarted = MetricsStore(path)
+    restarted.initialize()
+
+    assert path not in opened_paths
+    assert restarted.count_tasks() == 1
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_a_database_removed_while_running_is_not_recreated_with_the_umask(tmp_path):
+    previous = os.umask(0o022)
+    try:
+        store = MetricsStore(tmp_path / "lcc_metrics.db")
+        store.insert_tasks([make_row(0)])
+        for path in store._files():
+            path.unlink(missing_ok=True)
+
+        with pytest.raises(sqlite3.OperationalError):
+            store.insert_tasks([make_row(60)])
+    finally:
+        os.umask(previous)
+
+    assert not store.path.exists()
+    # The next start creates it again, owner-only.
+    MetricsStore(store.path).initialize()
+    assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
+
+
 def test_hardware_samples_have_nullable_gpu_memory_columns(store):
     store.initialize()
     connection = sqlite3.connect(store.path)
