@@ -24,6 +24,7 @@ The project is under active development, so entries currently describe the evolv
 - Localhost trust requires LCC to be opened as `localhost` or an IP address, so that a web site cannot reach it by pointing its own domain at 127.0.0.1 (DNS rebinding). Add other names you use on the LCC host to the new `ALLOWED_HOSTS`, or set `LCC_API_KEY`.
 - LCC state files, including `config.json` with Lemonade admin keys, are written with mode `0600` and replaced in one step, so an interrupted write keeps the previous content. The data directory is created with mode `0700`, and an existing one is tightened on startup, together with `config.json`.
 - `audit.jsonl` is rotated at 5 MB, keeping three older files.
+- The LCC key no longer appears in the server log. Browsers send it in the URL of WebSocket connections, and Uvicorn logged that URL. If the logs of an earlier version were shared or are readable by others, change `LCC_API_KEY`.
 - Smoke Test works with reasoning models: the token budget defaults to 1024 (up to 4096, previously capped at 256), token counts are kept when the model produces no answer, and the error says when reasoning used the whole budget.
 - Saved model options are read from Lemonade's `/api/v1/models` (`recipe_options`), falling back to `recipe_options.json`. Current Lemonade moved that file into its private config directory, so the Load dialog showed no saved options.
 - Config updates send dotted keys (e.g. `llamacpp.backend`) as nested sections, as Lemonade 11+ expects.
