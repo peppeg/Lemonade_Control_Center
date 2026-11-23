@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.services.log_parser import extract_task_records
 from app.services.metrics import task_history
@@ -131,3 +131,45 @@ def test_a_moving_window_over_legacy_records_stores_each_record_once(monkeypatch
     assert sorted((row["input_tokens"], row["output_tokens"]) for row in stored) == [
         (40, 12), (80, 24), (120, 36)
     ]
+
+
+def test_cleared_history_does_not_come_back_from_the_journal(monkeypatch, tmp_path):
+    """Reported in review: a cleared task reappeared on the next read."""
+    journal = [_line("2026-11-08 08:44:50.940"), _line("2026-11-08 08:44:51.187")]
+    later = [*journal, _line("2026-11-08 08:46:00.000")]
+    history = _history(monkeypatch, tmp_path, [journal, journal, later])
+    history.refresh_from_logs()
+    [_, last] = extract_task_records(journal)
+    cleared_at = datetime.fromisoformat(last.timestamp) + timedelta(seconds=30)
+
+    assert history.clear(now=cleared_at) == {"tasks": 2, "hardware": 0}
+
+    assert history.refresh_from_logs() == 0
+    assert history.count() == 0
+    # A genuinely new task after the clear is still recorded.
+    assert history.refresh_from_logs() == 1
+    assert [row["timestamp"] for row in history.get_recent(refresh=False)] == [
+        extract_task_records(later)[-1].timestamp
+    ]
+
+
+def test_cleared_legacy_records_do_not_come_back_either(monkeypatch, tmp_path):
+    """Dated by journald, legacy records fall on one side of the cut-off."""
+    monkeypatch.setattr(task_history.capabilities, "cmd_journalctl", True)
+    received = datetime(2026, 11, 8, 8, 44, tzinfo=UTC)
+    lines = _legacy() + ["Input tokens: 5", "Output tokens: 9", "TTFT (s): 0.10", "TPS: 30.00"]
+    times = [(received + timedelta(seconds=index)).isoformat() for index in range(len(lines))]
+    windows = iter([4, 4, 8])
+    monkeypatch.setattr(
+        task_history,
+        "parse_task_records",
+        lambda **_: extract_task_records(lines[: (end := next(windows))], times[:end]),
+    )
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+    history.refresh_from_logs()
+
+    history.clear(now=received + timedelta(seconds=2))
+
+    assert history.refresh_from_logs() == 0
+    assert history.refresh_from_logs() == 1
+    assert [row["input_tokens"] for row in history.get_recent(refresh=False)] == [5]

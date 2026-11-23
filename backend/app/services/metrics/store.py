@@ -11,6 +11,7 @@ running inside the event loop push them through asyncio.to_thread.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -39,6 +40,10 @@ RANGE_WINDOWS: dict[str, tuple[timedelta, int]] = {
 }
 
 DEFAULT_RANGE = "24h"
+
+# metrics_meta key holding when the history was last cleared, as an ISO-8601
+# UTC timestamp. Nothing at or before it is stored again; see clear().
+CLEARED_AT_META_KEY = "history_cleared_at"
 
 # Generation rates above this are not measurements: Lemonade emits a sentinel
 # (1000000.0) when a completion is one token long and there is no elapsed
@@ -192,9 +197,16 @@ class MetricsStore:
         with self._lock:
             connection = self._connect()
             try:
+                # One transaction for the reads and writes of the callable, so a
+                # check such as the clear cut-off holds for the rows it lets in.
+                connection.execute("BEGIN IMMEDIATE")
                 result = statements(connection)
                 connection.commit()
                 return result
+            except BaseException:
+                with contextlib.suppress(sqlite3.Error):
+                    connection.rollback()
+                raise
             finally:
                 connection.close()
 
@@ -215,10 +227,16 @@ class MetricsStore:
         with identical numbers at different times are two rows, while the same
         record scraped twice stays one.
 
-        An undated row (a legacy log line with no timestamp) carries the time
-        it was read, which changes on every scrape. Like the JSON history
-        before it, such a row is matched on its metrics alone: it is skipped
-        when a row with the same token counts, rate and duration exists.
+        Rows completed at or before the last clear() are skipped: the journal
+        still holds them, and they would otherwise come back on the next read.
+
+        An undated row carries the time it was read, which changes on every
+        scrape. Journal records are always dated (by Lemonade or by journald),
+        so this only covers sources without any timestamp. Like the JSON
+        history before it, such a row is matched on its metrics alone: it is
+        skipped when a row with the same token counts, rate and duration
+        exists. Once the history has been cleared it cannot be placed on
+        either side of the cut-off, so it is skipped.
         """
         if not rows:
             return 0
@@ -242,7 +260,10 @@ class MetricsStore:
 
         def run(connection: sqlite3.Connection) -> int:
             before = connection.total_changes
+            cleared_at = _cleared_at(connection)
             for row, values in zip(rows, payload, strict=True):
+                if cleared_at is not None and (not row.dated or values[1] <= cleared_at):
+                    continue
                 if not row.dated and _metrics_known(connection, row):
                     continue
                 connection.execute(
@@ -396,9 +417,16 @@ class MetricsStore:
     # ── Hardware samples ───────────────────────────────────
 
     def upsert_hardware_minute(self, aggregate: dict) -> None:
-        """Write (or refresh) the aggregated row for one minute."""
+        """Write (or refresh) the aggregated row for one minute.
+
+        A minute that began at or before the last clear() is not written: its
+        running aggregate still holds samples taken before the clear.
+        """
 
         def run(connection: sqlite3.Connection) -> None:
+            cleared_at = _cleared_at(connection)
+            if cleared_at is not None and _epoch(aggregate["timestamp"]) <= cleared_at:
+                return
             connection.execute(
                 "INSERT INTO hardware_samples ("
                 "timestamp, ts_epoch, sample_count, ram_used_gb, ram_total_gb,"
@@ -513,16 +541,24 @@ class MetricsStore:
 
         return self._write(run)
 
-    def clear(self) -> dict[str, int]:
+    def clear(self, now: datetime | None = None) -> dict[str, int]:
         """Wipe both series, reporting the rows removed.
 
         The caller shows those counts back to the operator: an irreversible
         delete that answers "done" tells them nothing about what it took.
+
+        The journal still holds the cleared tasks, so the time of the clear is
+        stored with the delete, in the same transaction, and nothing completed
+        at or before it is stored again.
         """
+        moment = (now or datetime.now(UTC)).astimezone(UTC)
 
         def run(connection: sqlite3.Connection) -> dict[str, int]:
             tasks = connection.execute("DELETE FROM task_records").rowcount
             hardware = connection.execute("DELETE FROM hardware_samples").rowcount
+            previous = _cleared_at(connection)
+            if previous is None or moment.timestamp() > previous:
+                _set_meta(connection, CLEARED_AT_META_KEY, moment.isoformat())
             return {"tasks": max(0, tasks), "hardware": max(0, hardware)}
 
         return self._write(run)
@@ -536,14 +572,7 @@ class MetricsStore:
         return row[0] if row else None
 
     def set_meta(self, key: str, value: str) -> None:
-        def run(connection: sqlite3.Connection) -> None:
-            connection.execute(
-                "INSERT INTO metrics_meta (key, value) VALUES (?, ?)"
-                " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (key, value),
-            )
-
-        self._write(run)
+        self._write(lambda connection: _set_meta(connection, key, value))
 
 
 # ── Bucketing and aggregation ──────────────────────────────
@@ -723,6 +752,27 @@ def _epoch(timestamp: str) -> float:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.timestamp()
+
+
+def _set_meta(connection: sqlite3.Connection, key: str, value: str) -> None:
+    connection.execute(
+        "INSERT INTO metrics_meta (key, value) VALUES (?, ?)"
+        " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (key, value),
+    )
+
+
+def _cleared_at(connection: sqlite3.Connection) -> float | None:
+    """Epoch of the last clear(), or None if the history was never cleared."""
+    row = connection.execute(
+        "SELECT value FROM metrics_meta WHERE key = ?", (CLEARED_AT_META_KEY,)
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        return datetime.fromisoformat(row[0]).timestamp()
+    except (TypeError, ValueError):
+        return None
 
 
 def _metrics_known(connection: sqlite3.Connection, row: TaskRow) -> bool:

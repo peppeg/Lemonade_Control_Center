@@ -285,6 +285,30 @@ async def test_clear_history_scope_deletes_and_reports_both_tables(empty_store):
 
 
 @pytest.mark.asyncio
+async def test_cleared_history_stays_cleared_when_tasks_are_read_again(empty_store, monkeypatch):
+    """The read endpoints refresh from the journal, which still holds the tasks."""
+    from app.services.log_parser import TaskTelemetryRecord
+
+    moment = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
+    record = TaskTelemetryRecord(
+        timestamp=moment, model="m", input_tokens=4, output_tokens=7, ttft_seconds=0.08,
+        generation_tps=32.28, prompt_eval_tps=50.0, total_duration_seconds=0.3,
+    )
+    monkeypatch.setattr(
+        "app.services.metrics.task_history.capabilities.cmd_journalctl", True
+    )
+    monkeypatch.setattr(
+        "app.services.metrics.task_history.parse_task_records", lambda **_: [record]
+    )
+    assert len((await get_tasks(n=100, since=None, until=None))["tasks"]) == 1
+
+    payload = await clear_metrics(scope="history")
+
+    assert payload["deleted"]["tasks"] == 1
+    assert (await get_tasks(n=100, since=None, until=None))["tasks"] == []
+
+
+@pytest.mark.asyncio
 async def test_history_summary_reports_counts_and_the_oldest_record(empty_store):
     oldest = recent_row(90, 20.1)
     empty_store.insert_tasks([recent_row(5, 13.84), oldest])

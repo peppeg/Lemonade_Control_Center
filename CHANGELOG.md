@@ -12,7 +12,7 @@ The project is under active development, so entries currently describe the evolv
 
 ### Changed
 
-- `POST /api/metrics/clear` now requires `scope=buffer` (live buffer only) or `scope=history` (also deletes the persisted history); a missing or unknown scope returns 400 instead of wiping data.
+- `POST /api/metrics/clear` now requires `scope=buffer` (live buffer only) or `scope=history` (also deletes the persisted history; tasks still in the Lemonade journal at that point are not recorded again); a missing or unknown scope returns 400 instead of wiping data.
 
 ## 0.3.2 - 2026-11-24
 

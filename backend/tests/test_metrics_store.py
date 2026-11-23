@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import stat
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 
 from app.services.log_parser import extract_task_records
 from app.services.metrics.store import (
+    CLEARED_AT_META_KEY,
     MetricsStore,
     TaskRow,
     bucket_hardware_rows,
@@ -563,6 +565,83 @@ def test_clear_wipes_both_series(store):
 
     assert store.count_tasks() == 0
     assert store.count_hardware() == 0
+
+
+def _hardware_minute(moment: datetime) -> dict:
+    return {
+        "timestamp": moment.isoformat(), "sample_count": 1, "ram_used_gb": 1.0,
+        "ram_total_gb": 8.0, "ram_percent": 12.0, "ram_percent_min": 12.0,
+        "ram_percent_max": 12.0, "cpu_percent": 1.0, "swap_used_gb": 0.0,
+        "gpu_load_percent": None, "gpu_temp_c": None, "temperatures": {},
+    }
+
+
+def test_cleared_tasks_still_in_the_journal_are_not_stored_again(store):
+    rows = [make_row(0), make_row(60)]
+    store.insert_tasks(rows)
+
+    store.clear(now=BASE + timedelta(minutes=5))
+
+    assert store.insert_tasks(rows) == 0
+    assert store.count_tasks() == 0
+
+
+def test_a_task_completed_after_the_clear_is_stored(store):
+    store.insert_tasks([make_row(0)])
+    store.clear(now=BASE + timedelta(minutes=5))
+
+    assert store.insert_tasks([make_row(0), make_row(5 * 60), make_row(5 * 60 + 1)]) == 1
+    assert [row["timestamp"] for row in store.get_tasks()] == [make_row(5 * 60 + 1).timestamp]
+
+
+def test_the_clear_time_is_stored_with_the_delete(store):
+    store.insert_tasks([make_row(0)])
+    moment = BASE + timedelta(minutes=5)
+
+    store.clear(now=moment)
+
+    assert store.get_meta(CLEARED_AT_META_KEY) == moment.isoformat()
+
+
+def test_a_later_clear_with_an_earlier_clock_keeps_the_later_cut_off(store):
+    store.clear(now=BASE + timedelta(minutes=5))
+    store.clear(now=BASE)
+
+    assert store.insert_tasks([make_row(60)]) == 0
+
+
+def test_an_undated_task_is_skipped_once_the_history_was_cleared(store):
+    """Its timestamp is only the time it was read, after any cut-off."""
+    undated = replace(make_row(10 * 60), dated=False)
+    store.clear(now=BASE + timedelta(minutes=5))
+
+    assert store.insert_tasks([undated]) == 0
+
+
+def test_a_hardware_minute_begun_before_the_clear_is_not_written_again(store):
+    """The collector's running aggregate still holds pre-clear samples."""
+    store.upsert_hardware_minute(_hardware_minute(BASE))
+    store.clear(now=BASE + timedelta(seconds=30))
+
+    store.upsert_hardware_minute(_hardware_minute(BASE))
+    assert store.count_hardware() == 0
+
+    store.upsert_hardware_minute(_hardware_minute(BASE + timedelta(minutes=1)))
+    assert store.count_hardware() == 1
+
+
+def test_a_failed_write_leaves_nothing_behind(store):
+    store.initialize()
+
+    def half_done(connection):
+        connection.execute("DELETE FROM task_records")
+        raise RuntimeError("interrupted")
+
+    store.insert_tasks([make_row(0)])
+    with pytest.raises(RuntimeError):
+        store._write(half_done)
+
+    assert store.count_tasks() == 1
 
 
 # ── Legacy JSON migration ──────────────────────────────────

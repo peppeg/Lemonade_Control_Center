@@ -105,9 +105,12 @@ class TaskHistory:
     def count(self) -> int:
         return self._store.count_tasks()
 
-    def clear(self) -> dict[str, int]:
-        """Wipe the persisted history, returning the rows removed per table."""
-        return self._store.clear()
+    def clear(self, now: datetime | None = None) -> dict[str, int]:
+        """Wipe the persisted history, returning the rows removed per table.
+
+        Tasks the journal still holds are not stored again; see MetricsStore.clear().
+        """
+        return self._store.clear(now)
 
     def export_csv(
         self,
