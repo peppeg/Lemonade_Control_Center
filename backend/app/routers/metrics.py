@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import StreamingResponse
 
 from app.services.metrics.collector import buffer, collect_once, subscribe, unsubscribe
 from app.services.metrics.store import RANGE_WINDOWS, resolve_range
@@ -35,14 +35,14 @@ async def get_latest():
 
 @router.get("/tasks")
 async def get_tasks(
-    n: int = Query(default=100, ge=1, le=5000),
+    n: int = Query(default=20, ge=1, le=5000),
     since: str | None = Query(default=None, description="ISO-8601 lower bound, inclusive"),
     until: str | None = Query(default=None, description="ISO-8601 upper bound, inclusive"),
 ):
     """Recent task records, oldest first.
 
-    The response shape is unchanged; `since` / `until` narrow the window and
-    `n` now reaches far beyond the old 50-record ceiling.
+    The response shape and the default of 20 records are unchanged; `since`
+    and `until` narrow the window, and `n` reaches up to 5000 instead of 50.
     """
     window_start = _parse_boundary(since, "since")
     window_end = _parse_boundary(until, "until")
@@ -57,7 +57,7 @@ async def get_tasks_series(
     range: str = Query(default="24h", description="|".join(RANGE_WINDOWS)),
 ):
     """Time-bucketed generation-speed aggregates over a long window."""
-    key, window, bucket_seconds = resolve_range(range)
+    key, window, bucket_seconds = _resolve_range(range)
     end = datetime.now(UTC)
     start = end - window
     window = await asyncio.to_thread(task_history.window, start, end, bucket_seconds)
@@ -82,7 +82,7 @@ async def get_tasks_scale(
     browser meant downloading every run in the window just to reduce it to a
     single number; the store reads one column and reduces it here instead.
     """
-    key, window, _bucket_seconds = resolve_range(range)
+    key, window, _bucket_seconds = _resolve_range(range)
     end = datetime.now(UTC)
     start = end - window
     result = await asyncio.to_thread(
@@ -103,7 +103,7 @@ async def get_hardware_series(
     range: str = Query(default="24h", description="|".join(RANGE_WINDOWS)),
 ):
     """Time-bucketed hardware aggregates from the persisted per-minute rows."""
-    key, window, bucket_seconds = resolve_range(range)
+    key, window, bucket_seconds = _resolve_range(range)
     end = datetime.now(UTC)
     start = end - window
     buckets = await asyncio.to_thread(
@@ -127,15 +127,15 @@ async def export_tasks_csv(
     """CSV export, optionally narrowed by the same window the charts use."""
     window_start = _parse_boundary(since, "since")
     window_end = _parse_boundary(until, "until")
-    if range and window_start is None:
-        _, window, _bucket = resolve_range(range)
-        window_start = datetime.now(UTC) - window
+    if range:
+        _, window, _bucket = _resolve_range(range)
+        if window_start is None:
+            window_start = datetime.now(UTC) - window
 
-    body = await asyncio.to_thread(
-        task_history.export_csv, window_start, window_end, 100_000, True
-    )
-    return PlainTextResponse(
-        body,
+    # Streamed: Starlette runs the synchronous generator in its thread pool, so
+    # the journal refresh and the batched reads stay off the event loop.
+    return StreamingResponse(
+        task_history.export_csv(window_start, window_end, True),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=lcc-tasks.csv"},
     )
@@ -184,17 +184,28 @@ async def clear_metrics(
     return {"cleared": True, "scope": "history", "deleted": deleted}
 
 
+def _resolve_range(value: str | None) -> tuple[str, timedelta, int]:
+    try:
+        return resolve_range(value)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 def _parse_boundary(value: str | None, field: str) -> datetime | None:
     """Parse an ISO-8601 query bound, defaulting a naive value to UTC."""
     if value is None or not value.strip():
         return None
     try:
         parsed = datetime.fromisoformat(value.strip())
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"{field} must be an ISO-8601 timestamp")
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        # Converting a date at the edge of the calendar, such as year 1 with a
+        # positive offset, overflows; it is a bad bound, not a server error.
+        return parsed.astimezone(UTC)
+    except (ValueError, OverflowError):
+        raise HTTPException(
+            status_code=400, detail=f"{field} must be an ISO-8601 timestamp"
+        ) from None
 
 
 @ws_router.websocket("/ws/metrics")

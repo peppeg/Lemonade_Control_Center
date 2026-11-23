@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -113,7 +114,7 @@ async def test_tasks_csv_endpoint_on_an_empty_database(empty_store):
 
     assert response.status_code == 200
     assert response.media_type == "text/csv"
-    assert response.body.decode().strip() == (
+    assert (await _csv_text(response)).strip() == (
         "timestamp,model,input_tokens,output_tokens,prompt_tps,gen_tps,"
         "ttft_seconds,total_seconds,finish_reason,finish_confidence"
     )
@@ -194,8 +195,8 @@ async def test_tasks_series_buckets_carry_every_aggregate(empty_store):
 
 
 @pytest.mark.asyncio
-async def test_series_falls_back_to_the_default_range(empty_store):
-    assert (await get_tasks_series(range="nonsense"))["range"] == "24h"
+async def test_series_uses_the_default_range_when_none_is_given(empty_store):
+    assert (await get_tasks_series(range=""))["range"] == "24h"
     assert (await get_hardware_series(range=""))["range"] == "24h"
 
 
@@ -228,8 +229,69 @@ async def test_tasks_csv_honours_the_range_parameter(empty_store):
     everything = await export_tasks_csv(since=None, until=None, range="7d")
     last_hour = await export_tasks_csv(since=None, until=None, range="1h")
 
-    assert len(everything.body.decode().strip().splitlines()) == 3
-    assert len(last_hour.body.decode().strip().splitlines()) == 2
+    assert len((await _csv_text(everything)).strip().splitlines()) == 3
+    assert len((await _csv_text(last_hour)).strip().splitlines()) == 2
+
+
+@pytest.mark.asyncio
+async def test_tasks_csv_exports_every_row_however_many_there_are(empty_store):
+    """It stopped at the newest 100,000 rows, dropping the oldest silently."""
+    total = 100_001
+    first = datetime.now(UTC) - timedelta(days=3)
+    empty_store.initialize()
+    connection = sqlite3.connect(empty_store.path)
+    with connection:
+        connection.executemany(
+            "INSERT INTO task_records (timestamp, ts_epoch, model, input_tokens,"
+            " output_tokens) VALUES (?, ?, 'm', 1, 1)",
+            (
+                ((first + timedelta(seconds=index)).isoformat(), first.timestamp() + index)
+                for index in range(total)
+            ),
+        )
+    connection.close()
+
+    lines = (await _csv_text(await export_tasks_csv(since=None, until=None, range=None))).splitlines()
+
+    assert len(lines) == total + 1
+    assert lines[1].startswith(first.isoformat())
+
+
+async def _csv_text(response) -> str:
+    return "".join([chunk async for chunk in response.body_iterator])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: get_tasks_series(range="90d"),
+        lambda: get_tasks_scale(range="90d", quantile=0.95),
+        lambda: get_hardware_series(range="90d"),
+        lambda: export_tasks_csv(since=None, until=None, range="90d"),
+        lambda: export_tasks_csv(since="2026-08-22T10:00:00Z", until=None, range="90d"),
+    ],
+    ids=["tasks-series", "tasks-scale", "hardware-series", "csv", "csv-with-since"],
+)
+async def test_an_unknown_range_is_rejected_not_replaced_by_24h(empty_store, call):
+    with pytest.raises(HTTPException) as raised:
+        await call()
+
+    assert raised.value.status_code == 400
+    assert "1h, 24h, 7d, 30d" in raised.value.detail
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bound", ["0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00", "soon"])
+async def test_a_bound_outside_the_calendar_is_a_bad_request(empty_store, bound):
+    for call in (
+        lambda: get_tasks(n=10, since=bound, until=None),
+        lambda: get_tasks(n=10, since=None, until=bound),
+        lambda: export_tasks_csv(since=bound, until=None, range=None),
+    ):
+        with pytest.raises(HTTPException) as raised:
+            await call()
+        assert raised.value.status_code == 400
 
 
 # ── Clear scopes (R5) ──────────────────────────────────────
@@ -400,3 +462,96 @@ async def test_tasks_series_summary_is_empty_not_absent(empty_store):
 
     assert payload["summary"]["count"] == 0
     assert payload["summary"]["gen_tps_p95"] == 0.0
+
+
+# ── Through the real app: query bounds and the access-control middleware ──
+
+API_KEY = "test-key"
+KEYED = {"x-lcc-api-key": API_KEY}
+
+
+@pytest.fixture
+def client(empty_store, monkeypatch, tmp_path):
+    from starlette.testclient import TestClient
+
+    from app.main import app
+
+    monkeypatch.setattr("app.services.security.AUDIT_LOG", tmp_path / "audit.jsonl")
+    monkeypatch.setattr("app.config.settings.require_auth", True)
+    monkeypatch.setattr("app.config.settings.lcc_api_key", API_KEY)
+    # Not entered as a context manager: the lifespan would start the samplers.
+    return TestClient(app, base_url="http://127.0.0.1:17600", client=("127.0.0.1", 50000))
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("GET", "/api/metrics/tasks"), ("GET", "/api/metrics/tasks/csv"),
+     ("POST", "/api/metrics/clear?scope=buffer")],
+)
+def test_task_routes_need_the_key(client, method, path):
+    assert client.request(method, path).status_code == 401
+    assert client.request(method, path, headers=KEYED).status_code == 200
+
+
+@pytest.mark.parametrize(("n", "status"), [(0, 422), (1, 200), (5000, 200), (5001, 422)])
+def test_tasks_route_bounds_n(client, n, status):
+    assert client.get(f"/api/metrics/tasks?n={n}", headers=KEYED).status_code == status
+
+
+def test_tasks_route_answers_400_to_a_bad_bound(client):
+    response = client.get("/api/metrics/tasks?since=yesterday", headers=KEYED)
+
+    assert response.status_code == 400
+    assert "since" in response.json()["detail"]
+
+
+def test_tasks_csv_route_streams_a_header_and_rejects_an_unknown_range(client, empty_store):
+    empty_store.insert_tasks([recent_row(5, 13.84)])
+
+    response = client.get("/api/metrics/tasks/csv?range=24h", headers=KEYED)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.text.splitlines()[0].startswith("timestamp,model,")
+    assert len(response.text.splitlines()) == 2
+    assert client.get("/api/metrics/tasks/csv?range=2d", headers=KEYED).status_code == 400
+
+
+def test_clear_route_needs_a_scope(client):
+    assert client.post("/api/metrics/clear", headers=KEYED).status_code == 400
+    assert client.post("/api/metrics/clear?scope=all", headers=KEYED).status_code == 400
+    assert client.post("/api/metrics/clear?scope=buffer", headers=KEYED).json() == {
+        "cleared": True, "scope": "buffer"
+    }
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("GET", "/api/metrics/tasks/series"), ("GET", "/api/metrics/tasks/scale"),
+     ("GET", "/api/metrics/hardware/series"), ("GET", "/api/metrics/history/summary"),
+     ("POST", "/api/metrics/clear?scope=history")],
+)
+def test_history_routes_need_the_key(client, method, path):
+    assert client.request(method, path).status_code == 401
+    assert client.request(method, path, headers=KEYED).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/metrics/tasks/series", "/api/metrics/hardware/series",
+             "/api/metrics/tasks/scale"],
+)
+def test_series_routes_reject_an_unknown_range(client, path):
+    assert client.get(f"{path}?range=2d", headers=KEYED).status_code == 400
+
+
+@pytest.mark.parametrize(("quantile", "status"), [(0, 422), (0.5, 200), (1, 200), (1.5, 422)])
+def test_tasks_scale_route_bounds_the_quantile(client, quantile, status):
+    path = f"/api/metrics/tasks/scale?quantile={quantile}"
+
+    assert client.get(path, headers=KEYED).status_code == status
+
+
+def test_tasks_route_returns_20_records_by_default(client, empty_store):
+    empty_store.insert_tasks([sized_row(index, 61) for index in range(25)])
+
+    assert len(client.get("/api/metrics/tasks", headers=KEYED).json()["tasks"]) == 20

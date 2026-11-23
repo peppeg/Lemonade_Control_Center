@@ -438,13 +438,15 @@ def test_bucket_hardware_rows_reports_absent_gpu_as_none():
     assert bucket["temps"] == {}
 
 
-def test_resolve_range_maps_selectors_and_falls_back():
+def test_resolve_range_maps_selectors_and_defaults_only_when_none_is_given():
     assert resolve_range("1h")[2] == 5 * 60
     assert resolve_range("24h")[2] == 60 * 60
     assert resolve_range("7d")[2] == 6 * 60 * 60
     assert resolve_range("30d")[2] == 24 * 60 * 60
-    assert resolve_range("nonsense")[0] == "24h"
+    assert resolve_range("7D")[0] == "7d"
     assert resolve_range(None)[0] == "24h"
+    with pytest.raises(ValueError, match="1h, 24h, 7d, 30d"):
+        resolve_range("90d")
 
 
 def test_task_series_runs_end_to_end_through_sqlite(store):
@@ -823,11 +825,11 @@ def test_refresh_from_logs_reports_a_broken_journal(store, monkeypatch):
         history.refresh_from_logs()
     # The read endpoints still serve what is stored.
     assert len(history.get_recent()) == 1
-    assert history.export_csv().count("\n") == 2
+    assert "".join(history.export_csv()).count("\n") == 2
 
 
 def test_export_csv_carries_a_header_even_when_empty(store):
-    body = TaskHistory(store).export_csv(refresh=False)
+    body = "".join(TaskHistory(store).export_csv(refresh=False))
 
     assert body.splitlines()[0] == (
         "timestamp,model,input_tokens,output_tokens,prompt_tps,gen_tps,"
@@ -839,11 +841,36 @@ def test_export_csv_carries_a_header_even_when_empty(store):
 def test_export_csv_honours_the_window(store):
     store.insert_tasks([make_row(0), make_row(3600)])
 
-    body = TaskHistory(store).export_csv(
+    body = "".join(TaskHistory(store).export_csv(
         since=BASE + timedelta(minutes=30), refresh=False
-    )
+    ))
 
     assert len(body.splitlines()) == 2
+
+
+def test_iter_tasks_reads_every_row_in_batches_oldest_first(store):
+    # Two rows share each timestamp, so batches also split ties correctly.
+    rows = [
+        make_row(index // 2, input_tokens=100 + index) for index in range(25)
+    ]
+    store.insert_tasks(rows)
+
+    batches = list(store.iter_tasks(batch_size=4))
+
+    assert [len(batch) for batch in batches] == [4, 4, 4, 4, 4, 4, 1]
+    flat = [row["input_tokens"] for batch in batches for row in batch]
+    assert flat == [row.input_tokens for row in rows]
+
+
+def test_iter_tasks_honours_the_window(store):
+    store.insert_tasks([make_row(index * 60) for index in range(10)])
+
+    batches = list(store.iter_tasks(since=BASE + timedelta(minutes=3),
+                                    until=BASE + timedelta(minutes=6), batch_size=2))
+
+    assert [row["timestamp"] for batch in batches for row in batch] == [
+        make_row(index * 60).timestamp for index in range(3, 7)
+    ]
 
 
 # ── Window summary ─────────────────────────────────────────

@@ -18,6 +18,7 @@ import os
 import sqlite3
 import stat
 import threading
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -344,6 +345,44 @@ class MetricsStore:
         rows.reverse()
         return rows
 
+    def iter_tasks(
+        self,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        batch_size: int = 1000,
+    ) -> Iterator[list[dict]]:
+        """Every task in a window, oldest first, in batches.
+
+        Each batch is a short read of its own, so exporting years of history
+        neither loads it all at once nor keeps a read open for the whole
+        download. Batches continue after the last (ts_epoch, id) seen.
+        """
+        clauses, params = _range_clauses(since, until)
+        after: tuple[float, int] | None = None
+        while True:
+            where = list(clauses)
+            values: list[float | int] = list(params)
+            if after is not None:
+                where.append("(ts_epoch > ? OR (ts_epoch = ? AND id > ?))")
+                values += [after[0], after[0], after[1]]
+            query = (
+                f"SELECT id, {', '.join(_TASK_COLUMNS)}, ts_epoch FROM task_records"
+                + (f" WHERE {' AND '.join(where)}" if where else "")
+                + " ORDER BY ts_epoch ASC, id ASC LIMIT ?"
+            )
+            arguments = (*values, max(1, batch_size))
+            rows = self._read(
+                lambda connection, query=query, arguments=arguments: connection.execute(
+                    query, arguments
+                ).fetchall()
+            )
+            if not rows:
+                return
+            after = (rows[-1]["ts_epoch"], rows[-1]["id"])
+            yield [{column: row[column] for column in _TASK_COLUMNS} for row in rows]
+            if len(rows) < batch_size:
+                return
+
     def count_tasks(self) -> int:
         return self._read(
             lambda connection: connection.execute(
@@ -624,10 +663,15 @@ class MetricsStore:
 
 
 def resolve_range(name: str | None) -> tuple[str, timedelta, int]:
-    """Map a range selector onto its window and bucket width."""
-    key = (name or DEFAULT_RANGE).lower()
+    """Map a range selector onto its window and bucket width.
+
+    No selector means the default range. An unknown one raises ValueError
+    rather than quietly answering for another window: a CSV export for a
+    range that does not exist would otherwise hold a different day's data.
+    """
+    key = (name or DEFAULT_RANGE).strip().lower()
     if key not in RANGE_WINDOWS:
-        key = DEFAULT_RANGE
+        raise ValueError(f"range must be one of: {', '.join(RANGE_WINDOWS)}")
     window, bucket_seconds = RANGE_WINDOWS[key]
     return key, window, bucket_seconds
 

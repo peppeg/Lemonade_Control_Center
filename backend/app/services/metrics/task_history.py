@@ -11,6 +11,7 @@ import io
 import json
 import logging
 import threading
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -198,17 +199,19 @@ class TaskHistory:
         self,
         since: datetime | None = None,
         until: datetime | None = None,
-        limit: int = 100_000,
         refresh: bool = True,
-    ) -> str:
+    ) -> Iterator[str]:
+        """Every task in the window as CSV, oldest first, a chunk at a time.
+
+        Nothing is left out: task records are kept indefinitely, and an export
+        capped at a row count would silently drop the oldest ones.
+        """
         if refresh:
             self._refresh_quietly()
-        output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=list(TaskRecord.__annotations__.keys()))
-        writer.writeheader()
-        for row in self._store.get_tasks(since=since, until=until, limit=limit):
-            writer.writerow(row)
-        return output.getvalue()
+        fieldnames = list(TaskRecord.__annotations__.keys())
+        yield _csv_chunk(fieldnames, [], header=True)
+        for batch in self._store.iter_tasks(since=since, until=until):
+            yield _csv_chunk(fieldnames, batch)
 
     # ── One-off migration ──────────────────────────────────
 
@@ -257,6 +260,15 @@ def _parse_time(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value) if value else None
     except ValueError:
         return None
+
+
+def _csv_chunk(fieldnames: list[str], rows: list[dict], *, header: bool = False) -> str:
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    if header:
+        writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue()
 
 
 def _to_row(record: TaskTelemetryRecord) -> TaskRow:
