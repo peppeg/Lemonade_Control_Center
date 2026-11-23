@@ -207,6 +207,7 @@ def _to_row(record: TaskTelemetryRecord) -> TaskRow:
         # INFERRED", which every other endpoint reports as plain "inferred".
         finish_confidence=finish.confidence.value,
         dated=record.dated,
+        journal_dated=record.journal_dated,
     )
 
 
@@ -224,6 +225,7 @@ def _row_from_legacy(item: dict) -> TaskRow | None:
             total_seconds=float(item.get("total_seconds") or 0),
             finish_reason=str(item.get("finish_reason") or "unknown"),
             finish_confidence=str(item.get("finish_confidence") or "unknown"),
+            polled=True,
         )
     except (KeyError, TypeError, ValueError):
         return None

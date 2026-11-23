@@ -1,5 +1,6 @@
 import json
 import subprocess
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -420,6 +421,46 @@ def test_a_telemetry_tagged_timing_line_is_not_a_record_of_its_own():
     assert extract_task_records(LEMONADE_2026_45_3[4:6]) == []
 
 
+@pytest.fixture
+def new_york(monkeypatch):
+    """Host local time with a clock change: 2026-11-01 01:00-02:00 occurs twice."""
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def _completed_at(local: str) -> str:
+    return (
+        f"{local} [Info] (Telemetry) Inference completed: model=M, "
+        "tokens=60 (in=10, out=50), ttft=0.5s, tps=30.0"
+    )
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="needs time.tzset")
+def test_the_repeated_hour_of_a_clock_change_is_read_by_the_journal_time(new_york):
+    """01:45 happens at 05:45Z (EDT) and again at 06:45Z (EST)."""
+    line = _completed_at("2026-11-01 01:45:00.000")
+
+    [first] = extract_task_records([line], ["2026-11-01T05:45:00.010000+00:00"])
+    [second] = extract_task_records([line], ["2026-11-01T06:45:00.010000+00:00"])
+
+    assert first.timestamp == "2026-11-01T05:45:00+00:00"
+    assert second.timestamp == "2026-11-01T06:45:00+00:00"
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="needs time.tzset")
+def test_outside_the_repeated_hour_lemonade_time_is_kept_as_it_was(new_york):
+    """Same timestamp as before for every other record, so no record changes identity."""
+    line = _completed_at("2026-11-01 03:15:00.250")
+
+    [record] = extract_task_records([line], ["2026-11-01T08:15:03+00:00"])
+
+    assert record.timestamp == extract_task_records([line])[0].timestamp
+    assert record.timestamp == "2026-11-01T08:15:00.250000+00:00"
+
+
 def test_extract_task_records_drops_records_without_output_tokens():
     """A request that produced nothing is not a data point."""
     assert extract_task_records([
@@ -456,6 +497,7 @@ def test_parse_task_records_reads_the_journal_window(monkeypatch):
     records = parse_task_records()
 
     assert len(records) == 9
+    assert not any(record.journal_dated for record in records)
     assert "json" in commands[0]
     # Lemonade's own timestamp wins over the time journald received the line,
     # so records keep the time main and the JSON history recorded for them.
@@ -470,7 +512,7 @@ def test_parse_task_records_dates_legacy_records_by_their_journal_entry(monkeypa
 
     records = parse_task_records()
 
-    assert all(record.dated for record in records)
+    assert all(record.dated and record.journal_dated for record in records)
     # Each record is dated by its Input tokens line, the 1st, 5th and 9th.
     assert [record.timestamp for record in records] == [
         _received(start_us, index) for index in (0, 4, 8)

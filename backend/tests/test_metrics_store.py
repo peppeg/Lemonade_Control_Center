@@ -752,6 +752,35 @@ def test_migration_skips_unusable_legacy_entries(tmp_path, store):
     assert TaskHistory(store).migrate_legacy_json(legacy) == 1
 
 
+def test_legacy_timestamps_are_stored_as_utc_with_one_spelling(tmp_path, store):
+    """Early versions wrote naive utcnow() times; others wrote aware ones."""
+    legacy = tmp_path / "task_history.json"
+    naive = {**_legacy_entry(), "timestamp": "2026-08-22T10:00:00.250000"}
+    zulu = {**_legacy_entry(), "timestamp": "2026-08-22T11:00:00Z", "input_tokens": 5}
+    legacy.write_text(json.dumps({"tasks": [naive, zulu]}), encoding="utf-8")
+
+    TaskHistory(store).migrate_legacy_json(legacy)
+
+    assert [row["timestamp"] for row in store.get_tasks()] == [
+        "2026-08-22T10:00:00.250000+00:00",
+        "2026-08-22T11:00:00+00:00",
+    ]
+    # The same instant from the journal is the same record.
+    aware = replace(make_row(0), timestamp="2026-08-22T10:00:00.250000+00:00",
+                    model="current")
+    assert store.insert_tasks([aware]) == 0
+
+
+def test_a_legacy_entry_with_an_unreadable_timestamp_is_skipped(tmp_path, store):
+    """It used to be stored, dated at the moment of the import."""
+    legacy = tmp_path / "task_history.json"
+    broken = {**_legacy_entry(), "timestamp": "yesterday"}
+    legacy.write_text(json.dumps({"tasks": [broken, _legacy_entry()]}), encoding="utf-8")
+
+    assert TaskHistory(store).migrate_legacy_json(legacy) == 1
+    assert [row["timestamp"] for row in store.get_tasks()] == [BASE.isoformat()]
+
+
 # ── History facade ─────────────────────────────────────────
 
 

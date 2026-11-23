@@ -45,6 +45,15 @@ DEFAULT_RANGE = "24h"
 # UTC timestamp. Nothing at or before it is stored again; see clear().
 CLEARED_AT_META_KEY = "history_cleared_at"
 
+# Furthest apart a legacy record's journald time and its task_history.json
+# copy are matched as one run. The JSON history held only the last run, read
+# when the Hardware page loaded, so its copy is dated by that poll: seconds to
+# a few minutes after the run when someone was watching. Identical legacy runs
+# further apart than this stay separate rows: matching any later row instead
+# dropped a genuine earlier run when an identical one came later. A run polled
+# later than this is stored twice, which loses nothing.
+POLL_MATCH_WINDOW_SECONDS = 5 * 60
+
 # Generation rates above this are not measurements: Lemonade emits a sentinel
 # (1000000.0) when a completion is one token long and there is no elapsed
 # generation time to divide by.
@@ -100,6 +109,12 @@ class TaskRow:
     finish_confidence: str
     # False when the source log line had no timestamp; see insert_tasks().
     dated: bool = True
+    # True when the time is journald's rather than the log line's own; see
+    # insert_tasks().
+    journal_dated: bool = False
+    # True for rows from task_history.json, dated by when they were polled;
+    # see insert_tasks().
+    polled: bool = False
 
 
 class MetricsStore:
@@ -225,7 +240,11 @@ class MetricsStore:
 
         Identity is (timestamp, model, input_tokens, output_tokens): two runs
         with identical numbers at different times are two rows, while the same
-        record scraped twice stays one.
+        record scraped twice stays one. Timestamps are stored as aware UTC
+        ISO strings, so one instant always has one spelling: a naive one, as
+        early versions wrote to task_history.json with utcnow(), is read as
+        UTC. A row whose
+        timestamp cannot be parsed is skipped rather than dated by guesswork.
 
         Rows completed at or before the last clear() are skipped: the journal
         still holds them, and they would otherwise come back on the next read.
@@ -237,14 +256,35 @@ class MetricsStore:
         skipped when a row with the same token counts, rate and duration
         exists. Once the history has been cleared it cannot be placed on
         either side of the cut-off, so it is skipped.
+
+        A legacy record dated by journald may already be stored under a later
+        time: the JSON history, and so its import, dated such records by when
+        they were polled. It is skipped when a row with the same model, token
+        counts and rate exists from its own time up to
+        POLL_MATCH_WINDOW_SECONDS after it. Identical runs at different times
+        are still told apart: a later run is never matched against an earlier
+        row, nor an earlier run against a row more than the window later.
+
+        The journal may also be read before the import (an import that failed
+        on an earlier start, or a read endpoint that came first). So a polled
+        row is skipped when a row with the same model, token counts and rate
+        was stored before this call at or before its own time, within the same
+        window, so either order pairs the same rows. Rows of the same call are
+        not matched, so repeated runs in the JSON history stay separate rows.
         """
         if not rows:
             return 0
 
-        payload = [
-            (
-                row.timestamp,
-                _epoch(row.timestamp),
+        accepted: list[TaskRow] = []
+        payload = []
+        for row in rows:
+            moment = _utc(row.timestamp)
+            if moment is None:
+                continue
+            accepted.append(row)
+            payload.append((
+                moment.isoformat(),
+                moment.timestamp(),
                 row.model,
                 row.input_tokens,
                 row.output_tokens,
@@ -254,17 +294,22 @@ class MetricsStore:
                 row.total_seconds,
                 row.finish_reason,
                 row.finish_confidence,
-            )
-            for row in rows
-        ]
+            ))
 
         def run(connection: sqlite3.Connection) -> int:
             before = connection.total_changes
             cleared_at = _cleared_at(connection)
-            for row, values in zip(rows, payload, strict=True):
+            stored_before = connection.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM task_records"
+            ).fetchone()[0]
+            for row, values in zip(accepted, payload, strict=True):
                 if cleared_at is not None and (not row.dated or values[1] <= cleared_at):
                     continue
                 if not row.dated and _metrics_known(connection, row):
+                    continue
+                if row.journal_dated and _seen_since(connection, row, values[1]):
+                    continue
+                if row.polled and _seen_until(connection, row, values[1], stored_before):
                     continue
                 connection.execute(
                     "INSERT OR IGNORE INTO task_records ("
@@ -743,15 +788,23 @@ def _iso(epoch: float) -> str:
     return datetime.fromtimestamp(epoch, tz=UTC).isoformat()
 
 
-def _epoch(timestamp: str) -> float:
-    """Epoch seconds for a stored ISO timestamp, tolerant of naive strings."""
+def _utc(timestamp: str) -> datetime | None:
+    """Parse an ISO timestamp as aware UTC; a naive one is taken as UTC."""
     try:
         parsed = datetime.fromisoformat(timestamp)
     except (TypeError, ValueError):
-        return datetime.now(UTC).timestamp()
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    return parsed.timestamp()
+    return parsed.astimezone(UTC)
+
+
+def _epoch(timestamp: str) -> float:
+    """Epoch seconds for one of this package's own ISO timestamps."""
+    moment = _utc(timestamp)
+    if moment is None:
+        raise ValueError(f"not an ISO-8601 timestamp: {timestamp!r}")
+    return moment.timestamp()
 
 
 def _set_meta(connection: sqlite3.Connection, key: str, value: str) -> None:
@@ -786,6 +839,49 @@ def _metrics_known(connection: sqlite3.Connection, row: TaskRow) -> bool:
                 row.output_tokens,
                 measurable_rate(row.gen_tps, row.output_tokens),
                 row.total_seconds,
+            ),
+        ).fetchone()
+        is not None
+    )
+
+
+def _seen_since(connection: sqlite3.Connection, row: TaskRow, epoch: float) -> bool:
+    """Whether the same run is stored at `epoch` or up to the poll window after it."""
+    return (
+        connection.execute(
+            "SELECT 1 FROM task_records WHERE input_tokens = ? AND output_tokens = ?"
+            " AND model = ? AND gen_tps = ? AND ts_epoch BETWEEN ? AND ? LIMIT 1",
+            (
+                row.input_tokens,
+                row.output_tokens,
+                row.model,
+                measurable_rate(row.gen_tps, row.output_tokens),
+                epoch,
+                epoch + POLL_MATCH_WINDOW_SECONDS,
+            ),
+        ).fetchone()
+        is not None
+    )
+
+
+def _seen_until(
+    connection: sqlite3.Connection, row: TaskRow, epoch: float, last_id: int
+) -> bool:
+    """Whether the same run is among rows up to `last_id`, at `epoch` or up to
+    the poll window before it."""
+    return (
+        connection.execute(
+            "SELECT 1 FROM task_records WHERE input_tokens = ? AND output_tokens = ?"
+            " AND model = ? AND gen_tps = ? AND ts_epoch BETWEEN ? AND ? AND id <= ?"
+            " LIMIT 1",
+            (
+                row.input_tokens,
+                row.output_tokens,
+                row.model,
+                measurable_rate(row.gen_tps, row.output_tokens),
+                epoch - POLL_MATCH_WINDOW_SECONDS,
+                epoch,
+                last_id,
             ),
         ).fetchone()
         is not None

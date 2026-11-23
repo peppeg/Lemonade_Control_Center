@@ -275,6 +275,10 @@ async def _collector_loop(interval_seconds: int) -> None:
 
 
 async def _task_sampler_loop(interval_seconds: int) -> None:
+    # The import runs here, before the first sample, rather than as a task of
+    # its own: that one sampled too, at the same moment as this loop's first
+    # tick, and stop_collector() could not cancel it.
+    await import_legacy_history()
     while True:
         try:
             await sample_tasks_once()
@@ -292,8 +296,8 @@ async def _pruner_loop(interval_seconds: int) -> None:
         await asyncio.sleep(interval_seconds)
 
 
-async def bootstrap() -> None:
-    """Run once per start: import the pre-SQLite JSON history, then sample.
+async def import_legacy_history() -> None:
+    """Import the pre-SQLite JSON history, once per start.
 
     A failed import is logged and left unmarked, so the next start tries it
     again; it is not retried while this process runs.
@@ -302,9 +306,6 @@ async def bootstrap() -> None:
         await asyncio.to_thread(task_history.migrate_legacy_json)
     except Exception as error:
         migration_failures.failed(error)
-    # The pruner loop prunes on its own first iteration, so bootstrap only
-    # has to get the first batch of tasks in without waiting 15 seconds.
-    await sample_tasks_once()
 
 
 def start_collector(interval_seconds: int = 5) -> None:
@@ -320,7 +321,6 @@ def start_collector(interval_seconds: int = 5) -> None:
         _pruner = asyncio.create_task(
             _pruner_loop(max(60, settings.metrics_prune_interval_seconds))
         )
-    asyncio.ensure_future(bootstrap())
 
 
 def stop_collector() -> None:

@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 
 from app.services.log_parser import extract_task_records
@@ -173,3 +174,155 @@ def test_cleared_legacy_records_do_not_come_back_either(monkeypatch, tmp_path):
     assert history.refresh_from_logs() == 0
     assert history.refresh_from_logs() == 1
     assert [row["input_tokens"] for row in history.get_recent(refresh=False)] == [5]
+
+
+def test_a_legacy_record_imported_from_the_json_history_is_not_stored_twice(
+    monkeypatch, tmp_path
+):
+    """The JSON history dated legacy records by when they were polled."""
+    received = datetime(2026, 11, 8, 8, 44, tzinfo=UTC)
+    times = [(received + timedelta(milliseconds=index)).isoformat() for index in range(8)]
+    lines = _legacy() + _legacy()
+    history = _history(monkeypatch, tmp_path, [])
+    monkeypatch.setattr(
+        task_history,
+        "parse_task_records",
+        lambda **_: extract_task_records(lines[:4], times[:4]),
+    )
+    legacy = tmp_path / "task_history.json"
+    legacy.write_text(json.dumps({"tasks": [{
+        "timestamp": (received + timedelta(seconds=7)).isoformat(), "model": "unknown",
+        "input_tokens": 4, "output_tokens": 7, "prompt_tps": 50.0, "gen_tps": 32.28,
+        "ttft_seconds": 0.08, "total_seconds": 0.3, "finish_reason": "stop",
+        "finish_confidence": "inferred",
+    }]}), encoding="utf-8")
+
+    assert history.migrate_legacy_json(legacy) == 1
+    assert history.refresh_from_logs() == 0
+    assert history.count() == 1
+
+
+def test_identical_legacy_runs_at_different_times_are_two_rows(monkeypatch, tmp_path):
+    received = datetime(2026, 11, 8, 8, 44, tzinfo=UTC)
+    lines = _legacy() + _legacy()
+    times = [(received + timedelta(seconds=index)).isoformat() for index in range(8)]
+    history = _history(monkeypatch, tmp_path, [])
+    windows = iter([4, 8, 8])
+    monkeypatch.setattr(
+        task_history,
+        "parse_task_records",
+        lambda **_: extract_task_records(lines[: (end := next(windows))], times[:end]),
+    )
+
+    for _ in range(3):
+        history.refresh_from_logs()
+
+    assert history.count() == 2
+
+
+def _legacy_json(path, received: datetime, count: int = 1, step=timedelta(seconds=7)):
+    path.write_text(json.dumps({"tasks": [{
+        "timestamp": (received + step * (index + 1)).isoformat(), "model": "unknown",
+        "input_tokens": 4, "output_tokens": 7, "prompt_tps": 50.0, "gen_tps": 32.28,
+        "ttft_seconds": 0.08, "total_seconds": 0.3, "finish_reason": "stop",
+        "finish_confidence": "inferred",
+    } for index in range(count)]}), encoding="utf-8")
+    return path
+
+
+def test_a_legacy_record_read_before_the_json_import_is_not_stored_twice(tmp_path):
+    """Reported in review: the import failed once, or a read came first."""
+    received = datetime(2026, 11, 8, 8, 44, tzinfo=UTC)
+    times = [(received + timedelta(milliseconds=index)).isoformat() for index in range(4)]
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+
+    assert history.ingest(extract_task_records(_legacy(), times)) == 1
+    assert history.migrate_legacy_json(_legacy_json(tmp_path / "task_history.json", received)) == 0
+    assert history.count() == 1
+
+
+def test_repeated_runs_in_the_json_history_are_all_imported(tmp_path):
+    received = datetime(2026, 11, 8, 8, 44, tzinfo=UTC)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+
+    assert history.migrate_legacy_json(
+        _legacy_json(tmp_path / "task_history.json", received, count=3)
+    ) == 3
+
+
+def test_an_imported_run_later_than_a_stored_one_is_kept(tmp_path):
+    """Only a stored run at or before the polled time can be the same run."""
+    received = datetime(2026, 11, 8, 8, 44, tzinfo=UTC)
+    later = received + timedelta(minutes=10)
+    times = [(later + timedelta(milliseconds=index)).isoformat() for index in range(4)]
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+
+    history.ingest(extract_task_records(_legacy(), times))
+
+    assert history.migrate_legacy_json(_legacy_json(tmp_path / "task_history.json", received)) == 1
+    assert history.count() == 2
+
+
+def _legacy_runs(starts: list[datetime], output_tokens: int, tps: float) -> list:
+    """Legacy per-field records, one per start, each line received 1 ms apart."""
+    lines: list[str] = []
+    times: list[str] = []
+    for start in starts:
+        lines += ["Input tokens: 4", f"Output tokens: {output_tokens}", "TTFT (s): 0.08", f"TPS: {tps}"]
+        times += [(start + timedelta(milliseconds=index)).isoformat() for index in range(4)]
+    return extract_task_records(lines, times)
+
+
+def _polled_json(path, polled: datetime, output_tokens: int, tps: float):
+    path.write_text(json.dumps({"tasks": [{
+        "timestamp": polled.isoformat(), "model": "unknown",
+        "input_tokens": 4, "output_tokens": output_tokens, "prompt_tps": 50.0,
+        "gen_tps": tps, "ttft_seconds": 0.08, "total_seconds": 0.3,
+        "finish_reason": "stop", "finish_confidence": "inferred",
+    }]}), encoding="utf-8")
+    return path
+
+
+def test_an_earlier_identical_legacy_run_is_kept_after_the_import(tmp_path):
+    """Reported in review: run A at 12:00 is only in the journal; an identical
+    run C at 13:00 is in the journal and in the JSON history, polled at
+    13:00:30. A once matched C's imported copy and was dropped."""
+    first = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+    second = first + timedelta(hours=1)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+
+    assert history.migrate_legacy_json(
+        _polled_json(tmp_path / "task_history.json", second + timedelta(seconds=30), 1, 0.0)
+    ) == 1
+    assert history.ingest(_legacy_runs([first, second], 1, 0.0)) == 1
+    assert [row["timestamp"] for row in history.get_recent(refresh=False)] == [
+        first.isoformat(),
+        (second + timedelta(seconds=30)).isoformat(),
+    ]
+
+
+def test_identical_legacy_runs_a_day_apart_are_kept_after_the_import(tmp_path):
+    first = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+    second = first + timedelta(days=1)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+
+    history.migrate_legacy_json(
+        _polled_json(tmp_path / "task_history.json", second + timedelta(seconds=10), 7, 32.28)
+    )
+    history.ingest(_legacy_runs([first, second], 7, 32.28))
+
+    assert history.count() == 2
+
+
+def test_an_imported_run_long_after_a_stored_identical_one_is_kept(tmp_path):
+    """The import matches only within the poll window, as the journal does, so
+    the order of the import and the journal read does not change the result."""
+    first = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+    history = TaskHistory(MetricsStore(tmp_path / "lcc_metrics.db"))
+
+    history.ingest(_legacy_runs([first], 1, 0.0))
+
+    assert history.migrate_legacy_json(
+        _polled_json(tmp_path / "task_history.json", first + timedelta(hours=1), 1, 0.0)
+    ) == 1
+    assert history.count() == 2

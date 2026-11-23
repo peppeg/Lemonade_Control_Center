@@ -551,6 +551,9 @@ class TaskTelemetryRecord:
     # False when none of the record's own lines carried a timestamp and
     # `timestamp` is the time it was read. It cannot be told apart by time.
     dated: bool = True
+    # True when the time is journald's, not Lemonade's: legacy per-field
+    # records have no timestamp of their own.
+    journal_dated: bool = False
 
     @property
     def dedup_key(self) -> tuple[str, str, int, int]:
@@ -672,8 +675,10 @@ def extract_task_records(
         pending: dict[str, object] = dict(found.fields)
         for index in found.lines:
             received = journal_times[index] if journal_times and index < len(journal_times) else None
-            if stamp := _line_timestamp(lines[index]) or received:
-                pending["timestamp"] = stamp
+            own_timestamp = _line_timestamp(lines[index], received)
+            if own_timestamp or received:
+                pending["timestamp"] = own_timestamp or received
+                pending["journal_dated"] = own_timestamp is None
                 break
         record = _build_task_record(pending)
         if record is not None:
@@ -722,11 +727,16 @@ def _build_task_record(pending: dict[str, object]) -> TaskTelemetryRecord | None
         prompt_eval_tps=prompt_eval_tps,
         total_duration_seconds=total_seconds,
         dated=dated,
+        journal_dated=dated and bool(pending.get("journal_dated")),
     )
 
 
-def _line_timestamp(line: str) -> str | None:
-    """Normalise a journal line's leading timestamp to an aware ISO string."""
+def _line_timestamp(line: str, received: str | None = None) -> str | None:
+    """Normalise a journal line's leading timestamp to an aware ISO string.
+
+    `received` is when journald received the line, if known. It settles
+    Lemonade's local times that occur twice when the clocks go back.
+    """
     match = RE_TIMESTAMP.match(line)
     if match:
         raw = match.group(1)
@@ -746,5 +756,24 @@ def _line_timestamp(line: str) -> str | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.astimezone()
+        parsed = _local_instant(parsed, received)
     return _as_utc(parsed).isoformat()
+
+
+def _local_instant(naive: datetime, received: str | None) -> datetime:
+    """Place a host-local time without offset on the timeline.
+
+    In the hour the clocks go back the same local time occurs twice, and
+    astimezone() alone always picks the first. The time journald received the
+    line tells which one it was. Outside that hour both readings agree, so
+    Lemonade's own timestamp, and with it the record's identity, is unchanged.
+    """
+    first = naive.replace(fold=0).astimezone()
+    second = naive.replace(fold=1).astimezone()
+    if first == second or received is None:
+        return first
+    try:
+        reference = datetime.fromisoformat(received)
+    except ValueError:
+        return first
+    return min((first, second), key=lambda candidate: abs(candidate - reference))

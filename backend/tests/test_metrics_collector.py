@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -275,15 +276,50 @@ async def test_a_failed_legacy_import_is_logged_once_per_start(store, monkeypatc
     legacy = tmp_path / "task_history.json"
     legacy.write_text("{not json", encoding="utf-8")
     monkeypatch.setattr("app.services.metrics.task_history.HISTORY_FILE", legacy)
-    monkeypatch.setattr(collector, "sample_tasks_once", _no_tasks)
 
     with caplog.at_level(logging.WARNING, logger=collector.log.name):
-        await collector.bootstrap()
+        await collector.import_legacy_history()
 
     [warning] = _warnings(caplog)
     assert warning.startswith("Import of task_history.json failed: cannot read")
     assert store.get_meta("task_history_json_imported") is None
 
 
-async def _no_tasks() -> int:
-    return 0
+
+@pytest.mark.asyncio
+async def test_start_imports_once_then_samples_tasks_one_at_a_time(store, monkeypatch):
+    """The start-up sample used to run alongside the sampler loop's first tick."""
+    events: list[str] = []
+    running = 0
+    overlaps = 0
+
+    def migrate():
+        events.append("import")
+
+    async def sample():
+        nonlocal running, overlaps
+        running += 1
+        overlaps = max(overlaps, running)
+        events.append("sample")
+        await asyncio.sleep(0.05)
+        running -= 1
+        return 0
+
+    async def idle(*args, **kwargs):
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(task_history, "migrate_legacy_json", migrate)
+    monkeypatch.setattr(collector, "sample_tasks_once", sample)
+    monkeypatch.setattr(collector, "_collector_loop", idle)
+    monkeypatch.setattr(collector, "_pruner_loop", idle)
+    before = asyncio.all_tasks()
+
+    collector.start_collector()
+    await asyncio.sleep(0.2)
+    collector.stop_collector()
+    await asyncio.sleep(0)
+
+    assert events == ["import", "sample"]
+    assert overlaps == 1
+    # Nothing started by the collector outlives stop_collector().
+    assert all(task.done() for task in asyncio.all_tasks() - before - {asyncio.current_task()})
