@@ -265,6 +265,7 @@ def test_extract_task_records_reads_timestamps_from_the_journal_lines():
     assert len(set(stamps)) == 9
     assert stamps == sorted(stamps)
     assert all(stamp.endswith("+00:00") for stamp in stamps)
+    assert all(record.dated for record in records)
 
 
 def test_extract_task_records_splits_consecutive_legacy_records():
@@ -285,6 +286,8 @@ def test_extract_task_records_splits_consecutive_legacy_records():
     assert [record.output_tokens for record in records] == [12, 24]
     assert [record.generation_tps for record in records] == [22.5, 20.0]
     assert records[0].model == "unknown"
+    # No line carried a timestamp, so the stored time is only the read time.
+    assert not any(record.dated for record in records)
 
 
 def test_extract_task_records_drops_records_without_output_tokens():

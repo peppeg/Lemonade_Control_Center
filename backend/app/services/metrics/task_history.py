@@ -176,6 +176,7 @@ def _to_row(record: TaskTelemetryRecord) -> TaskRow:
         # .value, not str(): the enum's str() spells "FinishReasonConfidence.
         # INFERRED", which every other endpoint reports as plain "inferred".
         finish_confidence=finish.confidence.value,
+        dated=record.dated,
     )
 
 

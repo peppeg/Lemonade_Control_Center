@@ -75,3 +75,36 @@ def test_task_history_drops_the_single_token_sentinel_rate(monkeypatch, tmp_path
     assert history.store.task_window(
         datetime(2026, 11, 1, tzinfo=UTC), datetime(2026, 11, 30, tzinfo=UTC), 3600
     )["summary"]["gen_tps_mean"] == 0.0
+
+
+def test_task_history_stores_an_undated_record_once(monkeypatch, tmp_path):
+    """A legacy record without a log timestamp is matched on its metrics alone.
+
+    Its timestamp is the time it was read, so it differs on every sampler tick;
+    without the fallback each tick would insert the same record again.
+    """
+    history = _history(monkeypatch, tmp_path, [_legacy(), _legacy()])
+
+    history.refresh_from_logs()
+    history.refresh_from_logs()
+
+    assert history.count() == 1
+
+
+def test_undated_record_is_skipped_when_its_metrics_are_already_stored(monkeypatch, tmp_path):
+    history = _history(monkeypatch, tmp_path, [[_line("2026-11-08 08:48:05.029")], _legacy()])
+
+    history.refresh_from_logs()
+    history.refresh_from_logs()
+
+    assert history.count() == 1
+
+
+def test_undated_records_with_different_metrics_are_both_stored(monkeypatch, tmp_path):
+    other = ["Input tokens: 5", "Output tokens: 9", "TTFT (s): 0.10", "TPS: 30.00"]
+    history = _history(monkeypatch, tmp_path, [_legacy(), other])
+
+    history.refresh_from_logs()
+    history.refresh_from_logs()
+
+    assert history.count() == 2

@@ -504,6 +504,9 @@ class TaskTelemetryRecord:
     generation_tps: float
     prompt_eval_tps: float
     total_duration_seconds: float
+    # False when no log line carried a timestamp and `timestamp` is the time
+    # the record was read. Such a record cannot be told apart by time.
+    dated: bool = True
 
     @property
     def dedup_key(self) -> tuple[str, str, int, int]:
@@ -609,7 +612,8 @@ def _build_task_record(pending: dict[str, object]) -> TaskTelemetryRecord | None
     total_seconds = round(ttft_seconds + output_tokens / gen_tps, 1) if gen_tps else 0.0
 
     timestamp = pending.get("timestamp")
-    if not isinstance(timestamp, str) or not timestamp:
+    dated = isinstance(timestamp, str) and bool(timestamp)
+    if not dated:
         timestamp = datetime.now(UTC).isoformat()
 
     model = pending.get("model")
@@ -623,6 +627,7 @@ def _build_task_record(pending: dict[str, object]) -> TaskTelemetryRecord | None
         generation_tps=gen_tps,
         prompt_eval_tps=prompt_eval_tps,
         total_duration_seconds=total_seconds,
+        dated=dated,
     )
 
 

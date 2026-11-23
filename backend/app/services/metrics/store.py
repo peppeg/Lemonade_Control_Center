@@ -89,6 +89,8 @@ class TaskRow:
     total_seconds: float
     finish_reason: str
     finish_confidence: str
+    # False when the source log line had no timestamp; see insert_tasks().
+    dated: bool = True
 
 
 class MetricsStore:
@@ -161,6 +163,11 @@ class MetricsStore:
         Identity is (timestamp, model, input_tokens, output_tokens): two runs
         with identical numbers at different times are two rows, while the same
         record scraped twice stays one.
+
+        An undated row (a legacy log line with no timestamp) carries the time
+        it was read, which changes on every scrape. Like the JSON history
+        before it, such a row is matched on its metrics alone: it is skipped
+        when a row with the same token counts, rate and duration exists.
         """
         if not rows:
             return 0
@@ -184,13 +191,16 @@ class MetricsStore:
 
         def run(connection: sqlite3.Connection) -> int:
             before = connection.total_changes
-            connection.executemany(
-                "INSERT OR IGNORE INTO task_records ("
-                "timestamp, ts_epoch, model, input_tokens, output_tokens, prompt_tps,"
-                " gen_tps, ttft_seconds, total_seconds, finish_reason, finish_confidence"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                payload,
-            )
+            for row, values in zip(rows, payload, strict=True):
+                if not row.dated and _metrics_known(connection, row):
+                    continue
+                connection.execute(
+                    "INSERT OR IGNORE INTO task_records ("
+                    "timestamp, ts_epoch, model, input_tokens, output_tokens, prompt_tps,"
+                    " gen_tps, ttft_seconds, total_seconds, finish_reason, finish_confidence"
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    values,
+                )
             return connection.total_changes - before
 
         return self._write(run)
@@ -649,6 +659,23 @@ def _epoch(timestamp: str) -> float:
     return parsed.timestamp()
 
 
+def _metrics_known(connection: sqlite3.Connection, row: TaskRow) -> bool:
+    """Whether a row with these token counts, rate and duration is stored."""
+    return (
+        connection.execute(
+            "SELECT 1 FROM task_records WHERE input_tokens = ? AND output_tokens = ?"
+            " AND gen_tps = ? AND total_seconds = ? LIMIT 1",
+            (
+                row.input_tokens,
+                row.output_tokens,
+                measurable_rate(row.gen_tps, row.output_tokens),
+                row.total_seconds,
+            ),
+        ).fetchone()
+        is not None
+    )
+
+
 def _range_clauses(
     since: datetime | None,
     until: datetime | None,
@@ -682,6 +709,8 @@ CREATE TABLE IF NOT EXISTS task_records (
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_records_ts ON task_records (ts_epoch);
+CREATE INDEX IF NOT EXISTS idx_task_records_tokens
+    ON task_records (input_tokens, output_tokens);
 
 CREATE TABLE IF NOT EXISTS hardware_samples (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
