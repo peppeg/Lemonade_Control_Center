@@ -6,6 +6,10 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+### Fixed
+
+- Dashboard and Diagnostics read the default backend where current Lemonade keeps it (`llamacpp.backend`). Diagnostics prefers the backend of the running process over the configured one.
+
 ## 0.3.1 - 2026-11-23
 
 ### Added

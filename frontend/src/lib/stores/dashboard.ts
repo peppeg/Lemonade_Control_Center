@@ -17,6 +17,7 @@ import type {
   DashboardLoadingState,
 } from '$lib/types';
 import { formatDuration } from '$lib/utils/format';
+import { configuredBackend } from '$lib/utils/runtimeConfig';
 
 // ── Stores ──
 
@@ -73,7 +74,7 @@ export async function refreshDashboard(): Promise<void> {
       websocketPort: h.websocket_port,
       globalTimeout: (raw.global_timeout as number) ?? null,
       maxLoadedModels: (raw.max_loaded_models as number) ?? null,
-      defaultBackend: (raw.llamacpp_backend as string) ?? null,
+      defaultBackend: null,
     };
   }
 
@@ -180,6 +181,7 @@ export async function refreshDashboard(): Promise<void> {
       runtimeConfigAvailable = true;
       globalTimeout = (cfg.data.raw.global_timeout as number) ?? globalTimeout;
       configMaxTokens = (cfg.data.raw.max_tokens as number) ?? null;
+      if (serverStatus) serverStatus.defaultBackend = configuredBackend(cfg.data.raw);
     }
   }
 
