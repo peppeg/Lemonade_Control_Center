@@ -7,16 +7,22 @@ Provides:
 - WebSocket live streaming
 """
 import asyncio
-import subprocess
+import contextlib
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.capabilities import capabilities
 from app.models.schemas import LastTaskStats, RecentLogsResponse
-from app.services.log_parser import get_recent_logs, parse_last_task
+from app.services.log_parser import _parse_log_line, get_recent_logs, parse_last_task
 from app.services.security import authorize_websocket
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
+
+LOG_STREAM_COMMAND = [
+    "journalctl", "-u", "lemond.service", "-f", "-o", "cat", "--no-pager", "-n", "0",
+]
+MAX_LOG_LINE_BYTES = 1024 * 1024
+STOP_TIMEOUT_SECONDS = 5
 
 
 @router.get("/recent", response_model=RecentLogsResponse)
@@ -51,35 +57,26 @@ async def stream_logs(websocket: WebSocket):
         return
 
     process = None
+    tasks: list[asyncio.Task] = []
     try:
-        process = subprocess.Popen(  # noqa: ASYNC220
-            ["journalctl", "-u", "lemond.service", "-f", "-o", "cat",
-             "--no-pager", "-n", "0"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
+        process = await asyncio.create_subprocess_exec(
+            *LOG_STREAM_COMMAND,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            limit=MAX_LOG_LINE_BYTES,
         )
 
         await websocket.send_json({"type": "connected", "message": "Log streaming started"})
 
-        loop = asyncio.get_event_loop()
-
-        while True:
-            line = await loop.run_in_executor(None, process.stdout.readline)
-
-            if not line:
-                await websocket.send_json({"type": "ended", "message": "Log stream ended"})
-                break
-
-            line = line.strip()
-            if line:
-                from app.services.log_parser import _parse_log_line
-                entry = _parse_log_line(line)
-                await websocket.send_json({
-                    "type": "log",
-                    "entry": entry.model_dump()
-                })
+        # Lemonade can stay silent for hours: waiting for a line must not hide
+        # that the client is gone, or that LCC is shutting down.
+        tasks = [
+            asyncio.create_task(_forward_log_lines(process.stdout, websocket)),
+            asyncio.create_task(_wait_for_disconnect(websocket)),
+        ]
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            task.result()
 
     except WebSocketDisconnect:
         pass
@@ -89,9 +86,45 @@ async def stream_logs(websocket: WebSocket):
         except Exception:
             pass
     finally:
+        for task in tasks:
+            task.cancel()
         if process:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
+            await _stop(process)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def _forward_log_lines(stdout: asyncio.StreamReader, websocket: WebSocket) -> None:
+    while True:
+        try:
+            raw = await stdout.readline()
+        except ValueError:  # longer than MAX_LOG_LINE_BYTES: the reader drops it
+            continue
+        if not raw:
+            await websocket.send_json({"type": "ended", "message": "Log stream ended"})
+            return
+        line = raw.decode("utf-8", errors="replace").strip()
+        if line:
+            await websocket.send_json({
+                "type": "log",
+                "entry": _parse_log_line(line).model_dump()
+            })
+
+
+async def _wait_for_disconnect(websocket: WebSocket) -> None:
+    while (await websocket.receive())["type"] != "websocket.disconnect":
+        pass
+
+
+async def _stop(process: asyncio.subprocess.Process) -> None:
+    """End the process, even when this handler is being cancelled."""
+    if process.returncode is not None:
+        return
+    with contextlib.suppress(ProcessLookupError):
+        process.terminate()
+    with contextlib.suppress(TimeoutError):
+        try:
+            await asyncio.wait_for(process.wait(), timeout=STOP_TIMEOUT_SECONDS)
+        finally:
+            if process.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    process.kill()
