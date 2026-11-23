@@ -14,6 +14,7 @@ from app.services.bench.models import (
     BenchResult,
     SuiteResult,
 )
+from app.services.state_files import write_private_text
 
 RESULTS_FILE = Path(__file__).parent.parent.parent / "data" / "bench_results.json"
 
@@ -162,8 +163,7 @@ class BenchStorage:
             pass
 
     def _save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
+        write_private_text(
+            self.path,
             json.dumps({"suites": list(self._suite_results), "quick": list(self._quick_results)}, indent=2),
-            encoding="utf-8",
         )

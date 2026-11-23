@@ -25,6 +25,7 @@ from app.routers import (
 from app.routers import settings as settings_router
 from app.services.metrics.collector import start_collector, stop_collector
 from app.services.security import DEV_ORIGINS, is_loopback_host
+from app.services.state_files import protect_data_dir
 
 
 @asynccontextmanager
@@ -43,6 +44,7 @@ async def lifespan(app: FastAPI):
         print("   LAN warning:  non-loopback APP_HOST should be used with REQUIRE_AUTH=true")
     print(f"   Capabilities: {capabilities.probe_timestamp or 'no probe results'}")
     print(f"   Lemonade ver: {capabilities.lemonade_version or 'unknown'}")
+    protect_data_dir()
     start_collector(interval_seconds=10)
     yield
     stop_collector()

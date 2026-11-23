@@ -10,6 +10,7 @@ from app.services.diagnostics.models import (
     DiagnosticReport,
     Severity,
 )
+from app.services.state_files import write_private_text
 
 HISTORY_FILE = Path(__file__).parent.parent.parent / "data" / "diagnostic_history.json"
 
@@ -35,13 +36,12 @@ class AlertHistory:
             self._dismissed = set()
 
     def _save(self) -> None:
-        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "entries": [entry.model_dump(mode="json") for entry in self._entries[-200:]],
             "active_rules": sorted(self._active_rules),
             "dismissed": sorted(self._dismissed),
         }
-        HISTORY_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        write_private_text(HISTORY_FILE, json.dumps(data, indent=2))
 
     def record(self, report: DiagnosticReport) -> DiagnosticReport:
         current_alert_ids = {alert.rule_id for alert in report.alerts}

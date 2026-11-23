@@ -16,6 +16,7 @@ from app.models.profiles import (
     SmartRecommendation,
 )
 from app.services.run_evidence import RunEvidenceStorage
+from app.services.state_files import ensure_private_dir, write_private_text
 
 PROFILES_DIR = Path(__file__).parent.parent / "data" / "profiles"
 
@@ -90,7 +91,7 @@ class ProfileService:
     def __init__(self, profiles_dir: Path = PROFILES_DIR, evidence_storage: RunEvidenceStorage | None = None) -> None:
         self.profiles_dir = profiles_dir
         self.evidence_storage = evidence_storage or RunEvidenceStorage()
-        self.profiles_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.profiles_dir)
 
     def _file_path(self, model_name: str) -> Path:
         safe_name = re.sub(r"[^A-Za-z0-9._-]+", "__", model_name).strip("._-")
@@ -118,7 +119,7 @@ class ProfileService:
         data = model_profiles.model_dump(mode="json")
         for profile in data["profiles"]:
             profile.pop("latest_evidence", None)
-        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        write_private_text(path, json.dumps(data, indent=2))
 
     def list_profiles(self, model_name: str) -> ModelProfiles:
         model_profiles = self._load(model_name)
