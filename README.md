@@ -53,6 +53,17 @@ By default, LCC remains local to the Linux host and can be opened there at `http
 |---|---|
 | ![Diagnostics](screenshot/lemonadecc_003.jpg) | ![Hardware monitor](screenshot/lemonadecc_004.jpg) |
 
+## What's New In 0.3.1
+
+Version 0.3.1 is a security and compatibility release:
+
+- **Access control** covers HTTP and WebSocket alike, refuses actions sent by other web sites, and limits localhost trust to direct local connections. See [Security](docs/security.md).
+- **Local state files** are readable only by the user running LCC and are replaced in one step.
+- **Lemonade 11.x** fixes cover telemetry parsing, nested configuration keys, and saved model options. A full 11.x test pass is still pending.
+- **Smoke Test** works with reasoning models, and AMD GTT and VRAM usage is shown where amdgpu reports it.
+
+See the [0.3.1 release notes](https://github.com/peppeg/Lemonade_Control_Center/releases/tag/0.3.1) before updating: some reverse proxy setups need a new setting.
+
 ## What's New In 0.3.0
 
 Version 0.3.0 adds the first complete evidence-and-workflow layer on top of LCC's operator foundation:

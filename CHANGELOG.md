@@ -6,6 +6,8 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+## 0.3.1 - 2026-11-23
+
 ### Added
 
 - AMD GPU memory telemetry: Dashboard, System, Hardware and run telemetry now show GTT and VRAM usage from amdgpu sysfs. On APUs such as Strix Halo model weights live mostly in GTT, which `llama-server` RSS and dedicated VRAM do not reflect.
