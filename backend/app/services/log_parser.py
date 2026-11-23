@@ -667,9 +667,9 @@ def extract_task_records(
             and not all(key in found.fields for key in _RECORD_FIELDS)
         ):
             continue
+        # TTFT is kept as logged: Lemonade 2026.45 reports milliseconds
+        # (0.485s), and the prompt rate is derived from it.
         pending: dict[str, object] = dict(found.fields)
-        if "ttft_seconds" in pending:
-            pending["ttft_seconds"] = round(pending["ttft_seconds"], 2)
         for index in found.lines:
             received = journal_times[index] if journal_times and index < len(journal_times) else None
             if stamp := _line_timestamp(lines[index]) or received:

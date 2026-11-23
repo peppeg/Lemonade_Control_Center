@@ -384,6 +384,42 @@ def test_a_record_is_not_dated_by_an_earlier_unrelated_line():
     assert [record.dated for record in records] == [False]
 
 
+# Lemonade 2026.45.3, from review: lines from two threads interleave, the
+# (Telemetry) and (Process) tags are swapped, and the "total time" line of the
+# second task is missing. The first task is a longer one whose total time a
+# parser could wrongly carry over.
+LEMONADE_2026_45_3 = [
+    "2026-11-23 16:07:18.410 [Info] (Process) 0.18.420.105 I slot print_timing: id  0 | task 0 | prompt eval time =     902.11 ms /    50 tokens (   18.04 ms per token,    55.43 tokens per second)",
+    "2026-11-23 16:07:29.910 [Info] (Process) 0.18.420.106 I slot print_timing: id  0 | task 0 |        eval time =   10597.80 ms /   300 tokens (   35.33 ms per token,    28.31 tokens per second)",
+    "2026-11-23 16:07:29.910 [Info] (Process) 0.18.420.107 I slot print_timing: id  0 | task 0 |       total time =   11499.91 ms /   350 tokens",
+    "2026-11-23 16:07:29.911 [Info] (Telemetry) Inference completed: model=Gemma-4-31B-it-MTP-GGUF, tokens=350 (in=50, out=300), ttft=0.902s, tps=28.31",
+    "2026-11-23 16:07:41.036 [Info] (Process) 0.18.432.412 I slot print_timing: id  0 | task 0 | prompt eval time =     484.83 ms /    27 tokens (   17.96 ms per token,    55.69 tokens per second)",
+    "2026-11-23 16:07:41.037 [Info] (Telemetry) 0.18.432.417 I slot print_timing: id  0 | task 0 |        eval time =    4699.53 ms /   134 tokens (   35.33 ms per token,    28.30 tokens per second)",
+    "2026-11-23 16:07:41.037 [Info] (Process) Inference completed: model=Gemma-4-31B-it-MTP-GGUF, tokens=161 (in=27, out=134), ttft=0.485s, tps=28.30",
+]
+
+
+def test_interleaved_lemonade_2026_45_3_lines_give_each_task_its_own_numbers(monkeypatch):
+    _fake_json_journal(monkeypatch, LEMONADE_2026_45_3)
+
+    first, second = parse_task_records()
+
+    assert (second.input_tokens, second.output_tokens) == (27, 134)
+    assert second.model == "Gemma-4-31B-it-MTP-GGUF"
+    assert second.ttft_seconds == pytest.approx(0.485)
+    assert second.generation_tps == pytest.approx(28.30)
+    assert second.prompt_eval_tps == pytest.approx(55.67)   # 27 / 0.485
+    # 0.485 + 134 / 28.30 = 5.2s, not the 11.5s of the task before it.
+    assert second.total_duration_seconds == pytest.approx(5.2)
+    assert first.total_duration_seconds == pytest.approx(11.5)
+    assert second.timestamp == extract_task_records(LEMONADE_2026_45_3[-1:])[0].timestamp
+    assert second.dated
+
+
+def test_a_telemetry_tagged_timing_line_is_not_a_record_of_its_own():
+    assert extract_task_records(LEMONADE_2026_45_3[4:6]) == []
+
+
 def test_extract_task_records_drops_records_without_output_tokens():
     """A request that produced nothing is not a data point."""
     assert extract_task_records([
