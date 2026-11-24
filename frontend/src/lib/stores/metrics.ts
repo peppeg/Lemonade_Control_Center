@@ -74,14 +74,13 @@ export function toggleMetricsPause(): void {
   metricsPaused.update((value) => !value);
 }
 
-export async function clearMetricsHistory(): Promise<void> {
-  const result = await api.metrics.clear();
+export async function clearLiveBuffer(): Promise<void> {
+  const result = await api.metrics.clear('buffer');
   if (result.ok) {
     timeSeriesData.set([]);
-    taskHistory.set([]);
-    notify.info('Metrics cleared', 'Hardware and task history buffers were cleared.');
+    notify.info('Live buffer cleared', 'The persisted task and hardware history was kept.');
   } else {
-    notify.error('Clear metrics failed', result.error);
+    notify.error('Clear failed', result.error);
   }
 }
 

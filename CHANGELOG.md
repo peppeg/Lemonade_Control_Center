@@ -6,6 +6,19 @@ The project is under active development, so entries currently describe the evolv
 
 ## Unreleased
 
+### Added
+
+- Persisted run history: every completed inference in the Lemonade journal and a per-minute hardware rollup (including GTT and VRAM in use, where amdgpu reports them) are stored in SQLite (`backend/app/data/lcc_metrics.db`, task records kept indefinitely and hardware rollups for 30 days by default; `TASK_RETENTION_DAYS` and `HARDWARE_RETENTION_DAYS` set a limit, 0 means none), sampled in the background so history accrues with no UI open. `/api/metrics/tasks` and the CSV export accept a time range; `/api/metrics/tasks` keeps its default of 20 records and accepts `n` up to 5000 instead of 50, and the CSV export holds every record in the range. An existing `task_history.json` is imported once. A record that cannot be read or stored (a malformed number, an integer SQLite cannot hold, a date out of range) is skipped with a warning, and the others are stored.
+
+### Changed
+
+- `POST /api/metrics/clear` now requires `scope=buffer`, which empties the live buffer and keeps the persisted history; a missing or unknown scope returns 400 instead of wiping data.
+
+### Fixed
+
+- The last task reads `in=`, `out=`, `ttft=` and `tps=` from `Inference completed` lines only. The same words on any other line were taken for its numbers.
+- In the older log format (one field per line), a repeated field ends the last task: after `Input tokens: 80`, `Output tokens: 24`, `Output tokens: 9`, a following `TPS: 12` is no longer taken for it, since it belongs to a task whose first line is missing. Its TPS is shown as missing.
+
 ## 0.3.2 - 2026-11-24
 
 ### Added

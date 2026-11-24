@@ -1,13 +1,20 @@
 import json
 import subprocess
+import time
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from app.models.schemas import LogEntryLevel
 from app.services.log_parser import (
+    JournalReadError,
     _parse_log_line,
+    extract_task_records,
     get_logs_for_window,
     parse_last_task,
+    parse_task_records,
 )
 
 
@@ -207,3 +214,524 @@ def test_parse_last_task_unavailable_without_journal(monkeypatch):
     monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
 
     assert parse_last_task().available is False
+
+
+# ── Multi-record extraction ────────────────────────────────
+
+FIXTURE = Path(__file__).parent / "fixtures" / "lemond_journal_11_7.log"
+
+
+def _fixture_lines() -> list[str]:
+    return FIXTURE.read_text(encoding="utf-8").splitlines()
+
+
+def test_extract_task_records_finds_every_record_in_a_real_journal():
+    """The captured 11.7 slice holds nine completed inferences."""
+    records = extract_task_records(_fixture_lines())
+
+    assert len(records) == 9
+    assert [record.output_tokens for record in records] == [
+        38, 79, 562, 10, 217, 61, 24, 55, 61
+    ]
+    assert [record.input_tokens for record in records] == [
+        27, 21, 26, 2306, 24124, 2337, 91, 49, 91
+    ]
+    assert {record.model for record in records} == {"Gemma-4-12B-it-MTP-GGUF"}
+
+
+def test_extract_task_records_matches_parse_last_task_on_the_final_record():
+    """The multi-record path derives exactly what parse_last_task derives."""
+    last = extract_task_records(_fixture_lines())[-1]
+
+    assert last.input_tokens == 91
+    assert last.output_tokens == 61
+    assert last.ttft_seconds == 1.24
+    assert last.generation_tps == 13.84
+    assert last.prompt_eval_tps == 73.39          # 91 / 1.24
+    assert last.total_duration_seconds == 5.6     # 1.24 + 61 / 13.84
+
+
+def test_extract_task_records_ignores_the_surrounding_journal_noise():
+    """An image model loading, VRAM pressure warnings and an eviction."""
+    noise = [
+        line for line in _fixture_lines()
+        if "(Telemetry) Inference completed" not in line
+    ]
+
+    assert len(noise) == 53
+    assert extract_task_records(noise) == []
+
+
+def test_extract_task_records_reads_timestamps_from_the_journal_lines():
+    records = extract_task_records(_fixture_lines())
+    stamps = [record.timestamp for record in records]
+
+    assert len(set(stamps)) == 9
+    assert stamps == sorted(stamps)
+    assert all(stamp.endswith("+00:00") for stamp in stamps)
+    assert all(record.dated for record in records)
+
+
+def test_extract_task_records_splits_consecutive_legacy_records():
+    """The per-field spelling separates records when a field repeats."""
+    records = extract_task_records([
+        "Input tokens: 40",
+        "Output tokens: 12",
+        "TTFT (s): 0.55",
+        "TPS: 22.5",
+        "Input tokens: 80",
+        "Output tokens: 24",
+        "TTFT (s): 1.10",
+        "TPS: 20.0",
+    ])
+
+    assert len(records) == 2
+    assert [record.input_tokens for record in records] == [40, 80]
+    assert [record.output_tokens for record in records] == [12, 24]
+    assert [record.generation_tps for record in records] == [22.5, 20.0]
+    assert records[0].model == "unknown"
+    # No line carried a timestamp, so the stored time is only the read time.
+    assert not any(record.dated for record in records)
+
+
+# Three legacy records, one field per line, as older Lemonade logged them.
+LEGACY_RECORDS = [(40, 12, 22.5), (80, 24, 20.0), (120, 36, 18.0)]
+LEGACY_WINDOW = [
+    line
+    for input_tokens, output_tokens, tps in LEGACY_RECORDS
+    for line in (
+        f"Input tokens: {input_tokens}",
+        f"Output tokens: {output_tokens}",
+        "TTFT (s): 0.50",
+        f"TPS: {tps}",
+    )
+]
+
+
+def _identities(records):
+    return [(r.input_tokens, r.output_tokens, r.generation_tps) for r in records]
+
+
+def test_a_window_starting_inside_a_legacy_record_does_not_shift_later_ones():
+    """Reported in review: the window started at an Output tokens line."""
+    for dropped in (1, 2, 3):
+        records = extract_task_records(LEGACY_WINDOW[dropped:])
+
+        assert _identities(records) == LEGACY_RECORDS[1:], f"first {dropped} lines dropped"
+
+
+def test_a_legacy_record_still_being_written_is_left_for_the_next_read():
+    for kept in (1, 2, 3):
+        window = LEGACY_WINDOW[: 8 + kept]
+
+        assert _identities(extract_task_records(window)) == LEGACY_RECORDS[:2], f"{kept} lines"
+
+    assert _identities(extract_task_records(LEGACY_WINDOW)) == LEGACY_RECORDS
+
+
+def test_every_window_yields_only_true_legacy_records():
+    """Wherever the window starts and ends, no record is invented."""
+    for start in range(len(LEGACY_WINDOW)):
+        for end in range(start, len(LEGACY_WINDOW) + 1):
+            found = _identities(extract_task_records(LEGACY_WINDOW[start:end]))
+            whole = [
+                record
+                for index, record in enumerate(LEGACY_RECORDS)
+                if start <= 4 * index and 4 * index + 4 <= end
+            ]
+
+            assert found == whole, (start, end)
+
+
+def test_a_legacy_record_missing_its_input_line_does_not_borrow_one():
+    """A record whose start was lost mid-journal is dropped, not merged."""
+    window = LEGACY_WINDOW[:4] + LEGACY_WINDOW[5:]
+
+    assert _identities(extract_task_records(window)) == [LEGACY_RECORDS[0], LEGACY_RECORDS[2]]
+
+
+def test_a_legacy_record_with_a_lost_line_does_not_borrow_from_the_next():
+    """The next record lost its input line: its TTFT is not the first one's."""
+    window = ["Input tokens: 40", "Output tokens: 12", "TPS: 22.5", "Output tokens: 24", "TTFT (s): 1.10", "TPS: 20.0"]
+
+    records = extract_task_records(window)
+
+    assert _identities(records) == [(40, 12, 22.5)]
+    assert records[0].ttft_seconds == 0.0
+
+
+def test_the_last_task_does_not_borrow_from_a_record_that_lost_its_input_line(monkeypatch):
+    _fake_journal(monkeypatch, ["Input tokens: 40", "Output tokens: 12", "Output tokens: 24", "TTFT (s): 1.10", "TPS: 20.0"])
+
+    stats = parse_last_task()
+
+    assert (stats.input_tokens, stats.output_tokens, stats.ttft_seconds, stats.generation_tps) == (40, 12, None, None)
+
+
+def test_a_repeated_field_keeps_its_first_value_as_in_the_last_task():
+    """Stored records are split like the last task (#52)."""
+    records = extract_task_records(
+        ["Input tokens: 80", "Output tokens: 24", "Output tokens: 9, TPS: 12.0", "TTFT (s): 0.50"]
+    )
+
+    assert _identities(records) == [(80, 24, 12.0)]
+
+
+def test_a_record_is_not_dated_by_an_earlier_unrelated_line():
+    """Otherwise its time would change when that line leaves the window."""
+    records = extract_task_records([
+        "2026-08-22 10:11:10.139 [Info] (Server) POST /api/v1/chat/completions - 200 OK",
+        *LEGACY_WINDOW[:4],
+    ])
+
+    assert [record.dated for record in records] == [False]
+
+
+# Lemonade 2026.45.3, from review: lines from two threads interleave, the
+# (Telemetry) and (Process) tags are swapped, and the "total time" line of the
+# second task is missing. The first task is a longer one whose total time a
+# parser could wrongly carry over.
+LEMONADE_2026_45_3 = [
+    "2026-11-23 16:07:18.410 [Info] (Process) 0.18.420.105 I slot print_timing: id  0 | task 0 | prompt eval time =     902.11 ms /    50 tokens (   18.04 ms per token,    55.43 tokens per second)",
+    "2026-11-23 16:07:29.910 [Info] (Process) 0.18.420.106 I slot print_timing: id  0 | task 0 |        eval time =   10597.80 ms /   300 tokens (   35.33 ms per token,    28.31 tokens per second)",
+    "2026-11-23 16:07:29.910 [Info] (Process) 0.18.420.107 I slot print_timing: id  0 | task 0 |       total time =   11499.91 ms /   350 tokens",
+    "2026-11-23 16:07:29.911 [Info] (Telemetry) Inference completed: model=Gemma-4-31B-it-MTP-GGUF, tokens=350 (in=50, out=300), ttft=0.902s, tps=28.31",
+    "2026-11-23 16:07:41.036 [Info] (Process) 0.18.432.412 I slot print_timing: id  0 | task 0 | prompt eval time =     484.83 ms /    27 tokens (   17.96 ms per token,    55.69 tokens per second)",
+    "2026-11-23 16:07:41.037 [Info] (Telemetry) 0.18.432.417 I slot print_timing: id  0 | task 0 |        eval time =    4699.53 ms /   134 tokens (   35.33 ms per token,    28.30 tokens per second)",
+    "2026-11-23 16:07:41.037 [Info] (Process) Inference completed: model=Gemma-4-31B-it-MTP-GGUF, tokens=161 (in=27, out=134), ttft=0.485s, tps=28.30",
+]
+
+
+def test_interleaved_lemonade_2026_45_3_lines_give_each_task_its_own_numbers(monkeypatch):
+    _fake_json_journal(monkeypatch, LEMONADE_2026_45_3)
+
+    first, second = parse_task_records()
+
+    assert (second.input_tokens, second.output_tokens) == (27, 134)
+    assert second.model == "Gemma-4-31B-it-MTP-GGUF"
+    assert second.ttft_seconds == pytest.approx(0.485)
+    assert second.generation_tps == pytest.approx(28.30)
+    assert second.prompt_eval_tps == pytest.approx(55.67)   # 27 / 0.485
+    # 0.485 + 134 / 28.30 = 5.2s, not the 11.5s of the task before it.
+    assert second.total_duration_seconds == pytest.approx(5.2)
+    assert first.total_duration_seconds == pytest.approx(11.5)
+    assert second.timestamp == extract_task_records(LEMONADE_2026_45_3[-1:])[0].timestamp
+    assert second.dated
+
+
+def test_a_telemetry_tagged_timing_line_is_not_a_record_of_its_own():
+    assert extract_task_records(LEMONADE_2026_45_3[4:6]) == []
+
+
+@pytest.fixture
+def new_york(monkeypatch):
+    """Host local time with a clock change: 2026-11-01 01:00-02:00 occurs twice."""
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def _completed_at(local: str) -> str:
+    return (
+        f"{local} [Info] (Telemetry) Inference completed: model=M, "
+        "tokens=60 (in=10, out=50), ttft=0.5s, tps=30.0"
+    )
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="needs time.tzset")
+def test_the_repeated_hour_of_a_clock_change_is_read_by_the_journal_time(new_york):
+    """01:45 happens at 05:45Z (EDT) and again at 06:45Z (EST)."""
+    line = _completed_at("2026-11-01 01:45:00.000")
+
+    [first] = extract_task_records([line], ["2026-11-01T05:45:00.010000+00:00"])
+    [second] = extract_task_records([line], ["2026-11-01T06:45:00.010000+00:00"])
+
+    assert first.timestamp == "2026-11-01T05:45:00+00:00"
+    assert second.timestamp == "2026-11-01T06:45:00+00:00"
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="needs time.tzset")
+def test_outside_the_repeated_hour_lemonade_time_is_kept_as_it_was(new_york):
+    """Same timestamp as before for every other record, so no record changes identity."""
+    line = _completed_at("2026-11-01 03:15:00.250")
+
+    [record] = extract_task_records([line], ["2026-11-01T08:15:03+00:00"])
+
+    assert record.timestamp == extract_task_records([line])[0].timestamp
+    assert record.timestamp == "2026-11-01T08:15:00.250000+00:00"
+
+
+def test_extract_task_records_drops_records_without_output_tokens():
+    """A request that produced nothing is not a data point."""
+    assert extract_task_records([
+        ("2026-08-22 10:11:15.874 [Info] (Telemetry) Inference completed: "
+        "model=X, tokens=91 (in=91, out=0), ttft=1.24s, tps=0.00"),
+    ]) == []
+
+
+def _fake_json_journal(monkeypatch, lines, start_us=1_787_400_000_000_000):
+    """Make parse_task_records see these lines, received one second apart."""
+    commands = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        entries = [
+            {"MESSAGE": line, "__REALTIME_TIMESTAMP": str(start_us + index * 1_000_000)}
+            for index, line in enumerate(lines)
+        ]
+        return SimpleNamespace(
+            returncode=0, stdout="\n".join(json.dumps(entry) for entry in entries), stderr=""
+        )
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
+    return commands
+
+
+def _received(start_us: int, index: int) -> str:
+    return datetime.fromtimestamp(start_us / 1_000_000 + index, tz=UTC).isoformat()
+
+
+def test_parse_task_records_reads_the_journal_window(monkeypatch):
+    commands = _fake_json_journal(monkeypatch, _fixture_lines())
+
+    records = parse_task_records()
+
+    assert len(records) == 9
+    assert not any(record.journal_dated for record in records)
+    assert "json" in commands[0]
+    # Lemonade's own timestamp wins over the time journald received the line,
+    # so records keep the time main and the JSON history recorded for them.
+    assert [record.timestamp for record in records] == [
+        record.timestamp for record in extract_task_records(_fixture_lines())
+    ]
+
+
+def test_parse_task_records_dates_legacy_records_by_their_journal_entry(monkeypatch):
+    start_us = 1_787_400_000_000_000
+    _fake_json_journal(monkeypatch, LEGACY_WINDOW, start_us)
+
+    records = parse_task_records()
+
+    assert all(record.dated and record.journal_dated for record in records)
+    # Each record is dated by its Input tokens line, the 1st, 5th and 9th.
+    assert [record.timestamp for record in records] == [
+        _received(start_us, index) for index in (0, 4, 8)
+    ]
+
+
+def test_legacy_record_dates_do_not_depend_on_the_window(monkeypatch):
+    start_us = 1_787_400_000_000_000
+    _fake_json_journal(monkeypatch, LEGACY_WINDOW, start_us)
+    whole = parse_task_records()
+
+    _fake_json_journal(monkeypatch, LEGACY_WINDOW[2:], start_us + 2_000_000)
+    moved = parse_task_records()
+
+    assert [record.timestamp for record in moved] == [record.timestamp for record in whole[1:]]
+
+
+def test_parse_task_records_reads_messages_journald_stored_as_bytes(monkeypatch):
+    line = _fixture_lines()[-1]
+    entry = {"MESSAGE": list(line.encode()), "__REALTIME_TIMESTAMP": "1787400000000000"}
+    monkeypatch.setattr(
+        "app.services.log_parser.subprocess.run",
+        lambda command, **kwargs: SimpleNamespace(
+            returncode=0, stdout=json.dumps(entry), stderr=""
+        ),
+    )
+
+    [record] = parse_task_records()
+
+    assert record.input_tokens == 91
+
+
+def test_parse_task_records_reports_a_missing_journalctl(monkeypatch):
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("journalctl")
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
+
+    with pytest.raises(JournalReadError, match="could not be run"):
+        parse_task_records()
+
+
+def test_parse_task_records_reports_a_journal_it_may_not_read(monkeypatch):
+    """journalctl --system fails, rather than showing nothing, without access."""
+    commands = []
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="No journal files were opened due to insufficient permissions.\n",
+        )
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
+
+    with pytest.raises(JournalReadError, match="insufficient permissions"):
+        parse_task_records()
+    assert "--system" in commands[0]
+
+
+def test_parse_task_records_reports_a_journalctl_timeout(monkeypatch):
+    def fake_run(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+
+    monkeypatch.setattr("app.services.log_parser.subprocess.run", fake_run)
+
+    with pytest.raises(JournalReadError):
+        parse_task_records()
+
+
+def test_parse_task_records_reports_output_it_cannot_read(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.log_parser.subprocess.run",
+        lambda command, **kwargs: SimpleNamespace(
+            returncode=0, stdout="journalctl: unrecognized option\n", stderr=""
+        ),
+    )
+
+    with pytest.raises(JournalReadError):
+        parse_task_records()
+
+
+def test_parse_task_records_returns_empty_on_a_quiet_journal(monkeypatch):
+    _fake_json_journal(monkeypatch, [])
+
+    assert parse_task_records() == []
+
+
+# ── Records that cannot be read ────────────────────────────
+#
+# Reported in review: float("28.30.") raised from the parser, and the next
+# read met the same line again. Such a record is skipped with a warning and
+# the records around it are kept.
+
+
+def _completed(second: int, fields: str) -> str:
+    return f"2026-08-22 10:00:{second:02d}.000 [Info] (Telemetry) Inference completed: model=M, {fields}"
+
+
+GOOD_FIELDS = "tokens=11 (in=4, out=7), ttft=0.08s, tps=32.28"
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        "tokens=11 (in=4, out=7), ttft=0.08s, tps=1.2.3",
+        "tokens=11 (in=99999999999999999999, out=7), ttft=0.08s, tps=32.28",
+        "tokens=11 (in=4, out=9223372036854775808), ttft=0.08s, tps=32.28",
+        "tokens=11 (in=4, out=7), ttft=0.08s, tps=1" + "0" * 400,
+        "tokens=11 (out=7), ttft=0.08s, tps=32.28",
+        "tokens=11 (in=4, out=7), tps=32.28",
+    ],
+    ids=["three-parts", "huge-input", "above-int64", "infinite", "no-input", "no-ttft"],
+)
+def test_a_record_that_cannot_be_read_is_skipped_and_its_neighbours_kept(caplog, fields):
+    with caplog.at_level("WARNING", logger="app.services.log_parser"):
+        records = extract_task_records([
+            _completed(1, GOOD_FIELDS.replace("in=4", "in=1")),
+            _completed(2, fields),
+            _completed(3, GOOD_FIELDS.replace("in=4", "in=3")),
+        ])
+
+    assert [record.input_tokens for record in records] == [1, 3]
+    assert "Skipped a task record in the Lemonade log" in caplog.text
+
+
+@pytest.mark.parametrize("value", ["28.30.", "32.28."])
+def test_a_number_with_a_stray_dot_is_read_up_to_the_dot(value):
+    """As the last task reads it (#58); it raised from float() before."""
+    records = extract_task_records([
+        _completed(1, GOOD_FIELDS.replace("in=4", "in=1")),
+        _completed(2, f"tokens=11 (in=2, out=7), ttft={value}s, tps={value}"),
+        _completed(3, GOOD_FIELDS.replace("in=4", "in=3")),
+    ])
+
+    assert [record.input_tokens for record in records] == [1, 2, 3]
+    assert (records[1].ttft_seconds, records[1].generation_tps) == (float(value[:-1]), float(value[:-1]))
+
+
+def test_an_unreadable_older_format_field_skips_its_record_only(caplog):
+    with caplog.at_level("WARNING", logger="app.services.log_parser"):
+        records = extract_task_records([
+            "Input tokens: 4", "Output tokens: 7", "TTFT (s): 1.2.3", "TPS: 32.28",
+            "Input tokens: 5", "Output tokens: 7", "TTFT (s): 0.08", "TPS: 32.28",
+        ])
+
+    assert [record.input_tokens for record in records] == [5]
+    assert "unreadable ttft_seconds" in caplog.text
+
+
+def test_compact_fields_are_read_from_inference_completed_lines_only():
+    """From review: `in=` or `tps=` on another line is not telemetry."""
+    lines = [
+        "2026-08-22 10:00:01.000 [Info] (Server) slot update: in=5, out=9, ttft=1.0s, tps=99.0",
+        _completed(2, GOOD_FIELDS),
+        "2026-08-22 10:00:03.000 [Info] (Server) note: in=6, out=9, ttft=1.0s, tps=99.0",
+    ]
+
+    records = extract_task_records(lines)
+
+    assert [(r.input_tokens, r.output_tokens, r.generation_tps) for r in records] == [(4, 7, 32.28)]
+
+
+def test_the_last_task_ignores_compact_fields_outside_inference_completed(monkeypatch):
+    output = "\n".join([_completed(2, GOOD_FIELDS), "[Info] (Server) note: in=6, out=9, tps=99.0"])
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout=output, stderr="")
+    )
+
+    stats = parse_last_task()
+
+    assert (stats.input_tokens, stats.output_tokens, stats.generation_tps) == (4, 7, 32.28)
+
+
+@pytest.fixture
+def local_zone(monkeypatch):
+    """Run in a given host time zone; year 1 and 9999 overflow only off UTC."""
+
+    def use(name: str) -> None:
+        monkeypatch.setenv("TZ", name)
+        time.tzset()
+
+    yield use
+    monkeypatch.undo()
+    time.tzset()
+
+
+EDGES = [
+    pytest.param("0001-01-01 00:00:00.000", "Asia/Kolkata", id="year-1-east"),
+    pytest.param("9999-12-31 23:59:59.999", "America/New_York", id="year-9999-west"),
+    # Raises OverflowError rather than ValueError.
+    pytest.param("0001-01-01T00:00:00+05:00", "UTC", id="iso-with-offset"),
+]
+
+
+@pytest.mark.parametrize(("stamp", "zone"), EDGES)
+def test_a_line_dated_at_the_edge_of_the_calendar_is_dated_by_journald(local_zone, stamp, zone):
+    local_zone(zone)
+    received = "2026-08-22T10:00:02+00:00"
+    line = f"{stamp} [Info] (Telemetry) Inference completed: model=M, {GOOD_FIELDS}"
+
+    records = extract_task_records([line], [received])
+
+    assert [(record.timestamp, record.journal_dated) for record in records] == [(received, True)]
+
+
+@pytest.mark.parametrize("text", ["28.30.", "nan", "inf", "-1", "1" + "0" * 400, ""])
+def test_read_number_refuses_what_cannot_be_stored(text):
+    from app.services.log_parser import read_number
+
+    assert read_number(text) is None
+
+
+@pytest.mark.parametrize("text", [str(2**63), "-1", "1.5", "9" * 5000, ""])
+def test_read_count_refuses_what_cannot_be_stored(text):
+    from app.services.log_parser import read_count
+
+    assert read_count(text) is None
+

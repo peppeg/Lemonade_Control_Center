@@ -1,16 +1,22 @@
 """Metrics endpoints and WebSocket stream."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
-from fastapi.responses import PlainTextResponse
+import asyncio
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 
 from app.services.metrics.collector import buffer, collect_once, subscribe, unsubscribe
-from app.services.metrics.task_history import TaskHistory
+from app.services.metrics.store import resolve_range
+from app.services.metrics.task_history import TaskHistory, task_history
 from app.services.security import authorize_websocket
 
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 ws_router = APIRouter()
-task_history = TaskHistory()
+
+# Exported for callers that used to reach the history through this module.
+__all__ = ["TaskHistory", "router", "task_history", "ws_router"]
 
 
 @router.get("/history")
@@ -28,24 +34,98 @@ async def get_latest():
 
 
 @router.get("/tasks")
-async def get_tasks(n: int = Query(default=20, ge=1, le=50)):
-    return {"tasks": task_history.get_recent(n)}
+async def get_tasks(
+    n: int = Query(default=20, ge=1, le=5000),
+    since: str | None = Query(default=None, description="ISO-8601 lower bound, inclusive"),
+    until: str | None = Query(default=None, description="ISO-8601 upper bound, inclusive"),
+):
+    """Recent task records, oldest first.
+
+    The response shape and the default of 20 records are unchanged; `since`
+    and `until` narrow the window, and `n` reaches up to 5000 instead of 50.
+    """
+    window_start = _parse_boundary(since, "since")
+    window_end = _parse_boundary(until, "until")
+    tasks = await asyncio.to_thread(
+        task_history.get_recent, n, window_start, window_end, True
+    )
+    return {"tasks": tasks}
 
 
 @router.get("/tasks/csv")
-async def export_tasks_csv():
-    return PlainTextResponse(
-        task_history.export_csv(),
+async def export_tasks_csv(
+    since: str | None = Query(default=None),
+    until: str | None = Query(default=None),
+    range: str | None = Query(default=None),
+):
+    """CSV export of every task, optionally narrowed to a window or a range."""
+    window_start = _parse_boundary(since, "since")
+    window_end = _parse_boundary(until, "until")
+    if range:
+        _, window = _resolve_range(range)
+        if window_start is None:
+            window_start = datetime.now(UTC) - window
+
+    # Streamed: Starlette runs the synchronous generator in its thread pool, so
+    # the journal refresh and the batched reads stay off the event loop.
+    return StreamingResponse(
+        task_history.export_csv(window_start, window_end, True),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=lcc-tasks.csv"},
     )
 
 
+# What each scope is allowed to destroy. "buffer" is the in-memory ring the
+# live view streams into and refills within seconds; the persisted history
+# is never cleared by it.
+CLEAR_SCOPES = ("buffer",)
+
+
 @router.post("/clear")
-async def clear_metrics():
+async def clear_metrics(
+    scope: str | None = Query(
+        default=None, description="|".join(CLEAR_SCOPES)
+    ),
+):
+    """Clear metrics at an explicit scope.
+
+    There is deliberately no default. This endpoint used to wipe the whole
+    persisted history under a one-word "Clear" button; an omitted or unknown
+    scope is now a rejection, so no caller can destroy weeks of records by
+    saying nothing.
+    """
+    if scope not in CLEAR_SCOPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"scope is required and must be one of: {', '.join(CLEAR_SCOPES)}",
+        )
+
     buffer.clear()
-    task_history.clear()
-    return {"cleared": True}
+    return {"cleared": True, "scope": "buffer"}
+
+
+def _resolve_range(value: str | None) -> tuple[str, timedelta]:
+    try:
+        return resolve_range(value)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+def _parse_boundary(value: str | None, field: str) -> datetime | None:
+    """Parse an ISO-8601 query bound, defaulting a naive value to UTC."""
+    if value is None or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        # Converting a date at the edge of the calendar, such as year 1 with a
+        # positive offset, overflows; it is a bad bound, not a server error.
+        return parsed.astimezone(UTC)
+    except (ValueError, OverflowError):
+        raise HTTPException(
+            status_code=400, detail=f"{field} must be an ISO-8601 timestamp"
+        ) from None
 
 
 @ws_router.websocket("/ws/metrics")
